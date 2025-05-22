@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}{{ employee.name }} - Attendance{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">{{ employee.name }} - Attendance</h1>
+                    <p class="text-gray-600">{{ employee.department }} | {{ employee.position or 'Employee' }}</p>
+                </div>
+                <a href="{{ url_for('employees.detail', id=employee.id) }}" 
+                   class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                    Back to Profile
+                </a>
+            </div>
+        </div>
+
+        <!-- Attendance Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-2">This Month</h3>
+                <p class="text-3xl font-bold text-blue-600">{{ stats.present_days }}</p>
+                <p class="text-sm text-gray-500">Days Present</p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-2">Absent</h3>
+                <p class="text-3xl font-bold text-red-600">{{ stats.absent_days }}</p>
+                <p class="text-sm text-gray-500">Days Absent</p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-2">Late Arrivals</h3>
+                <p class="text-3xl font-bold text-yellow-600">{{ stats.late_days }}</p>
+                <p class="text-sm text-gray-500">Days Late</p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-2">Attendance Rate</h3>
+                <p class="text-3xl font-bold text-green-600">{{ "%.1f"|format(stats.attendance_rate) }}%</p>
+                <p class="text-sm text-gray-500">Overall Rate</p>
+            </div>
+        </div>
+
+        <!-- Attendance Records -->
+        <div class="bg-white rounded-lg shadow-md">
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-800">Attendance Records</h2>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check In</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check Out</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours Worked</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for record in attendance_records %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {{ record.date.strftime('%b %d, %Y') }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {% if record.check_in_time %}
+                                    {{ record.check_in_time.strftime('%H:%M') }}
+                                {% else %}
+                                    <span class="text-gray-400">--</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {% if record.check_out_time %}
+                                    {{ record.check_out_time.strftime('%H:%M') }}
+                                {% else %}
+                                    <span class="text-gray-400">--</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {% if record.check_in_time and record.check_out_time %}
+                                    {% set hours = (record.check_out_time - record.check_in_time).total_seconds() / 3600 %}
+                                    {{ "%.1f"|format(hours) }}h
+                                {% else %}
+                                    <span class="text-gray-400">--</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
+                                      {% if record.status == 'present' %}bg-green-100 text-green-800
+                                      {% elif record.status == 'absent' %}bg-red-100 text-red-800
+                                      {% elif record.status == 'late' %}bg-yellow-100 text-yellow-800
+                                      {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    {{ record.status.title() }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-900">
+                                {{ record.notes or '--' }}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                                No attendance records found.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

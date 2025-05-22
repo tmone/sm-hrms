@@ -1,7 +1,5 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required
-from models.employee import Employee, AttendanceRecord
-from models.base import db
 from datetime import datetime, date, timedelta
 from sqlalchemy import or_
 
@@ -10,6 +8,10 @@ employees_bp = Blueprint('employees', __name__)
 @employees_bp.route('/')
 @login_required
 def index():
+    # Get models from current app
+    Employee = current_app.Employee
+    db = current_app.db
+    
     # Get filter parameters
     search = request.args.get('search', '')
     department = request.args.get('department', '')
@@ -53,6 +55,9 @@ def index():
 @login_required
 def create():
     if request.method == 'POST':
+        Employee = current_app.Employee
+        db = current_app.db
+        
         employee = Employee(
             name=request.form['name'],
             department=request.form['department'],
@@ -78,30 +83,26 @@ def create():
 @employees_bp.route('/<int:id>')
 @login_required
 def detail(id):
+    Employee = current_app.Employee
+    AttendanceRecord = current_app.AttendanceRecord
+    
     employee = Employee.query.get_or_404(id)
     
     # Get recent attendance records
-    attendance_records = AttendanceRecord.query.filter_by(employee_id=id)\
+    recent_attendance = AttendanceRecord.query.filter_by(employee_id=id)\
                                               .order_by(AttendanceRecord.date.desc())\
-                                              .limit(30).all()
-    
-    # Get attendance statistics
-    total_days = AttendanceRecord.query.filter_by(employee_id=id).count()
-    present_days = AttendanceRecord.query.filter_by(employee_id=id, status='present').count()
-    attendance_rate = (present_days / total_days * 100) if total_days > 0 else 0
+                                              .limit(5).all()
     
     return render_template('employees/detail.html',
                          employee=employee,
-                         attendance_records=attendance_records,
-                         attendance_stats={
-                             'total_days': total_days,
-                             'present_days': present_days,
-                             'attendance_rate': attendance_rate
-                         })
+                         recent_attendance=recent_attendance)
 
 @employees_bp.route('/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit(id):
+    Employee = current_app.Employee
+    db = current_app.db
+    
     employee = Employee.query.get_or_404(id)
     
     if request.method == 'POST':
@@ -128,6 +129,9 @@ def edit(id):
 @employees_bp.route('/<int:id>/delete', methods=['POST'])
 @login_required
 def delete(id):
+    Employee = current_app.Employee
+    db = current_app.db
+    
     employee = Employee.query.get_or_404(id)
     
     try:
@@ -143,6 +147,9 @@ def delete(id):
 @employees_bp.route('/<int:id>/attendance')
 @login_required
 def attendance(id):
+    Employee = current_app.Employee
+    AttendanceRecord = current_app.AttendanceRecord
+    
     employee = Employee.query.get_or_404(id)
     
     # Get date range from query parameters
@@ -160,9 +167,24 @@ def attendance(id):
         AttendanceRecord.date <= end_date
     ).order_by(AttendanceRecord.date.desc()).all()
     
+    # Calculate stats
+    total_days = len(attendance_records)
+    present_days = len([r for r in attendance_records if r.status == 'present'])
+    absent_days = len([r for r in attendance_records if r.status == 'absent'])
+    late_days = len([r for r in attendance_records if r.status == 'late'])
+    attendance_rate = (present_days / total_days * 100) if total_days > 0 else 0
+    
+    stats = {
+        'present_days': present_days,
+        'absent_days': absent_days,
+        'late_days': late_days,
+        'attendance_rate': attendance_rate
+    }
+    
     return render_template('employees/attendance.html',
                          employee=employee,
                          attendance_records=attendance_records,
+                         stats=stats,
                          start_date=start_date,
                          end_date=end_date)
 
@@ -170,5 +192,6 @@ def attendance(id):
 @login_required
 def api_list():
     # API endpoint for employee data (used by other components)
+    Employee = current_app.Employee
     employees = Employee.query.filter_by(status='active').all()
     return jsonify([emp.to_dict() for emp in employees])

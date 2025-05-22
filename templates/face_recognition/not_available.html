@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Face Recognition Not Available{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4">
+    <div class="max-w-2xl mx-auto">
+        <div class="bg-white rounded-lg shadow-md p-8 text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100 mb-4">
+                <svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                </svg>
+            </div>
+            
+            <h1 class="text-2xl font-bold text-gray-800 mb-4">Face Recognition Not Available</h1>
+            
+            <p class="text-gray-600 mb-6">
+                The face recognition feature is currently not available. This feature requires additional AI libraries and models to be installed.
+            </p>
+            
+            <div class="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
+                <h3 class="text-sm font-medium text-blue-800 mb-2">To enable face recognition:</h3>
+                <ul class="text-sm text-blue-700 text-left space-y-1">
+                    <li>1. Install the required AI libraries (OpenCV, face_recognition, etc.)</li>
+                    <li>2. Configure face recognition models</li>
+                    <li>3. Restart the application</li>
+                </ul>
+            </div>
+            
+            <div class="flex justify-center space-x-4">
+                <a href="{{ url_for('dashboard.index') }}" 
+                   class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                    Back to Dashboard
+                </a>
+                <a href="{{ url_for('videos.index') }}" 
+                   class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                    Manage Videos
+                </a>
+            </div>
+        </div>
+        
+        <!-- Alternative Features -->
+        <div class="mt-6 bg-gray-50 rounded-lg p-6">
+            <h3 class="text-lg font-medium text-gray-800 mb-4">Available Features</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-white rounded-md p-4">
+                    <h4 class="font-medium text-gray-800 mb-2">Employee Management</h4>
+                    <p class="text-sm text-gray-600 mb-3">Manage employee records and information</p>
+                    <a href="{{ url_for('employees.index') }}" 
+                       class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                        Manage Employees →
+                    </a>
+                </div>
+                
+                <div class="bg-white rounded-md p-4">
+                    <h4 class="font-medium text-gray-800 mb-2">Video Processing</h4>
+                    <p class="text-sm text-gray-600 mb-3">Upload and process videos for basic detection</p>
+                    <a href="{{ url_for('videos.index') }}" 
+                       class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                        Manage Videos →
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

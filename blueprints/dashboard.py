@@ -1,9 +1,5 @@
-from flask import Blueprint, render_template, jsonify
+from flask import Blueprint, render_template, jsonify, current_app
 from flask_login import login_required
-from models.employee import Employee, AttendanceRecord
-from models.video import Video, DetectedPerson
-from models.face_recognition import TrainedModel, FaceDataset
-from models.base import db
 from datetime import datetime, timedelta
 from sqlalchemy import func
 
@@ -12,16 +8,18 @@ dashboard_bp = Blueprint('dashboard', __name__)
 @dashboard_bp.route('/')
 @login_required
 def index():
+    # Get models from current app
+    Employee = current_app.Employee
+    
     # Get summary statistics
     stats = get_dashboard_stats()
     
-    # Get recent activities
-    recent_videos = Video.query.order_by(Video.created_at.desc()).limit(5).all()
+    # Get recent employees (simplified for now)
     recent_employees = Employee.query.order_by(Employee.created_at.desc()).limit(5).all()
     
     return render_template('dashboard/index.html', 
                          stats=stats,
-                         recent_videos=recent_videos,
+                         recent_videos=[],  # Empty for now
                          recent_employees=recent_employees)
 
 @dashboard_bp.route('/api/stats')
@@ -30,33 +28,37 @@ def api_stats():
     return jsonify(get_dashboard_stats())
 
 def get_dashboard_stats():
+    # Get models from current app
+    Employee = current_app.Employee
+    AttendanceRecord = current_app.AttendanceRecord
+    
     # Employee statistics
     total_employees = Employee.query.count()
     active_employees = Employee.query.filter_by(status='active').count()
     
-    # Video processing statistics
-    total_videos = Video.query.count()
-    processed_videos = Video.query.filter_by(status='completed').count()
-    processing_videos = Video.query.filter_by(status='processing').count()
+    # Simplified stats for now (video features not implemented yet)
+    total_videos = 0
+    processed_videos = 0
+    processing_videos = 0
     
-    # Detection statistics
-    total_detections = DetectedPerson.query.count()
-    identified_persons = DetectedPerson.query.filter_by(is_identified=True).count()
+    # Simplified detection stats
+    total_detections = 0
+    identified_persons = 0
     
-    # Model statistics
-    total_models = TrainedModel.query.count()
-    active_models = TrainedModel.query.filter_by(is_active=True).count()
+    # Simplified model stats
+    total_models = 0
+    active_models = 0
     
     # Today's attendance
     today = datetime.now().date()
     today_attendance = AttendanceRecord.query.filter_by(date=today).count()
     
-    # Processing queue status
+    # Processing queue status (simplified)
     queue_status = {
-        'pending': Video.query.filter_by(status='uploaded').count(),
+        'pending': 0,
         'processing': processing_videos,
         'completed': processed_videos,
-        'failed': Video.query.filter_by(status='failed').count()
+        'failed': 0
     }
     
     return {

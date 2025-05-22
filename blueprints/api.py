@@ -1,9 +1,5 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 from flask_login import login_required
-from models.employee import Employee, AttendanceRecord
-from models.video import Video, DetectedPerson
-from models.face_recognition import TrainedModel, FaceDataset, RecognitionResult
-from models.base import db
 from datetime import datetime, date
 from sqlalchemy import func
 
@@ -15,17 +11,158 @@ def stats():
     """Get dashboard statistics"""
     return jsonify(get_dashboard_stats())
 
+@api_bp.route('/test-endpoint')
+@login_required  
+def test_endpoint():
+    """Test endpoint to verify API is working"""
+    return jsonify({
+        'message': 'Enhanced API endpoint is working!',
+        'timestamp': datetime.utcnow().isoformat(),
+        'version': 'enhanced_v2'
+    })
+
 @api_bp.route('/processing-queue')
 @login_required
 def processing_queue():
-    """Get processing queue status"""
-    queue_count = Video.query.filter(Video.status.in_(['uploaded', 'processing'])).count()
-    return jsonify({'count': queue_count})
+    """Get detailed processing queue status"""
+    import sys
+    import os
+    
+    print("🔍 API: Enhanced processing-queue endpoint called")
+    
+    try:
+        Video = getattr(current_app, 'Video', None)
+        if not Video:
+            return jsonify({
+                'error': 'Video processing not available',
+                'queue': {'pending': 0, 'converting': 0, 'processing': 0, 'completed': 0, 'failed': 0},
+                'active_tasks': [],
+                'total_tasks': 0
+            })
+        
+        # Get video queue status from database
+        queue_status = {
+            'pending': Video.query.filter_by(status='uploaded').count(),
+            'converting': Video.query.filter_by(status='converting').count(),
+            'processing': Video.query.filter_by(status='processing').count(),
+            'completed': Video.query.filter_by(status='completed').count(),
+            'failed': Video.query.filter_by(status='failed').count()
+        }
+        
+        # Get conversion manager status
+        active_tasks = []
+        total_tasks = 0
+        conversion_manager_status = "unavailable"
+        
+        try:
+            sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+            from utils.conversion_manager import conversion_manager
+            
+            all_tasks = conversion_manager.get_all_tasks()
+            total_tasks = len(all_tasks)
+            conversion_manager_status = "connected"
+            
+            print(f"🔍 API: Found {total_tasks} total tasks in conversion manager")
+            
+            # Get active tasks
+            for task_id, task_data in all_tasks.items():
+                print(f"🔍 API: Task {task_id[:8]} - Status: {task_data['status']}, Progress: {task_data['progress']}%")
+                
+                if task_data['status'] in ['queued', 'running']:
+                    # Get video info
+                    video = Video.query.get(task_data['video_id'])
+                    
+                    active_tasks.append({
+                        'task_id': task_id,
+                        'video_id': task_data['video_id'],
+                        'video_filename': video.filename if video else 'Unknown',
+                        'status': task_data['status'],
+                        'progress': task_data['progress'],
+                        'message': task_data['message'],
+                        'started_at': task_data['started_at'],
+                        'elapsed_time': get_elapsed_time(task_data['started_at'])
+                    })
+            
+            print(f"🔍 API: Found {len(active_tasks)} active tasks")
+            
+        except Exception as e:
+            print(f"❌ API: Error getting conversion manager status: {e}")
+            conversion_manager_status = f"error: {str(e)}"
+        
+        # Get recent activity (last 10 videos)
+        recent_videos = Video.query.order_by(Video.updated_at.desc()).limit(10).all()
+        recent_activity = []
+        
+        for video in recent_videos:
+            recent_activity.append({
+                'id': video.id,
+                'filename': video.filename,
+                'status': video.status,
+                'created_at': video.created_at.isoformat(),
+                'updated_at': video.updated_at.isoformat(),
+                'file_size_mb': round(video.file_size / 1024 / 1024, 1) if video.file_size else 0,
+                'processing_started_at': video.processing_started_at.isoformat() if video.processing_started_at else None,
+                'processing_completed_at': video.processing_completed_at.isoformat() if video.processing_completed_at else None,
+                'error_message': video.error_message
+            })
+        
+        response_data = {
+            'queue_status': queue_status,
+            'active_tasks': active_tasks,
+            'total_tasks': total_tasks,
+            'recent_activity': recent_activity,
+            'conversion_manager_status': conversion_manager_status,
+            'summary': {
+                'total_videos': sum(queue_status.values()),
+                'active_processing': queue_status['converting'] + queue_status['processing'],
+                'completion_rate': round(queue_status['completed'] / sum(queue_status.values()) * 100, 1) if sum(queue_status.values()) > 0 else 0
+            },
+            'timestamp': datetime.utcnow().isoformat(),
+            'endpoint_version': 'enhanced_v2'  # To confirm we're hitting the right endpoint
+        }
+        
+        print(f"🔍 API: Returning response with {len(active_tasks)} active tasks, queue status: {queue_status}")
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        return jsonify({
+            'error': f'Error fetching queue status: {str(e)}',
+            'queue_status': {'pending': 0, 'converting': 0, 'processing': 0, 'completed': 0, 'failed': 0},
+            'active_tasks': [],
+            'total_tasks': 0
+        }), 500
+
+def get_elapsed_time(started_at_str):
+    """Calculate elapsed time from start timestamp"""
+    if not started_at_str:
+        return None
+    
+    try:
+        from datetime import datetime
+        started_at = datetime.fromisoformat(started_at_str.replace('Z', '+00:00'))
+        elapsed = datetime.utcnow() - started_at.replace(tzinfo=None)
+        
+        total_seconds = int(elapsed.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        
+        if hours > 0:
+            return f"{hours}h {minutes}m {seconds}s"
+        elif minutes > 0:
+            return f"{minutes}m {seconds}s"
+        else:
+            return f"{seconds}s"
+    except Exception:
+        return None
 
 @api_bp.route('/employees')
 @login_required
 def employees():
     """Get employees list"""
+    Employee = current_app.Employee
+    
     search = request.args.get('search', '')
     department = request.args.get('department', '')
     status = request.args.get('status', 'active')
@@ -51,24 +188,43 @@ def videos():
     """Get videos list"""
     status = request.args.get('status', '')
     
-    query = Video.query
-    if status:
-        query = query.filter_by(status=status)
-    
-    videos = query.order_by(Video.created_at.desc()).all()
-    return jsonify([video.to_dict() for video in videos])
+    # Video management is optional feature
+    try:
+        Video = getattr(current_app, 'Video', None)
+        if Video:
+            query = Video.query
+            if status:
+                query = query.filter_by(status=status)
+            videos = query.order_by(Video.created_at.desc()).all()
+            return jsonify([video.to_dict() for video in videos])
+        else:
+            return jsonify([])
+    except Exception:
+        return jsonify([])
 
 @api_bp.route('/videos/<int:id>/detections')
 @login_required
 def video_detections(id):
     """Get detections for a specific video"""
-    detections = DetectedPerson.query.filter_by(video_id=id).all()
-    return jsonify([detection.to_dict() for detection in detections])
+    # Face detection is optional feature
+    try:
+        DetectedPerson = getattr(current_app, 'DetectedPerson', None)
+        if DetectedPerson:
+            detections = DetectedPerson.query.filter_by(video_id=id).all()
+            return jsonify([detection.to_dict() for detection in detections])
+        else:
+            return jsonify([])
+    except Exception:
+        return jsonify([])
 
 @api_bp.route('/attendance/today')
 @login_required
 def attendance_today():
     """Get today's attendance"""
+    Employee = current_app.Employee
+    AttendanceRecord = current_app.AttendanceRecord
+    db = current_app.db
+    
     today = date.today()
     
     attendance = db.session.query(
@@ -91,6 +247,10 @@ def attendance_today():
 @login_required
 def mark_attendance():
     """Mark attendance for an employee"""
+    Employee = current_app.Employee
+    AttendanceRecord = current_app.AttendanceRecord
+    db = current_app.db
+    
     data = request.get_json()
     
     employee_id = data.get('employee_id')
@@ -149,19 +309,28 @@ def mark_attendance():
 @login_required
 def identify_person():
     """Manually identify a detected person"""
-    data = request.get_json()
-    
-    detection_id = data.get('detection_id')
-    employee_id = data.get('employee_id')
-    
-    if not detection_id:
-        return jsonify({'error': 'Missing detection_id'}), 400
-    
-    detection = DetectedPerson.query.get(detection_id)
-    if not detection:
-        return jsonify({'error': 'Detection not found'}), 404
-    
+    # Face recognition is optional feature
     try:
+        DetectedPerson = getattr(current_app, 'DetectedPerson', None)
+        RecognitionResult = getattr(current_app, 'RecognitionResult', None)
+        Employee = current_app.Employee
+        db = current_app.db
+        
+        if not DetectedPerson or not RecognitionResult:
+            return jsonify({'error': 'Face recognition not available'}), 404
+            
+        data = request.get_json()
+        
+        detection_id = data.get('detection_id')
+        employee_id = data.get('employee_id')
+        
+        if not detection_id:
+            return jsonify({'error': 'Missing detection_id'}), 400
+        
+        detection = DetectedPerson.query.get(detection_id)
+        if not detection:
+            return jsonify({'error': 'Detection not found'}), 404
+        
         if employee_id:
             employee = Employee.query.get(employee_id)
             if not employee:
@@ -197,38 +366,51 @@ def identify_person():
         })
         
     except Exception as e:
-        db.session.rollback()
+        if hasattr(current_app, 'db'):
+            current_app.db.session.rollback()
         return jsonify({'error': str(e)}), 500
+    except Exception:
+        return jsonify({'error': 'Face recognition not available'}), 404
 
 @api_bp.route('/models/performance')
 @login_required
 def models_performance():
     """Get model performance metrics"""
-    models = TrainedModel.query.filter_by(status='completed').all()
-    
-    performance_data = []
-    for model in models:
-        # Get recognition results for this model
-        results = RecognitionResult.query.filter_by(model_id=model.id).all()
+    # Model performance is optional feature
+    try:
+        TrainedModel = getattr(current_app, 'TrainedModel', None)
+        RecognitionResult = getattr(current_app, 'RecognitionResult', None)
         
-        total_predictions = len(results)
-        verified_correct = len([r for r in results if r.is_verified and r.employee_id])
+        if not TrainedModel or not RecognitionResult:
+            return jsonify([])
+            
+        models = TrainedModel.query.filter_by(status='completed').all()
         
-        accuracy = (verified_correct / total_predictions * 100) if total_predictions > 0 else 0
+        performance_data = []
+        for model in models:
+            # Get recognition results for this model
+            results = RecognitionResult.query.filter_by(model_id=model.id).all()
+            
+            total_predictions = len(results)
+            verified_correct = len([r for r in results if r.is_verified and r.employee_id])
+            
+            accuracy = (verified_correct / total_predictions * 100) if total_predictions > 0 else 0
+            
+            performance_data.append({
+                'model_id': model.id,
+                'model_name': model.name,
+                'model_type': model.model_type,
+                'total_predictions': total_predictions,
+                'verified_correct': verified_correct,
+                'accuracy': accuracy,
+                'training_accuracy': model.accuracy,
+                'validation_accuracy': model.validation_accuracy,
+                'is_active': model.is_active
+            })
         
-        performance_data.append({
-            'model_id': model.id,
-            'model_name': model.name,
-            'model_type': model.model_type,
-            'total_predictions': total_predictions,
-            'verified_correct': verified_correct,
-            'accuracy': accuracy,
-            'training_accuracy': model.accuracy,
-            'validation_accuracy': model.validation_accuracy,
-            'is_active': model.is_active
-        })
-    
-    return jsonify(performance_data)
+        return jsonify(performance_data)
+    except Exception:
+        return jsonify([])
 
 @api_bp.route('/system/health')
 @login_required
@@ -236,17 +418,32 @@ def system_health():
     """Get system health status"""
     try:
         # Test database connection
+        db = current_app.db
         db.session.execute('SELECT 1')
         db_status = 'healthy'
     except Exception:
         db_status = 'error'
     
-    # Get processing queue status
-    processing_count = Video.query.filter_by(status='processing').count()
-    pending_count = Video.query.filter_by(status='uploaded').count()
+    # Get processing queue status (optional feature)
+    try:
+        Video = getattr(current_app, 'Video', None)
+        if Video:
+            processing_count = Video.query.filter_by(status='processing').count()
+            pending_count = Video.query.filter_by(status='uploaded').count()
+        else:
+            processing_count = pending_count = 0
+    except Exception:
+        processing_count = pending_count = 0
     
-    # Get active models
-    active_models = TrainedModel.query.filter_by(is_active=True).count()
+    # Get active models (optional feature)
+    try:
+        TrainedModel = getattr(current_app, 'TrainedModel', None)
+        if TrainedModel:
+            active_models = TrainedModel.query.filter_by(is_active=True).count()
+        else:
+            active_models = 0
+    except Exception:
+        active_models = 0
     
     return jsonify({
         'database': db_status,
@@ -260,34 +457,58 @@ def system_health():
 
 def get_dashboard_stats():
     """Helper function to get dashboard statistics"""
+    Employee = current_app.Employee
+    AttendanceRecord = current_app.AttendanceRecord
+    
     # Employee statistics
     total_employees = Employee.query.count()
     active_employees = Employee.query.filter_by(status='active').count()
     
-    # Video processing statistics
-    total_videos = Video.query.count()
-    processed_videos = Video.query.filter_by(status='completed').count()
-    processing_videos = Video.query.filter_by(status='processing').count()
+    # Video processing statistics (optional feature)
+    try:
+        Video = getattr(current_app, 'Video', None)
+        if Video:
+            total_videos = Video.query.count()
+            processed_videos = Video.query.filter_by(status='completed').count()
+            processing_videos = Video.query.filter_by(status='processing').count()
+            queue_status = {
+                'pending': Video.query.filter_by(status='uploaded').count(),
+                'processing': processing_videos,
+                'completed': processed_videos,
+                'failed': Video.query.filter_by(status='failed').count()
+            }
+        else:
+            total_videos = processed_videos = processing_videos = 0
+            queue_status = {'pending': 0, 'processing': 0, 'completed': 0, 'failed': 0}
+    except Exception:
+        total_videos = processed_videos = processing_videos = 0
+        queue_status = {'pending': 0, 'processing': 0, 'completed': 0, 'failed': 0}
     
-    # Detection statistics
-    total_detections = DetectedPerson.query.count()
-    identified_persons = DetectedPerson.query.filter_by(is_identified=True).count()
+    # Detection statistics (optional feature)
+    try:
+        DetectedPerson = getattr(current_app, 'DetectedPerson', None)
+        if DetectedPerson:
+            total_detections = DetectedPerson.query.count()
+            identified_persons = DetectedPerson.query.filter_by(is_identified=True).count()
+        else:
+            total_detections = identified_persons = 0
+    except Exception:
+        total_detections = identified_persons = 0
     
-    # Model statistics
-    total_models = TrainedModel.query.count()
-    active_models = TrainedModel.query.filter_by(is_active=True).count()
+    # Model statistics (optional feature)
+    try:
+        TrainedModel = getattr(current_app, 'TrainedModel', None)
+        if TrainedModel:
+            total_models = TrainedModel.query.count()
+            active_models = TrainedModel.query.filter_by(is_active=True).count()
+        else:
+            total_models = active_models = 0
+    except Exception:
+        total_models = active_models = 0
     
     # Today's attendance
     today = datetime.now().date()
     today_attendance = AttendanceRecord.query.filter_by(date=today).count()
-    
-    # Processing queue status
-    queue_status = {
-        'pending': Video.query.filter_by(status='uploaded').count(),
-        'processing': processing_videos,
-        'completed': processed_videos,
-        'failed': Video.query.filter_by(status='failed').count()
-    }
     
     return {
         'employees': {

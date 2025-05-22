@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Video Management Not Available{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4">
+    <div class="max-w-2xl mx-auto">
+        <div class="bg-white rounded-lg shadow-md p-8 text-center">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100 mb-4">
+                <svg class="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                </svg>
+            </div>
+            
+            <h1 class="text-2xl font-bold text-gray-800 mb-4">Video Management Not Available</h1>
+            
+            <p class="text-gray-600 mb-6">
+                The video management feature is currently not available. This feature requires additional video processing libraries and models to be installed.
+            </p>
+            
+            <div class="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
+                <h3 class="text-sm font-medium text-blue-800 mb-2">To enable video management:</h3>
+                <ul class="text-sm text-blue-700 text-left space-y-1">
+                    <li>1. Install video processing libraries (OpenCV, FFmpeg, etc.)</li>
+                    <li>2. Configure video storage and processing settings</li>
+                    <li>3. Set up background processing with Celery (optional)</li>
+                    <li>4. Restart the application</li>
+                </ul>
+            </div>
+            
+            <div class="flex justify-center space-x-4">
+                <a href="{{ url_for('dashboard.index') }}" 
+                   class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                    Back to Dashboard
+                </a>
+                <a href="{{ url_for('employees.index') }}" 
+                   class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                    Manage Employees
+                </a>
+            </div>
+        </div>
+        
+        <!-- Alternative Features -->
+        <div class="mt-6 bg-gray-50 rounded-lg p-6">
+            <h3 class="text-lg font-medium text-gray-800 mb-4">Available Features</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-white rounded-md p-4">
+                    <h4 class="font-medium text-gray-800 mb-2">Employee Management</h4>
+                    <p class="text-sm text-gray-600 mb-3">Manage employee records and attendance</p>
+                    <a href="{{ url_for('employees.index') }}" 
+                       class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                        Manage Employees →
+                    </a>
+                </div>
+                
+                <div class="bg-white rounded-md p-4">
+                    <h4 class="font-medium text-gray-800 mb-2">Dashboard</h4>
+                    <p class="text-sm text-gray-600 mb-3">View system overview and statistics</p>
+                    <a href="{{ url_for('dashboard.index') }}" 
+                       class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                        View Dashboard →
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

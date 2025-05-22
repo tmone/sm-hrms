@@ -1,0 +1,1051 @@
+{% extends "base.html" %}
+
+{% block title %}{{ video.filename }} - Video Details{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- Socket.IO Client -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+{% endblock %}
+
+{% block content %}
+<style>
+/* Progress bar animations */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+@keyframes progressGlow {
+    0% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); }
+    50% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.8); }
+    100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); }
+}
+
+.progress-bar-animated {
+    animation: progressGlow 2s ease-in-out infinite;
+}
+
+.conversion-status-live {
+    animation: pulse 2s infinite;
+}
+
+/* Live indicator */
+@keyframes liveDot {
+    0% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+    100% { opacity: 0.3; transform: scale(0.8); }
+}
+
+.live-indicator {
+    animation: liveDot 1.5s infinite;
+}
+</style>
+<div class="container mx-auto px-4">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">{{ video.title or video.filename }}</h1>
+                    <p class="text-gray-600 mt-1">{{ video.description or 'No description provided' }}</p>
+                    <div class="flex items-center space-x-4 mt-2 text-sm text-gray-500">
+                        <span>{{ (video.file_size / 1024 / 1024) | round(1) }} MB</span>
+                        {% if video.duration %}
+                            <span>{{ "%.1f"|format(video.duration) }} seconds</span>
+                        {% endif %}
+                        <span>Uploaded {{ video.created_at.strftime('%b %d, %Y at %H:%M') }}</span>
+                    </div>
+                </div>
+                <div class="flex space-x-2">
+                    <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full 
+                          {% if video.status == 'completed' %}bg-green-100 text-green-800
+                          {% elif video.status == 'processing' %}bg-yellow-100 text-yellow-800
+                          {% elif video.status == 'failed' %}bg-red-100 text-red-800
+                          {% else %}bg-gray-100 text-gray-800{% endif %}">
+                        {{ video.status.title() }}
+                    </span>
+                    <a href="{{ url_for('videos.index') }}" 
+                       class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                        Back to Videos
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Video Preview and Processing -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Video Player -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Video Preview</h2>
+                    
+                    {% if video.processed_path %}
+                        <!-- Show converted video if available -->
+                        <video id="videoPlayer" controls class="w-full rounded-lg" preload="metadata" 
+                               onloadstart="console.log('🎬 Loading converted video:', '{{ video.processed_path }}')"
+                               oncanplay="console.log('✅ Converted video can play')" 
+                               onerror="console.error('❌ Converted video error:', event.target.error)"
+                               onloadedmetadata="console.log('📊 Video metadata loaded:', {duration: event.target.duration, width: event.target.videoWidth, height: event.target.videoHeight})">
+                            <source src="{{ url_for('videos.stream_video', filename=video.processed_path) }}" type="video/mp4">
+                            <source src="{{ url_for('videos.serve_video_static', filename=video.processed_path) }}" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="mt-2 text-sm text-green-600 bg-green-50 p-2 rounded">
+                            ✅ <strong>Converted Video:</strong> This video has been automatically converted to web-compatible MP4 format.
+                            <div class="mt-2 space-x-2">
+                                <a href="{{ url_for('videos.stream_video', filename=video.processed_path) }}" 
+                                   class="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700" 
+                                   target="_blank">Test Direct Link</a>
+                                <button onclick="testVideoPlayback('{{ video.processed_path }}')" 
+                                        class="text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700">
+                                    🔍 Debug Playback
+                                </button>
+                                <button onclick="reconvertVideo({{ video.id }})" 
+                                        class="text-xs bg-orange-600 text-white px-2 py-1 rounded hover:bg-orange-700">
+                                    🔄 Re-convert
+                                </button>
+                                <button onclick="debugVideoStatus({{ video.id }})" 
+                                        class="text-xs bg-gray-600 text-white px-2 py-1 rounded hover:bg-gray-700">
+                                    🐛 Debug Status
+                                </button>
+                            </div>
+                        </div>
+                    {% elif video.status == 'uploaded' and video.file_path %}
+                        <div id="videoContainer">
+                            <video id="videoPlayer" controls class="w-full rounded-lg" onloadstart="handleVideoLoad()" onerror="handleVideoError()">
+                                <source src="{{ url_for('videos.stream_video', filename=video.file_path) }}" type="video/mp4">
+                                <source src="{{ url_for('videos.serve_video_static', filename=video.file_path) }}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            
+                            <!-- Video Loading/Error States -->
+                            <div id="videoLoading" class="bg-gray-100 rounded-lg h-64 flex items-center justify-center hidden">
+                                <div class="text-center">
+                                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                                    <p class="text-gray-600">Loading video...</p>
+                                </div>
+                            </div>
+                            
+                            <div id="videoError" class="bg-red-50 border border-red-200 rounded-lg p-4 mt-4 hidden">
+                                <h4 class="text-sm font-medium text-red-800 mb-2">🚫 Video Format Not Supported</h4>
+                                <div class="text-sm text-red-600 mb-3">
+                                    <p>This video file appears to be in IMKH format, which is not supported by web browsers.</p>
+                                    <p class="mt-2"><strong>Solutions:</strong></p>
+                                    <ul class="list-disc ml-4 mt-1">
+                                        <li>Convert to MP4 format using FFmpeg</li>
+                                        <li>Use VLC Media Player to view the original file</li>
+                                        <li>Contact your video source provider for a web-compatible version</li>
+                                    </ul>
+                                </div>
+                                <div class="space-y-2">
+                                    <button onclick="showConversionInstructions()" class="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
+                                        📝 Show Conversion Instructions
+                                    </button>
+                                    <a href="{{ url_for('videos.download_video', filename=video.file_path) }}" 
+                                       class="text-sm bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 inline-block">
+                                        📥 Download Original File
+                                    </a>
+                                    <button onclick="openDiagnosticTool()" class="text-sm bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700">
+                                        🔍 Open Diagnostic Tool
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div id="conversionInstructions" class="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4 hidden">
+                                <h4 class="text-sm font-medium text-blue-800 mb-2">🛠️ Video Conversion Instructions</h4>
+                                <div class="text-sm text-blue-700">
+                                    <p class="mb-2"><strong>Option 1: Using FFmpeg (Recommended)</strong></p>
+                                    <ol class="list-decimal ml-4 mb-3">
+                                        <li>Install FFmpeg from <a href="https://ffmpeg.org/download.html" target="_blank" class="underline">ffmpeg.org</a></li>
+                                        <li>Open command line in the video file directory</li>
+                                        <li>Run: <code class="bg-gray-200 px-1 rounded">ffmpeg -i input.mp4 -c:v libx264 -c:a aac -preset medium -crf 23 output.mp4</code></li>
+                                    </ol>
+                                    
+                                    <p class="mb-2"><strong>Option 2: Using Online Converters</strong></p>
+                                    <ul class="list-disc ml-4 mb-3">
+                                        <li>CloudConvert, Online-Convert, or similar services</li>
+                                        <li>Upload your file and convert to MP4</li>
+                                    </ul>
+                                    
+                                    <p class="mb-2"><strong>Option 3: Video Editing Software</strong></p>
+                                    <ul class="list-disc ml-4">
+                                        <li>VLC Media Player (free)</li>
+                                        <li>HandBrake (free)</li>
+                                        <li>Adobe Premiere, Final Cut Pro, etc.</li>
+                                    </ul>
+                                </div>
+                                <button onclick="hideConversionInstructions()" class="text-sm bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700 mt-2">
+                                    Hide Instructions
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Video Information -->
+                        <div class="mt-4 text-sm text-gray-600">
+                            <p><strong>File:</strong> {{ video.filename }}</p>
+                            <p><strong>Size:</strong> {{ (video.file_size / 1024 / 1024) | round(1) }} MB</p>
+                            {% if video.duration %}
+                                <p><strong>Duration:</strong> {{ "%.1f"|format(video.duration) }} seconds</p>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <div class="bg-gray-100 rounded-lg h-64 flex items-center justify-center">
+                            {% if video.status == 'processing' %}
+                                <div class="text-center">
+                                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                                    <p class="text-gray-600">Video is being processed...</p>
+                                </div>
+                            {% elif video.status == 'failed' %}
+                                <div class="text-center">
+                                    <svg class="mx-auto h-12 w-12 text-red-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <p class="text-gray-600">Processing failed</p>
+                                    <p class="text-sm text-red-600 mt-1">{{ video.error_message or 'Unknown error' }}</p>
+                                </div>
+                            {% else %}
+                                <div class="text-center">
+                                    <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 002 2v8a2 2 0 002 2z"></path>
+                                    </svg>
+                                    <p class="text-gray-600">Video preview not available</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Processing Details -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Processing Details</h2>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-500">Processing Status</label>
+                            <p class="mt-1 text-sm text-gray-900">{{ video.status.title() }}</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-500">Priority</label>
+                            <p class="mt-1 text-sm text-gray-900">{{ video.priority.title() if video.priority else 'Normal' }}</p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-500">Started</label>
+                            <p class="mt-1 text-sm text-gray-900">
+                                {% if video.processing_started_at %}
+                                    {{ video.processing_started_at.strftime('%b %d, %Y at %H:%M') }}
+                                {% else %}
+                                    Not started
+                                {% endif %}
+                            </p>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-500">Completed</label>
+                            <p class="mt-1 text-sm text-gray-900">
+                                {% if video.processing_completed_at %}
+                                    {{ video.processing_completed_at.strftime('%b %d, %Y at %H:%M') }}
+                                {% else %}
+                                    Not completed
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    
+                    {% if video.status == 'failed' and video.error_message %}
+                        <div class="bg-red-50 border border-red-200 rounded-md p-4">
+                            <h4 class="text-sm font-medium text-red-800">Error Details</h4>
+                            <p class="mt-1 text-sm text-red-700">{{ video.error_message }}</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Stats and Actions -->
+            <div class="space-y-6">
+                <!-- Quick Stats -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Detection Results</h2>
+                    
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-600">Persons Detected</span>
+                            <span class="text-sm font-medium text-gray-900">{{ detections|length }}</span>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-600">Identified</span>
+                            <span class="text-sm font-medium text-gray-900">
+                                {{ detections|selectattr('is_identified')|list|length }}
+                            </span>
+                        </div>
+                        
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-600">Confidence Score</span>
+                            <span class="text-sm font-medium text-gray-900">
+                                {% if detections %}
+                                    {{ "%.1f"|format((detections|sum(attribute='confidence')/detections|length)*100) }}%
+                                {% else %}
+                                    --
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Actions</h2>
+                    
+                    <div class="space-y-3">
+                        {% if video.status == 'uploaded' or (video.status == 'completed' and video.processed_path) %}
+                            <!-- Status message for web-compatible videos -->
+                            <div class="bg-green-50 border border-green-200 rounded-md p-4 mb-3">
+                                {% if video.processed_path %}
+                                    <h4 class="text-sm font-medium text-green-800 mb-2">✅ Converted Video Ready</h4>
+                                    <p class="text-sm text-green-700 mb-3">This video has been automatically converted to web-compatible MP4 format and is ready for processing.</p>
+                                {% else %}
+                                    <h4 class="text-sm font-medium text-green-800 mb-2">✅ Web-Compatible Format</h4>
+                                    <p class="text-sm text-green-700 mb-3">This video is already in a web-compatible format and ready to play.</p>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Process Video Form -->
+                            <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST" class="space-y-3">
+                                <div class="bg-blue-50 border border-blue-200 rounded-md p-4">
+                                    <h4 class="text-sm font-medium text-blue-800 mb-3">Process Video Options</h4>
+                                    
+                                    <div class="space-y-2">
+                                        <label class="flex items-center">
+                                            <input type="checkbox" name="extract_persons" value="true" checked class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                                            <span class="ml-2 text-sm text-gray-700">Extract persons from video</span>
+                                        </label>
+                                        
+                                        <label class="flex items-center">
+                                            <input type="checkbox" name="face_recognition" value="true" class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                                            <span class="ml-2 text-sm text-gray-700">Run face recognition</span>
+                                        </label>
+                                        
+                                        <label class="flex items-center">
+                                            <input type="checkbox" name="extract_frames" value="true" class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                                            <span class="ml-2 text-sm text-gray-700">Extract key frames</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                                    Process Video
+                                </button>
+                            </form>
+                        {% elif video.status == 'converting' %}
+                            <div class="bg-blue-50 border border-blue-200 rounded-md p-4">
+                                <h4 class="text-sm font-medium text-blue-800 mb-2">🔄 Auto-Converting Video</h4>
+                                <div class="flex items-center mb-3">
+                                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
+                                    <span class="text-sm text-blue-700">Automatically converting to web-compatible MP4 format...</span>
+                                </div>
+                                
+                                <!-- Progress Bar -->
+                                <div class="mb-3">
+                                    <div class="flex justify-between text-xs text-blue-600 mb-1">
+                                        <span>Progress</span>
+                                        <span id="progressPercent">0%</span>
+                                    </div>
+                                    <div class="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
+                                        <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300 progress-bar-animated" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Progress Message -->
+                                <div class="text-xs text-blue-600 mb-3">
+                                    <div id="progressMessage">This video was detected as non-web-compatible and is being converted automatically...</div>
+                                    <div class="mt-1">
+                                        Started: {{ video.processing_started_at.strftime('%H:%M:%S') if video.processing_started_at }}
+                                    </div>
+                                </div>
+                                
+                                <!-- Real-time Status -->
+                                <div id="conversionProgress" class="text-xs text-blue-600 bg-blue-100 p-2 rounded">
+                                    <div class="flex items-center">
+                                        <div class="h-2 w-2 bg-blue-600 rounded-full mr-2 live-indicator"></div>
+                                        <span id="liveStatus" class="conversion-status-live">Checking conversion status...</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Debug Panel (only visible in converting state) -->
+                                <div id="debugPanel" class="mt-4 p-3 bg-gray-100 rounded text-xs text-gray-600">
+                                    <div class="font-medium mb-2">🔧 Debug Information:</div>
+                                    <div id="debugInfo">
+                                        <div>• Status: <span id="debugStatus">Unknown</span></div>
+                                        <div>• Progress: <span id="debugProgress">0%</span></div>
+                                        <div>• Message: <span id="debugMessage">No message</span></div>
+                                        <div>• Last Update: <span id="debugLastUpdate">Never</span></div>
+                                        <div>• API Calls: <span id="debugApiCalls">0</span></div>
+                                        <div>• Task ID: <span id="debugTaskId">None</span></div>
+                                        <div>• WebSocket: <span id="debugWebSocket">Disconnected</span></div>
+                                        <div>• Connection: <span id="debugConnection">AJAX Polling</span></div>
+                                    </div>
+                                    <button onclick="toggleDebugPanel()" class="mt-2 text-xs bg-gray-300 px-2 py-1 rounded">Hide Debug</button>
+                                </div>
+                            </div>
+                        {% elif video.status == 'completed' %}
+                            <button class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                                Run Face Recognition
+                            </button>
+                            
+                            <button class="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                                Export Results
+                            </button>
+                        {% elif video.status == 'failed' %}
+                            <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST">
+                                <input type="hidden" name="extract_persons" value="true">
+                                <button type="submit" class="w-full px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700">
+                                    Retry Processing
+                                </button>
+                            </form>
+                        {% endif %}
+                        
+                        <button class="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                            Download Original
+                        </button>
+                        
+                        <button class="w-full px-4 py-2 border border-red-300 rounded-md text-red-700 hover:bg-red-50">
+                            Delete Video
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Processing Log -->
+                {% if video.processing_log %}
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Processing Log</h2>
+                    
+                    <div class="bg-gray-50 rounded-md p-3 max-h-32 overflow-y-auto">
+                        <pre class="text-xs text-gray-700 whitespace-pre-wrap">{{ video.processing_log }}</pre>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Detections -->
+        {% if detections %}
+        <div class="mt-6 bg-white rounded-lg shadow-md">
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-lg font-semibold text-gray-800">Detected Persons</h2>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Identified As</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bounding Box</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for detection in detections %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {{ "%.2f"|format(detection.timestamp) }}s
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {{ "%.1f"|format(detection.confidence * 100) }}%
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {% if detection.is_identified and detection.employee %}
+                                    <span class="text-blue-600">{{ detection.employee.name }}</span>
+                                {% else %}
+                                    <span class="text-gray-400">Unknown</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ detection.bbox_x }}, {{ detection.bbox_y }}, 
+                                {{ detection.bbox_width }}x{{ detection.bbox_height }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                {% if not detection.is_identified %}
+                                    <button class="text-blue-600 hover:text-blue-900">Identify</button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function handleVideoLoad() {
+    console.log('Video loading started...');
+    const loading = document.getElementById('videoLoading');
+    const error = document.getElementById('videoError');
+    if (loading) loading.classList.add('hidden');
+    if (error) error.classList.add('hidden');
+}
+
+function handleVideoError() {
+    console.log('Video error occurred');
+    const video = document.getElementById('videoPlayer');
+    const error = document.getElementById('videoError');
+    if (error) {
+        error.classList.remove('hidden');
+    }
+    if (video) {
+        video.style.display = 'none';
+    }
+}
+
+function tryAlternativePlayback() {
+    const video = document.getElementById('videoPlayer');
+    const error = document.getElementById('videoError');
+    
+    if (video) {
+        // Try different serving method
+        const filename = '{{ video.file_path }}';
+        video.innerHTML = `
+            <source src="{{ url_for('videos.serve_video_static', filename='') }}${filename}" type="application/octet-stream">
+            <source src="{{ url_for('videos.download_video', filename='') }}${filename}" type="application/octet-stream">
+        `;
+        video.style.display = 'block';
+        video.load();
+        
+        if (error) {
+            error.classList.add('hidden');
+        }
+        
+        // Show loading state
+        const loading = document.getElementById('videoLoading');
+        if (loading) {
+            loading.classList.remove('hidden');
+        }
+        
+        // Set timeout to show error again if still failing
+        setTimeout(() => {
+            if (video.readyState === 0) {
+                handleVideoError();
+                if (loading) loading.classList.add('hidden');
+            }
+        }, 5000);
+    }
+}
+
+function showConversionInstructions() {
+    document.getElementById('conversionInstructions').classList.remove('hidden');
+}
+
+function hideConversionInstructions() {
+    document.getElementById('conversionInstructions').classList.add('hidden');
+}
+
+function openDiagnosticTool() {
+    window.open('/static/video_test.html', '_blank');
+}
+
+function checkConversionStatus() {
+    const videoId = {{ video.id }};
+    
+    console.log(`🔍 Checking conversion status for video ${videoId}...`);
+    
+    fetch(`/videos/api/${videoId}/conversion-status`)
+        .then(response => {
+            console.log(`📡 API Response status: ${response.status}`);
+            return response.json();
+        })
+        .then(data => {
+            console.log('📊 Conversion status data received:', data);
+            console.log('📊 Data details:', {
+                status: data.status,
+                progress: data.progress,
+                message: data.progress_message,
+                taskId: data.task_id,
+                timestamp: new Date().toLocaleTimeString()
+            });
+            updateProgressUI(data);
+        })
+        .catch(error => {
+            console.error('❌ Error checking conversion status:', error);
+            const liveStatus = document.getElementById('liveStatus');
+            if (liveStatus) {
+                liveStatus.textContent = '⚠️ Error checking status. Please refresh the page.';
+            }
+        });
+}
+
+function updateProgressUI(data) {
+    console.log('🎨 Updating progress UI with data:', data);
+    
+    const progressBar = document.getElementById('progressBar');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressMessage = document.getElementById('progressMessage');
+    const liveStatus = document.getElementById('liveStatus');
+    
+    // Update debug information
+    updateDebugInfo(data);
+    
+    // Log current UI elements
+    console.log('📋 UI Elements found:', {
+        progressBar: !!progressBar,
+        progressPercent: !!progressPercent, 
+        progressMessage: !!progressMessage,
+        liveStatus: !!liveStatus
+    });
+    
+    if (data.status === 'completed') {
+        console.log('✅ Conversion completed!');
+        if (progressBar) progressBar.style.width = '100%';
+        if (progressPercent) progressPercent.textContent = '100%';
+        if (progressMessage) progressMessage.textContent = 'Conversion completed successfully!';
+        if (liveStatus) liveStatus.innerHTML = '✅ Conversion completed! Reloading page...';
+        
+        // Clear the progress interval and disconnect WebSocket
+        if (window.conversionProgressInterval) {
+            clearInterval(window.conversionProgressInterval);
+            window.conversionProgressInterval = null;
+        }
+        
+        if (socket) {
+            socket.emit('leave_video_room', { video_id: {{ video.id }} });
+        }
+        
+        setTimeout(() => location.reload(), 2000);
+        
+    } else if (data.status === 'failed') {
+        console.log('❌ Conversion failed:', data.error_message);
+        if (progressBar) progressBar.style.width = '0%';
+        if (progressPercent) progressPercent.textContent = '0%';
+        if (progressMessage) progressMessage.textContent = 'Conversion failed';
+        if (liveStatus) liveStatus.innerHTML = `❌ Conversion failed: ${data.error_message || 'Unknown error'}`;
+        
+        // Clear the progress interval and disconnect WebSocket
+        if (window.conversionProgressInterval) {
+            clearInterval(window.conversionProgressInterval);
+            window.conversionProgressInterval = null;
+        }
+        
+        if (socket) {
+            socket.emit('leave_video_room', { video_id: {{ video.id }} });
+        }
+        
+    } else if (data.status === 'converting') {
+        const progress = data.progress || 0;
+        const message = data.progress_message || 'Converting...';
+        
+        console.log(`🔄 Converting: ${progress.toFixed(1)}% - ${message}`);
+        
+        // Update progress bar with animation
+        if (progressBar) {
+            progressBar.style.width = `${progress}%`;
+            progressBar.style.transition = 'width 0.3s ease-in-out';
+        }
+        if (progressPercent) progressPercent.textContent = `${progress.toFixed(1)}%`;
+        
+        // Update messages
+        if (progressMessage) progressMessage.textContent = message;
+        
+        // Calculate elapsed time
+        const elapsed = data.processing_started_at ? 
+            Math.round((new Date() - new Date(data.processing_started_at)) / 1000) : 0;
+        
+        const elapsedMinutes = Math.floor(elapsed / 60);
+        const elapsedSeconds = elapsed % 60;
+        const elapsedText = elapsedMinutes > 0 ? 
+            `${elapsedMinutes}m ${elapsedSeconds}s` : `${elapsedSeconds}s`;
+        
+        if (liveStatus) {
+            liveStatus.innerHTML = `🔄 ${message} (${elapsedText} elapsed)`;
+        }
+        
+        // Update page title to show progress
+        document.title = `Converting ${progress.toFixed(1)}% - ${message}`;
+        
+        // Visual feedback: pulse effect on high progress
+        if (progress > 80 && progressBar) {
+            progressBar.style.animation = 'pulse 1s infinite';
+        } else if (progressBar) {
+            progressBar.style.animation = 'none';
+        }
+        
+    } else {
+        console.log('⚠️ Unknown status:', data.status);
+        if (liveStatus) {
+            liveStatus.textContent = `Status: ${data.status}`;
+        }
+    }
+}
+
+// WebSocket connection for real-time progress updates
+let socket = null;
+
+function initializeWebSocket() {
+    const videoId = {{ video.id }};
+    const videoStatus = '{{ video.status }}';
+    
+    console.log('📡 Initializing WebSocket connection...');
+    
+    // Initialize Socket.IO connection
+    socket = io();
+    
+    socket.on('connect', function() {
+        console.log('📡 WebSocket connected');
+        
+        // Join the video-specific room for updates
+        socket.emit('join_video_room', { video_id: videoId });
+        
+        // Request current status
+        socket.emit('request_video_status', { video_id: videoId });
+    });
+    
+    socket.on('disconnect', function() {
+        console.log('📡 WebSocket disconnected');
+    });
+    
+    socket.on('status', function(data) {
+        console.log('📡 WebSocket status:', data.message);
+    });
+    
+    socket.on('conversion_progress', function(data) {
+        console.log('🔄 WebSocket progress update:', data);
+        
+        // Only process updates for this video
+        if (data.video_id === videoId) {
+            updateProgressUI(data);
+        }
+    });
+    
+    socket.on('video_status', function(data) {
+        console.log('📊 WebSocket video status:', data);
+        
+        // Process current status response
+        if (data.video_id === videoId) {
+            updateProgressUI(data);
+        }
+    });
+    
+    // Handle connection errors
+    socket.on('connect_error', function(error) {
+        console.error('📡 WebSocket connection error:', error);
+        console.log('📡 Falling back to AJAX polling...');
+        
+        // Fallback to AJAX polling if WebSocket fails
+        if (videoStatus === 'converting') {
+            setupAjaxPolling();
+        }
+    });
+}
+
+function setupAjaxPolling() {
+    console.log('🔄 Setting up AJAX polling fallback...');
+    
+    // Initial check immediately
+    checkConversionStatus();
+    
+    // Check status every 3 seconds for frequent updates
+    const progressInterval = setInterval(function() {
+        checkConversionStatus();
+    }, 3000);
+    
+    // Store interval ID so we can clear it if needed
+    window.conversionProgressInterval = progressInterval;
+    
+    // Clear interval when page is hidden/unloaded
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden && window.conversionProgressInterval) {
+            clearInterval(window.conversionProgressInterval);
+            console.log('⏸️ Paused progress tracking (page hidden)');
+        } else if (!document.hidden && '{{ video.status }}' === 'converting') {
+            // Resume when page becomes visible again
+            window.conversionProgressInterval = setInterval(checkConversionStatus, 3000);
+            console.log('▶️ Resumed progress tracking (page visible)');
+        }
+    });
+}
+
+// Initialize real-time updates
+document.addEventListener('DOMContentLoaded', function() {
+    const videoStatus = '{{ video.status }}';
+    
+    if (videoStatus === 'converting') {
+        console.log('🔄 Video is converting, setting up real-time progress tracking...');
+        
+        // Try WebSocket first, fallback to AJAX polling
+        if (typeof io !== 'undefined') {
+            initializeWebSocket();
+        } else {
+            console.log('📡 Socket.IO not available, using AJAX polling...');
+            setupAjaxPolling();
+        }
+    }
+});
+
+// Add video event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    const video = document.getElementById('videoPlayer');
+    if (video) {
+        video.addEventListener('loadstart', function() {
+            console.log('Video load started');
+            const loading = document.getElementById('videoLoading');
+            if (loading) loading.classList.remove('hidden');
+        });
+        
+        video.addEventListener('canplay', function() {
+            console.log('Video can start playing');
+            const loading = document.getElementById('videoLoading');
+            if (loading) loading.classList.add('hidden');
+        });
+        
+        video.addEventListener('error', function(e) {
+            console.log('Video error:', e);
+            handleVideoError();
+            const loading = document.getElementById('videoLoading');
+            if (loading) loading.classList.add('hidden');
+        });
+        
+        video.addEventListener('stalled', function() {
+            console.log('Video stalled');
+            const loading = document.getElementById('videoLoading');
+            if (loading) loading.classList.remove('hidden');
+        });
+        
+        video.addEventListener('waiting', function() {
+            console.log('Video waiting for data');
+            const loading = document.getElementById('videoLoading');
+            if (loading) loading.classList.remove('hidden');
+        });
+        
+        video.addEventListener('playing', function() {
+            console.log('Video is playing');
+            const loading = document.getElementById('videoLoading');
+            if (loading) loading.classList.add('hidden');
+        });
+    }
+});
+
+// Debug functionality
+let debugApiCallCount = 0;
+
+function updateDebugInfo(data) {
+    debugApiCallCount++;
+    const now = new Date().toLocaleTimeString();
+    
+    // Update debug panel elements
+    const debugStatus = document.getElementById('debugStatus');
+    const debugProgress = document.getElementById('debugProgress');
+    const debugMessage = document.getElementById('debugMessage');
+    const debugLastUpdate = document.getElementById('debugLastUpdate');
+    const debugApiCalls = document.getElementById('debugApiCalls');
+    const debugTaskId = document.getElementById('debugTaskId');
+    
+    if (debugStatus) debugStatus.textContent = data.status || 'Unknown';
+    if (debugProgress) debugProgress.textContent = data.progress ? `${data.progress.toFixed(1)}%` : '0%';
+    if (debugMessage) debugMessage.textContent = data.progress_message || 'No message';
+    if (debugLastUpdate) debugLastUpdate.textContent = now;
+    if (debugApiCalls) debugApiCalls.textContent = debugApiCallCount;
+    if (debugTaskId) debugTaskId.textContent = data.task_id || 'None';
+    
+    // Update WebSocket status
+    const debugWebSocket = document.getElementById('debugWebSocket');
+    const debugConnection = document.getElementById('debugConnection');
+    
+    if (debugWebSocket && socket) {
+        debugWebSocket.textContent = socket.connected ? 'Connected' : 'Disconnected';
+        debugWebSocket.style.color = socket.connected ? 'green' : 'red';
+    }
+    
+    if (debugConnection) {
+        debugConnection.textContent = socket && socket.connected ? 'WebSocket' : 'AJAX Polling';
+        debugConnection.style.color = socket && socket.connected ? 'green' : 'orange';
+    }
+    
+    console.log('🔧 Debug info updated:', {
+        status: data.status,
+        progress: data.progress,
+        message: data.progress_message,
+        apiCalls: debugApiCallCount,
+        websocket: socket ? socket.connected : false,
+        time: now
+    });
+}
+
+function toggleDebugPanel() {
+    const debugPanel = document.getElementById('debugPanel');
+    if (debugPanel) {
+        const isVisible = !debugPanel.classList.contains('hidden');
+        if (isVisible) {
+            debugPanel.classList.add('hidden');
+        } else {
+            debugPanel.classList.remove('hidden');
+        }
+        
+        // Update button text
+        const button = debugPanel.querySelector('button[onclick="toggleDebugPanel()"]');
+        if (button) {
+            button.textContent = isVisible ? 'Show Debug' : 'Hide Debug';
+        }
+        
+        console.log(`🔧 Debug panel ${isVisible ? 'hidden' : 'shown'}`);
+    }
+}
+
+// Initialize debug panel visibility
+document.addEventListener('DOMContentLoaded', function() {
+    const videoStatus = '{{ video.status }}';
+    const debugPanel = document.getElementById('debugPanel');
+    
+    // Show debug panel by default when converting
+    if (videoStatus === 'converting' && debugPanel) {
+        debugPanel.classList.remove('hidden');
+        console.log('🔧 Debug panel initialized and visible');
+    }
+});
+
+// Video playback debugging function
+function testVideoPlayback(filename) {
+    console.log('🔍 Testing video playback for:', filename);
+    
+    // Test direct streaming URL
+    const streamUrl = `/videos/stream/${filename}`;
+    const staticUrl = `/videos/serve/${filename}`;
+    
+    // Create a test video element
+    const testVideo = document.createElement('video');
+    testVideo.preload = 'metadata';
+    testVideo.muted = true;
+    
+    testVideo.addEventListener('loadstart', () => {
+        console.log('📡 Video load started');
+    });
+    
+    testVideo.addEventListener('loadedmetadata', () => {
+        console.log('📊 Video metadata loaded:', {
+            duration: testVideo.duration,
+            width: testVideo.videoWidth,
+            height: testVideo.videoHeight,
+            readyState: testVideo.readyState
+        });
+    });
+    
+    testVideo.addEventListener('canplay', () => {
+        console.log('✅ Video can play - format is compatible');
+    });
+    
+    testVideo.addEventListener('error', (e) => {
+        console.error('❌ Video error:', {
+            error: testVideo.error,
+            code: testVideo.error?.code,
+            message: testVideo.error?.message,
+            networkState: testVideo.networkState,
+            readyState: testVideo.readyState
+        });
+        
+        // Try alternative URL
+        console.log('🔄 Trying alternative URL...');
+        testVideo.src = staticUrl;
+    });
+    
+    // Start testing
+    testVideo.src = streamUrl;
+    
+    // Also test HTTP response
+    fetch(streamUrl, { 
+        method: 'HEAD',
+        headers: { 'Range': 'bytes=0-1024' }
+    })
+    .then(response => {
+        console.log('📡 HTTP Response:', {
+            status: response.status,
+            contentType: response.headers.get('content-type'),
+            contentLength: response.headers.get('content-length'),
+            acceptRanges: response.headers.get('accept-ranges'),
+            contentRange: response.headers.get('content-range')
+        });
+    })
+    .catch(error => {
+        console.error('📡 HTTP Error:', error);
+    });
+}
+
+// Reconvert video function
+function reconvertVideo(videoId) {
+    if (!confirm('Re-convert this video? This will overwrite the current converted version.')) {
+        return;
+    }
+    
+    console.log('🔄 Starting reconversion for video ID:', videoId);
+    
+    // Make POST request to reconvert
+    fetch(`/videos/${videoId}/convert`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => {
+        if (response.ok) {
+            console.log('✅ Reconversion started successfully');
+            alert('Reconversion started! The page will refresh to show progress.');
+            location.reload();
+        } else {
+            console.error('❌ Reconversion failed:', response.status);
+            alert('Failed to start reconversion. Please try again.');
+        }
+    })
+    .catch(error => {
+        console.error('❌ Reconversion error:', error);
+        alert('Error starting reconversion. Please try again.');
+    });
+}
+
+// Debug video status function
+function debugVideoStatus(videoId) {
+    console.log('🐛 Getting debug status for video ID:', videoId);
+    
+    fetch(`/videos/api/debug/${videoId}`)
+    .then(response => response.json())
+    .then(data => {
+        console.log('🐛 Debug Status:', data);
+        
+        // Display in a readable format
+        const debugInfo = `
+📹 VIDEO INFO:
+- ID: ${data.video_info.id}
+- Status: ${data.video_info.status}
+- Filename: ${data.video_info.filename}
+- Processed Path: ${data.video_info.processed_path || 'None'}
+- Started: ${data.video_info.processing_started_at || 'Never'}
+- Log: ${data.video_info.processing_log || 'None'}
+- Error: ${data.video_info.error_message || 'None'}
+
+🔧 CONVERSION MANAGER:
+- Total Tasks: ${data.conversion_manager.total_tasks}
+- Video Task Exists: ${data.conversion_manager.video_task_exists}
+- All Task IDs: ${data.conversion_manager.all_task_ids.join(', ') || 'None'}
+
+${data.conversion_manager.video_task_data ? `
+📊 VIDEO TASK DATA:
+- Task ID: ${data.conversion_manager.video_task_data.task_id}
+- Status: ${data.conversion_manager.video_task_data.status}
+- Progress: ${data.conversion_manager.video_task_data.progress}%
+- Message: ${data.conversion_manager.video_task_data.message}
+- Started: ${data.conversion_manager.video_task_data.started_at}
+` : '❌ No active conversion task found'}
+        `;
+        
+        alert(debugInfo);
+    })
+    .catch(error => {
+        console.error('🐛 Debug error:', error);
+        alert('Failed to get debug information');
+    });
+}
+</script>
+{% endblock %}

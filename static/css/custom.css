@@ -1,0 +1,343 @@
+/* Custom CSS for StepMedia HRM */
+
+/* Theme Variables */
+:root {
+    --primary-color: #2E3192;
+    --secondary-color: #F5F5F5;
+    --accent-color: #008080;
+    --success-color: #10B981;
+    --warning-color: #F59E0B;
+    --error-color: #EF4444;
+    --info-color: #3B82F6;
+}
+
+/* Dark theme variables */
+[data-theme="dark"] {
+    --bg-primary: #1F2937;
+    --bg-secondary: #111827;
+    --text-primary: #F9FAFB;
+    --text-secondary: #D1D5DB;
+}
+
+/* Smooth transitions */
+* {
+    transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-track {
+    background: #374151;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+    background: #6B7280;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: #9CA3AF;
+}
+
+/* Loading spinner */
+.spinner {
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid var(--primary-color);
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Progress bar animations */
+.progress-bar {
+    transition: width 0.3s ease;
+}
+
+/* Card hover effects */
+.card-hover {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Button animations */
+.btn-animate {
+    transition: all 0.2s ease;
+}
+
+.btn-animate:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Video player custom styles */
+.video-container {
+    position: relative;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.video-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.video-container:hover .video-overlay {
+    opacity: 1;
+}
+
+/* Face detection boxes */
+.face-box {
+    position: absolute;
+    border: 2px solid var(--accent-color);
+    background: rgba(0, 128, 128, 0.2);
+    pointer-events: none;
+    animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+    0% { border-color: var(--accent-color); }
+    50% { border-color: rgba(0, 128, 128, 0.5); }
+    100% { border-color: var(--accent-color); }
+}
+
+/* Person timeline */
+.person-timeline {
+    position: relative;
+    height: 40px;
+    background: #e5e7eb;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.person-segment {
+    position: absolute;
+    height: 100%;
+    background: var(--accent-color);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.person-segment:hover {
+    background: #006666;
+}
+
+/* Status badges */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.status-badge.processing {
+    background-color: #DBEAFE;
+    color: #1E40AF;
+}
+
+.status-badge.completed {
+    background-color: #D1FAE5;
+    color: #065F46;
+}
+
+.status-badge.failed {
+    background-color: #FEE2E2;
+    color: #991B1B;
+}
+
+.status-badge.pending {
+    background-color: #FEF3C7;
+    color: #92400E;
+}
+
+/* Dark mode status badges */
+.dark .status-badge.processing {
+    background-color: #1E3A8A;
+    color: #BFDBFE;
+}
+
+.dark .status-badge.completed {
+    background-color: #064E3B;
+    color: #A7F3D0;
+}
+
+.dark .status-badge.failed {
+    background-color: #7F1D1D;
+    color: #FECACA;
+}
+
+.dark .status-badge.pending {
+    background-color: #78350F;
+    color: #FDE68A;
+}
+
+/* File upload zone */
+.upload-zone {
+    border: 2px dashed #d1d5db;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.upload-zone.dragover {
+    border-color: var(--primary-color);
+    background-color: rgba(46, 49, 146, 0.05);
+}
+
+.dark .upload-zone {
+    border-color: #4b5563;
+}
+
+.dark .upload-zone.dragover {
+    border-color: var(--primary-color);
+    background-color: rgba(46, 49, 146, 0.1);
+}
+
+/* Notification animations */
+.notification-enter {
+    animation: slideInRight 0.3s ease;
+}
+
+.notification-exit {
+    animation: slideOutRight 0.3s ease;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+/* Data table styles */
+.data-table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.data-table th {
+    background-color: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    font-weight: 600;
+    text-align: left;
+    padding: 0.75rem 1rem;
+}
+
+.data-table td {
+    border-bottom: 1px solid #e5e7eb;
+    padding: 0.75rem 1rem;
+}
+
+.data-table tr:hover {
+    background-color: #f9fafb;
+}
+
+.dark .data-table th {
+    background-color: #374151;
+    border-bottom-color: #4b5563;
+}
+
+.dark .data-table td {
+    border-bottom-color: #4b5563;
+}
+
+.dark .data-table tr:hover {
+    background-color: #374151;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+    .ml-64 {
+        margin-left: 0;
+    }
+    
+    nav.fixed.left-0 {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+    
+    nav.fixed.left-0.mobile-open {
+        transform: translateX(0);
+    }
+    
+    .mobile-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 30;
+    }
+}
+
+/* Print styles */
+@media print {
+    .no-print {
+        display: none;
+    }
+    
+    body {
+        background: white;
+        color: black;
+    }
+    
+    .bg-white {
+        box-shadow: none;
+        border: 1px solid #e5e7eb;
+    }
+}

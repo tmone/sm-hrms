@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Employees - StepMedia HRM{% endblock %}
+{% block page_title %}Employees{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Employee Directory</h2>
+            <p class="text-gray-600 dark:text-gray-400">Manage your team members and their information</p>
+        </div>
+        <a href="{{ url_for('employees.create') }}" 
+           class="bg-primary hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+            <i class="fas fa-plus mr-2"></i>Add Employee
+        </a>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Search</label>
+                <input type="text" 
+                       name="search" 
+                       value="{{ search }}"
+                       placeholder="Name, email, or ID..."
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Department</label>
+                <select name="department" 
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept }}" {% if dept == department %}selected{% endif %}>{{ dept }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status</label>
+                <select name="status" 
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                    <option value="">All Status</option>
+                    <option value="active" {% if status == 'active' %}selected{% endif %}>Active</option>
+                    <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+            <div class="flex items-end">
+                <button type="submit" 
+                        class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                    <i class="fas fa-search mr-2"></i>Filter
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Employee Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for employee in employees.items %}
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 card-hover">
+            <div class="flex items-center space-x-4">
+                <div class="w-12 h-12 bg-primary text-white rounded-full flex items-center justify-center">
+                    <span class="text-lg font-bold">{{ employee.name[0].upper() }}</span>
+                </div>
+                <div class="flex-1">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ employee.name }}</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">{{ employee.position or 'No position' }}</p>
+                    <p class="text-sm text-gray-500">{{ employee.department }}</p>
+                </div>
+                <div class="text-right">
+                    <span class="px-2 py-1 rounded-full text-xs font-medium
+                                {% if employee.status == 'active' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% endif %}
+                                {% if employee.status == 'inactive' %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200{% endif %}">
+                        {{ employee.status.title() }}
+                    </span>
+                </div>
+            </div>
+            
+            <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+                    <span><i class="fas fa-envelope mr-1"></i>{{ employee.email }}</span>
+                    <span><i class="fas fa-phone mr-1"></i>{{ employee.phone or 'No phone' }}</span>
+                </div>
+            </div>
+            
+            <div class="mt-4 flex space-x-2">
+                <a href="{{ url_for('employees.detail', id=employee.id) }}" 
+                   class="flex-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-600 dark:text-blue-300 text-center py-2 px-3 rounded text-sm font-medium transition-colors">
+                    View Details
+                </a>
+                <a href="{{ url_for('employees.edit', id=employee.id) }}" 
+                   class="flex-1 bg-gray-50 hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 text-center py-2 px-3 rounded text-sm font-medium transition-colors">
+                    Edit
+                </a>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-span-3 text-center py-12">
+            <i class="fas fa-users text-6xl text-gray-300 dark:text-gray-600 mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No employees found</h3>
+            <p class="text-gray-600 dark:text-gray-400 mb-4">Get started by adding your first employee.</p>
+            <a href="{{ url_for('employees.create') }}" 
+               class="bg-primary hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                Add Employee
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if employees.pages > 1 %}
+    <div class="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
+        <div class="text-sm text-gray-600 dark:text-gray-400">
+            Showing {{ employees.per_page * (employees.page - 1) + 1 }} to 
+            {{ employees.per_page * employees.page if employees.page < employees.pages else employees.total }} 
+            of {{ employees.total }} employees
+        </div>
+        <div class="flex space-x-2">
+            {% if employees.has_prev %}
+            <a href="{{ url_for('employees.index', page=employees.prev_num, search=search, department=department, status=status) }}" 
+               class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                Previous
+            </a>
+            {% endif %}
+            
+            {% for page_num in employees.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num != employees.page %}
+                    <a href="{{ url_for('employees.index', page=page_num, search=search, department=department, status=status) }}" 
+                       class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                        {{ page_num }}
+                    </a>
+                    {% else %}
+                    <span class="px-3 py-2 bg-primary text-white rounded text-sm">{{ page_num }}</span>
+                    {% endif %}
+                {% else %}
+                <span class="px-3 py-2 text-gray-400">...</span>
+                {% endif %}
+            {% endfor %}
+            
+            {% if employees.has_next %}
+            <a href="{{ url_for('employees.index', page=employees.next_num, search=search, department=department, status=status) }}" 
+               class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

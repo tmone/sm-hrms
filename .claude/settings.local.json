@@ -30,7 +30,9 @@
       "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg \"processing-queue\" --type py)",
       "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg \"api_bp\" app.py)",
       "Bash(git remote add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(cp:*)",
+      "Bash(rg:*)"
     ],
     "deny": []
   }

@@ -74,10 +74,10 @@
             </div>
         </div>
 
-        <!-- Main Content: Video Preview and Detection Navigator -->
-        <div class="flex flex-col xl:flex-row gap-6">
-            <!-- Video Player (Always Visible) -->
-            <div class="xl:w-2/3">
+        <!-- Main Content: Side-by-Side Layout -->
+        <div class="flex flex-col lg:flex-row gap-6">
+            <!-- Left Side: Video Player (Always Visible) -->
+            <div class="lg:w-2/3">
                 <div class="bg-white rounded-lg shadow-md p-6 sticky top-6">
                     <h2 class="text-lg font-semibold text-gray-800 mb-4">Video Preview</h2>
                     
@@ -289,8 +289,8 @@
                 </div>
             </div>
 
-            <!-- Detection Navigation Panel -->
-            <div class="xl:w-1/3">
+            <!-- Right Side: Detection Navigation Panel -->
+            <div class="lg:w-1/3">
                 <div class="bg-white rounded-lg shadow-md">
                     <!-- Header with Stats -->
                     <div class="p-4 border-b border-gray-200">
@@ -598,107 +598,64 @@
                 {% endif %}
             </div>
         </div>
-    </div>
 
-    <!-- Detailed Detected Persons Table (Bottom Section) -->
-    {% if detections and detections|length > 0 %}
-    <div class="container mx-auto px-4 mt-8">
-        <div class="max-w-6xl mx-auto">
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-                    <h2 class="text-xl font-semibold text-gray-800 mb-2 sm:mb-0">
-                        Detailed Detection Results
-                    </h2>
-                    <div class="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-md">
-                        {{ detections|length }} person{{ 's' if detections|length != 1 }} detected • 
-                        {{ detections|selectattr('is_identified')|list|length }} identified
-                    </div>
-                </div>
-                
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Person ID</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Identity</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            {% for detection in detections %}
-                            <tr class="hover:bg-gray-50 detection-table-row" data-detection-id="{{ detection.id }}">
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    PERSON-{{ "%04d"|format(loop.index) }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {{ "%.2f"|format(detection.timestamp) }}s
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    <div class="flex items-center">
-                                        <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                                            <div class="bg-blue-600 h-2 rounded-full" style="width: {{ detection.confidence * 100 }}%"></div>
-                                        </div>
-                                        <span>{{ "%.1f"|format(detection.confidence * 100) }}%</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {% if detection.is_identified and detection.employee %}
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                            ✅ {{ detection.employee.name }}
-                                        </span>
+            
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for detection in detections %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {{ "%.2f"|format(detection.timestamp) }}s
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {{ "%.1f"|format(detection.confidence * 100) }}%
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {% if detection.is_identified and detection.employee %}
+                                    <span class="text-blue-600">{{ detection.employee.name }}</span>
+                                {% else %}
+                                    <span class="text-gray-400">Unknown</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {% if detection.bbox_x is number and detection.bbox_y is number and detection.bbox_width is number and detection.bbox_height is number %}
+                                    {{ detection.bbox_x }}, {{ detection.bbox_y }}, 
+                                    {{ detection.bbox_width }}x{{ detection.bbox_height }}
+                                {% else %}
+                                    <span class="text-red-500">Invalid bbox data</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                {% if not detection.is_identified %}
+                                    {% if detection.bbox_x is number and detection.bbox_y is number and detection.bbox_width is number and detection.bbox_height is number and detection.timestamp is number %}
+                                        <button onclick="jumpToDetection({{ detection.timestamp }}, {{ detection.id }}, {{ detection.bbox_x }}, {{ detection.bbox_y }}, {{ detection.bbox_width }}, {{ detection.bbox_height }})" 
+                                                class="text-blue-600 hover:text-blue-900 mr-2"
+                                                data-detection-id="{{ detection.id }}"
+                                                data-timestamp="{{ detection.timestamp }}"
+                                                data-bbox-x="{{ detection.bbox_x }}"
+                                                data-bbox-y="{{ detection.bbox_y }}" 
+                                                data-bbox-width="{{ detection.bbox_width }}"
+                                                data-bbox-height="{{ detection.bbox_height }}">
+                                            🎯 Go to Frame
+                                        </button>
                                     {% else %}
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                            ❓ Unknown
-                                        </span>
+                                        <span class="text-red-500">❌ Invalid data</span>
                                     {% endif %}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {% if detection.bbox_x is number and detection.bbox_y is number and detection.bbox_width is number and detection.bbox_height is number %}
-                                        <div class="text-xs">
-                                            <div>X: {{ detection.bbox_x }}, Y: {{ detection.bbox_y }}</div>
-                                            <div>{{ detection.bbox_width }}×{{ detection.bbox_height }}px</div>
-                                        </div>
-                                    {% else %}
-                                        <span class="text-red-500 text-xs">❌ Invalid bbox data</span>
-                                    {% endif %}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    <div class="flex space-x-2">
-                                        {% if detection.bbox_x is number and detection.bbox_y is number and detection.bbox_width is number and detection.bbox_height is number and detection.timestamp is number %}
-                                            <button onclick="navigateToDetection({{ detection.timestamp }}, {{ detection.id }}, {{ detection.bbox_x }}, {{ detection.bbox_y }}, {{ detection.bbox_width }}, {{ detection.bbox_height }})" 
-                                                    class="inline-flex items-center px-3 py-1 border border-blue-300 text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                                                    data-detection-id="{{ detection.id }}"
-                                                    data-timestamp="{{ detection.timestamp }}"
-                                                    data-bbox-x="{{ detection.bbox_x }}"
-                                                    data-bbox-y="{{ detection.bbox_y }}" 
-                                                    data-bbox-width="{{ detection.bbox_width }}"
-                                                    data-bbox-height="{{ detection.bbox_height }}">
-                                                🎯 Go to Frame
-                                            </button>
-                                        {% else %}
-                                            <span class="text-red-500 text-xs">❌ Invalid data</span>
-                                        {% endif %}
-                                        
-                                        {% if not detection.is_identified %}
-                                            <button onclick="identifyPerson({{ detection.id }})" 
-                                                    class="inline-flex items-center px-3 py-1 border border-green-300 text-sm leading-4 font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                                                👤 Identify
-                                            </button>
-                                        {% endif %}
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+                                    <button onclick="identifyPerson({{ detection.id }})" 
+                                            class="text-green-600 hover:text-green-900">
+                                        👤 Identify
+                                    </button>
+                                {% else %}
+                                    <span class="text-gray-400">✅ Identified</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 
 <script>
@@ -1322,27 +1279,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (loading) loading.classList.add('hidden');
         });
         
-        video.addEventListener('loadedmetadata', function() {
-            console.log('Video metadata loaded');
-            updateTimeDisplay();
-        });
-        
-        video.addEventListener('timeupdate', function() {
-            updateTimeDisplay();
-            updateDetectionCounter();
-        });
-        
         video.addEventListener('error', function(e) {
             console.log('Video error:', e);
             handleVideoError();
             const loading = document.getElementById('videoLoading');
             if (loading) loading.classList.add('hidden');
         });
-        
-        // Initialize time display
-        setTimeout(() => {
-            updateTimeDisplay();
-        }, 100);
         
         video.addEventListener('stalled', function() {
             console.log('Video stalled');
@@ -1430,67 +1372,7 @@ function toggleDebugPanel() {
     }
 }
 
-// Enhanced navigation for person detection
-function navigateToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHeight) {
-    console.log(`🎯 Navigating to detection ${detectionId} at ${timestamp}s`);
-    console.log(`📊 Parameters: timestamp=${timestamp}, detectionId=${detectionId}, bbox=[${bboxX}, ${bboxY}, ${bboxWidth}x${bboxHeight}]`);
-    
-    const video = document.getElementById('videoPlayer');
-    if (!video) {
-        console.error('❌ Video player not found');
-        return;
-    }
-    
-    // Validate parameters
-    if (isNaN(timestamp) || timestamp < 0) {
-        console.error('❌ Invalid timestamp:', timestamp);
-        return;
-    }
-    
-    if (isNaN(bboxX) || isNaN(bboxY) || isNaN(bboxWidth) || isNaN(bboxHeight)) {
-        console.error('❌ Invalid bounding box coordinates:', { bboxX, bboxY, bboxWidth, bboxHeight });
-        return;
-    }
-    
-    // Wait for video metadata to be loaded
-    if (video.readyState < 1) {
-        console.log('⏳ Waiting for video metadata to load...');
-        video.addEventListener('loadedmetadata', function() {
-            performNavigation();
-        }, { once: true });
-    } else {
-        performNavigation();
-    }
-    
-    function performNavigation() {
-        console.log(`🎬 Video duration: ${video.duration}s, seeking to: ${timestamp}s`);
-        
-        // Validate timestamp against video duration
-        if (timestamp > video.duration) {
-            console.warn('⚠️ Timestamp exceeds video duration, adjusting...');
-            timestamp = Math.min(timestamp, video.duration - 0.1);
-        }
-        
-        // Seek to timestamp and PAUSE (don't auto-play)
-        video.currentTime = timestamp;
-        if (!video.paused) {
-            video.pause();
-        }
-        
-        // Highlight the detection row
-        highlightDetectionInNavigator(detectionId);
-        
-        // Show bounding box with person label
-        showEnhancedBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp, detectionId);
-        
-        // Update current time display
-        updateTimeDisplay();
-        
-        console.log('✅ Navigation to detection completed');
-    }
-}
-
-// Legacy function for compatibility
+// Person detection and identification functionality
 function jumpToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHeight) {
     console.log(`🎯 Jumping to detection ${detectionId} at ${timestamp}s`);
     console.log(`📊 Parameters: timestamp=${timestamp}, detectionId=${detectionId}, bbox=[${bboxX}, ${bboxY}, ${bboxWidth}x${bboxHeight}]`);
@@ -1555,229 +1437,6 @@ function jumpToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHe
     }
 }
 
-function highlightDetectionInNavigator(detectionId) {
-    console.log(`🎯 Highlighting detection ${detectionId} in navigator`);
-    
-    // Remove existing highlights
-    const allItems = document.querySelectorAll('.detection-item');
-    allItems.forEach(item => {
-        item.classList.remove('bg-blue-100', 'border-blue-300');
-    });
-    
-    // Find and highlight the detection item
-    const targetItem = document.querySelector(`.detection-item[data-detection-id="${detectionId}"]`);
-    if (targetItem) {
-        targetItem.classList.add('bg-blue-100', 'border-blue-300');
-        
-        // Scroll into view smoothly
-        targetItem.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'center' 
-        });
-        
-        console.log(`✅ Highlighted detection ${detectionId} in navigator`);
-    } else {
-        console.warn(`⚠️ Detection item ${detectionId} not found in navigator`);
-    }
-}
-
-function showEnhancedBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp, detectionId) {
-    console.log(`📦 Showing enhanced bounding box for PERSON-${String(detectionId).padStart(4, '0')}`);
-    
-    const video = document.getElementById('videoPlayer');
-    if (!video) {
-        console.error('❌ Video element not found for bounding box');
-        return;
-    }
-    
-    // Wait for video to be ready
-    if (video.readyState < 1 || video.videoWidth === 0) {
-        console.log('⏳ Waiting for video to load before showing bounding box...');
-        video.addEventListener('loadedmetadata', function() {
-            showEnhancedBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp, detectionId);
-        }, { once: true });
-        return;
-    }
-    
-    // Remove existing bounding box
-    const existingBox = document.getElementById('boundingBox');
-    if (existingBox) {
-        existingBox.remove();
-    }
-    
-    // Get video container
-    const videoContainer = video.parentElement;
-    if (!videoContainer) {
-        console.error('❌ Video container not found');
-        return;
-    }
-    
-    // Position the container relatively
-    videoContainer.style.position = 'relative';
-    
-    // Create enhanced bounding box overlay
-    const boundingBox = document.createElement('div');
-    boundingBox.id = 'boundingBox';
-    boundingBox.style.position = 'absolute';
-    boundingBox.style.border = '3px solid #ef4444';
-    boundingBox.style.background = 'rgba(239, 68, 68, 0.15)';
-    boundingBox.style.pointerEvents = 'none';
-    boundingBox.style.zIndex = '10';
-    boundingBox.style.borderRadius = '4px';
-    boundingBox.style.transition = 'all 0.3s ease';
-    
-    // Add enhanced label with person ID
-    const label = document.createElement('div');
-    label.style.position = 'absolute';
-    label.style.top = '-30px';
-    label.style.left = '0';
-    label.style.background = '#ef4444';
-    label.style.color = 'white';
-    label.style.padding = '4px 8px';
-    label.style.fontSize = '14px';
-    label.style.fontWeight = 'bold';
-    label.style.borderRadius = '4px';
-    label.style.whiteSpace = 'nowrap';
-    label.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
-    label.textContent = `PERSON-${String(detectionId).padStart(4, '0')} @ ${timestamp.toFixed(1)}s`;
-    boundingBox.appendChild(label);
-    
-    // Function to update bounding box position and size
-    function updateBoundingBox() {
-        const videoRect = video.getBoundingClientRect();
-        const containerRect = videoContainer.getBoundingClientRect();
-        
-        // Calculate actual video display dimensions (accounting for aspect ratio)
-        const videoAspectRatio = video.videoWidth / video.videoHeight;
-        const containerAspectRatio = videoRect.width / videoRect.height;
-        
-        let displayWidth, displayHeight, offsetX, offsetY;
-        
-        if (containerAspectRatio > videoAspectRatio) {
-            // Video is pillarboxed (black bars on sides)
-            displayHeight = videoRect.height;
-            displayWidth = displayHeight * videoAspectRatio;
-            offsetX = (videoRect.width - displayWidth) / 2;
-            offsetY = 0;
-        } else {
-            // Video is letterboxed (black bars on top/bottom)
-            displayWidth = videoRect.width;
-            displayHeight = displayWidth / videoAspectRatio;
-            offsetX = 0;
-            offsetY = (videoRect.height - displayHeight) / 2;
-        }
-        
-        // Convert percentage-based bounding box to pixels
-        const boxLeft = offsetX + (bboxX / 100) * displayWidth;
-        const boxTop = offsetY + (bboxY / 100) * displayHeight;
-        const boxWidth = (bboxWidth / 100) * displayWidth;
-        const boxHeight = (bboxHeight / 100) * displayHeight;
-        
-        boundingBox.style.left = `${boxLeft}px`;
-        boundingBox.style.top = `${boxTop}px`;
-        boundingBox.style.width = `${boxWidth}px`;
-        boundingBox.style.height = `${boxHeight}px`;
-        
-        console.log(`📏 Positioned bounding box: ${boxLeft.toFixed(1)}, ${boxTop.toFixed(1)}, ${boxWidth.toFixed(1)}x${boxHeight.toFixed(1)}`);
-    }
-    
-    videoContainer.appendChild(boundingBox);
-    
-    // Update position when video metadata loads
-    if (video.readyState >= 1) {
-        updateBoundingBox();
-    } else {
-        video.addEventListener('loadedmetadata', updateBoundingBox, { once: true });
-    }
-    
-    // Update position on window resize
-    const resizeHandler = () => updateBoundingBox();
-    window.addEventListener('resize', resizeHandler);
-    
-    // Blink effect - flash the box for 1 second
-    let blinkCount = 0;
-    const blinkInterval = setInterval(() => {
-        boundingBox.style.opacity = boundingBox.style.opacity === '0' ? '1' : '0';
-        blinkCount++;
-        if (blinkCount >= 4) { // 2 full blinks (4 opacity changes)
-            clearInterval(blinkInterval);
-            boundingBox.style.opacity = '1';
-        }
-    }, 250);
-    
-    // Auto-hide bounding box after 8 seconds
-    setTimeout(() => {
-        if (boundingBox && boundingBox.parentElement) {
-            boundingBox.style.opacity = '0';
-            setTimeout(() => {
-                if (boundingBox && boundingBox.parentElement) {
-                    boundingBox.remove();
-                    window.removeEventListener('resize', resizeHandler);
-                }
-            }, 300);
-        }
-    }, 8000);
-    
-    console.log(`✅ Enhanced bounding box displayed for PERSON-${String(detectionId).padStart(4, '0')}`);
-}
-
-function updateTimeDisplay() {
-    const video = document.getElementById('videoPlayer');
-    const currentTimeDisplay = document.getElementById('currentTimeDisplay');
-    const durationDisplay = document.getElementById('durationDisplay');
-    
-    if (video && currentTimeDisplay) {
-        currentTimeDisplay.textContent = formatTimestamp(video.currentTime);
-    }
-    
-    if (video && durationDisplay && video.duration) {
-        durationDisplay.textContent = formatTimestamp(video.duration);
-    }
-}
-
-function updateDetectionCounter() {
-    const video = document.getElementById('videoPlayer');
-    const detectionCounter = document.getElementById('detectionCounter');
-    
-    if (!video || !detectionCounter) return;
-    
-    const currentTime = video.currentTime;
-    const tolerance = 1.0; // 1 second tolerance
-    
-    // Find detections near current time
-    const detectionItems = document.querySelectorAll('.detection-item');
-    let activeDetection = null;
-    
-    detectionItems.forEach(item => {
-        const timestamp = parseFloat(item.dataset.timestamp);
-        if (Math.abs(currentTime - timestamp) <= tolerance) {
-            if (!activeDetection || Math.abs(currentTime - timestamp) < Math.abs(currentTime - parseFloat(activeDetection.dataset.timestamp))) {
-                activeDetection = item;
-            }
-        }
-    });
-    
-    if (activeDetection) {
-        const detectionId = activeDetection.dataset.detectionId;
-        const timestamp = parseFloat(activeDetection.dataset.timestamp);
-        detectionCounter.textContent = `PERSON-${String(detectionId).padStart(4, '0')} at ${timestamp.toFixed(1)}s`;
-        detectionCounter.className = 'text-green-600 font-medium';
-        
-        // Highlight the row
-        highlightDetectionInNavigator(detectionId);
-    } else {
-        detectionCounter.textContent = 'No detection at current frame';
-        detectionCounter.className = 'text-gray-500';
-        
-        // Remove highlights
-        const allItems = document.querySelectorAll('.detection-item');
-        allItems.forEach(item => {
-            item.classList.remove('bg-blue-100', 'border-blue-300');
-        });
-    }
-}
-
-// Legacy function for compatibility
 function highlightDetectionRow(detectionId) {
     // Remove existing highlights
     const allRows = document.querySelectorAll('tbody tr');

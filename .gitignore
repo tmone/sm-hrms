@@ -146,3 +146,4 @@ hr_management/processing/temp/*
 # OS specific
 .DS_Store
 Thumbs.db
+.claude/settings.local.json

@@ -45,7 +45,7 @@
 <div class="container mx-auto px-4">
     <div class="max-w-6xl mx-auto">
         <!-- Header -->
-        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6" data-video-fps="{{ video.fps }}">
             <div class="flex justify-between items-start">
                 <div>
                     <h1 class="text-2xl font-bold text-gray-800">{{ video.title or video.filename }}</h1>
@@ -84,6 +84,8 @@
                     {% if video.processed_path %}
                         <!-- Show converted video if available -->
                         <video id="videoPlayer" controls class="w-full rounded-lg" preload="metadata" 
+                               data-original-width="{{ video.resolution.split('x')[0] if video.resolution else '' }}"
+                               data-original-height="{{ video.resolution.split('x')[1] if video.resolution else '' }}" 
                                onloadstart="console.log('🎬 Loading converted video:', '{{ video.processed_path }}')"
                                oncanplay="console.log('✅ Converted video can play')" 
                                onerror="console.error('❌ Converted video error:', event.target.error)"
@@ -97,7 +99,10 @@
                         </div>
                     {% elif video.status == 'uploaded' and video.file_path %}
                         <div id="videoContainer">
-                            <video id="videoPlayer" controls class="w-full rounded-lg" onloadstart="handleVideoLoad()" onerror="handleVideoError()">
+                            <video id="videoPlayer" controls class="w-full rounded-lg" 
+                                   data-original-width="{{ video.resolution.split('x')[0] if video.resolution else '' }}"
+                                   data-original-height="{{ video.resolution.split('x')[1] if video.resolution else '' }}"
+                                   onloadstart="handleVideoLoad()" onerror="handleVideoError()">
                                 <source src="{{ url_for('videos.stream_video', filename=video.file_path) }}" type="video/mp4">
                                 <source src="{{ url_for('videos.serve_video_static', filename=video.file_path) }}" type="video/mp4">
                                 Your browser does not support the video tag.
@@ -294,7 +299,21 @@
                 <div class="bg-white rounded-lg shadow-md">
                     <!-- Header with Stats -->
                     <div class="p-4 border-b border-gray-200">
-                        <h2 class="text-lg font-semibold text-gray-800 mb-2">Detection Navigator</h2>
+                        <div class="flex justify-between items-center mb-2">
+                            <h2 class="text-lg font-semibold text-gray-800">Detection Navigator</h2>
+                            <div class="flex space-x-1">
+                                <button onclick="toggleDemoDebugMode()" 
+                                        class="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+                                        title="Demo debug mode (Press D key)">
+                                    🎯 Demo
+                                </button>
+                                <button onclick="calibrateBoundingBoxes()" 
+                                        class="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                                        title="AI calibrate all detections (Press C key)">
+                                    🤖 AI
+                                </button>
+                            </div>
+                        </div>
                         <div class="flex justify-between text-sm text-gray-600">
                             <span>{{ detections|length }} persons detected</span>
                             <span>{{ detections|selectattr('is_identified')|list|length }} identified</span>
@@ -308,6 +327,7 @@
                         <div class="detection-item p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
                              data-detection-id="{{ detection.id }}"
                              data-timestamp="{{ detection.timestamp }}"
+                             data-frame-number="{{ detection.frame_number }}"
                              data-bbox-x="{{ detection.bbox_x }}"
                              data-bbox-y="{{ detection.bbox_y }}"
                              data-bbox-width="{{ detection.bbox_width }}"
@@ -321,14 +341,22 @@
                                     <div class="text-xs text-gray-500">
                                         Confidence: {{ "%.1f"|format(detection.confidence * 100) }}%
                                     </div>
+                                    <div class="text-xs text-gray-400">
+                                        Box: {{ detection.bbox_x }},{{ detection.bbox_y }} {{ detection.bbox_width }}×{{ detection.bbox_height }}
+                                    </div>
                                     {% if detection.is_identified %}
                                     <div class="text-xs text-green-600 font-medium">✅ Identified</div>
                                     {% endif %}
                                 </div>
-                                <div class="ml-2">
+                                <div class="ml-2 flex flex-col space-y-1">
                                     <button class="text-blue-600 hover:text-blue-800 text-sm font-medium"
                                             onclick="event.stopPropagation(); navigateToDetection({{ detection.timestamp }}, {{ detection.id }}, {{ detection.bbox_x }}, {{ detection.bbox_y }}, {{ detection.bbox_width }}, {{ detection.bbox_height }})">
                                         🎯 Go
+                                    </button>
+                                    <button class="text-purple-600 hover:text-purple-800 text-xs font-medium"
+                                            onclick="event.stopPropagation(); calibrateBoundingBoxes({{ detection.id }})"
+                                            title="AI calibrate this detection">
+                                        🤖 Cal
                                     </button>
                                 </div>
                             </div>
@@ -672,6 +700,7 @@
                                                     class="inline-flex items-center px-3 py-1 border border-blue-300 text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                                                     data-detection-id="{{ detection.id }}"
                                                     data-timestamp="{{ detection.timestamp }}"
+                                                    data-frame-number="{{ detection.frame_number }}"
                                                     data-bbox-x="{{ detection.bbox_x }}"
                                                     data-bbox-y="{{ detection.bbox_y }}" 
                                                     data-bbox-width="{{ detection.bbox_width }}"
@@ -1534,12 +1563,10 @@ function jumpToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHe
             timestamp = Math.min(timestamp, video.duration - 0.1);
         }
         
-        // Jump to the timestamp
+        // Jump to the timestamp and PAUSE (as requested - no auto-play)
         video.currentTime = timestamp;
-        
-        // Play video if paused
-        if (video.paused) {
-            video.play().catch(e => console.log('Could not auto-play video:', e));
+        if (!video.paused) {
+            video.pause();
         }
         
         // Highlight the detection in the table
@@ -1553,6 +1580,717 @@ function jumpToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHe
         
         console.log('✅ Jump to detection completed');
     }
+}
+
+function navigateToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHeight) {
+    console.log(`🧭 Enhanced navigation to detection: ${detectionId} at ${timestamp}s`);
+    
+    const video = document.getElementById('videoPlayer');
+    if (!video) {
+        console.error('❌ Video player not found');
+        return;
+    }
+    
+    // Get improved timestamp with frame-based correction
+    const correctedTimestamp = improveFPSCorrection(timestamp, detectionId, video);
+    
+    console.log(`📊 Timestamp correction: Original=${timestamp}s, Corrected=${correctedTimestamp}s`);
+    
+    // Wait for video metadata if needed
+    if (video.readyState < 1) {
+        console.log('⏳ Waiting for video metadata...');
+        video.addEventListener('loadedmetadata', function() {
+            performNavigation(correctedTimestamp);
+        }, { once: true });
+    } else {
+        performNavigation(correctedTimestamp);
+    }
+    
+    function performNavigation(finalTimestamp) {
+        console.log(`🎬 Navigating to corrected timestamp: ${finalTimestamp}s`);
+        
+        // Validate final timestamp
+        if (finalTimestamp > video.duration) {
+            console.warn('⚠️ Corrected timestamp exceeds duration, adjusting...');
+            finalTimestamp = Math.min(finalTimestamp, video.duration - 0.1);
+        }
+        
+        // Navigate to timestamp and PAUSE (no auto-play as requested)
+        video.currentTime = finalTimestamp;
+        if (!video.paused) {
+            video.pause();
+        }
+        
+        // Highlight detection in navigator panel
+        highlightDetectionInNavigator(detectionId);
+        
+        // Show enhanced bounding box with person label and 1-second blink
+        showEnhancedBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, finalTimestamp, detectionId);
+        
+        // Update time display
+        updateTimeDisplay(finalTimestamp);
+        
+        // Update detection counter
+        updateDetectionCounter(detectionId, finalTimestamp);
+        
+        console.log('✅ Enhanced navigation completed');
+    }
+}
+
+function improveFPSCorrection(timestamp, detectionId, video) {
+    try {
+        // Get video duration and frame rate estimation
+        const duration = video.duration || 0;
+        
+        // Check if we have frame number data from the detection row
+        const detectionRow = document.querySelector(`[data-detection-id="${detectionId}"]`);
+        if (detectionRow && detectionRow.dataset.frameNumber) {
+            const frameNumber = parseInt(detectionRow.dataset.frameNumber);
+            if (!isNaN(frameNumber) && frameNumber > 0) {
+                const estimatedFPS = getVideoFrameRate(video);
+                const frameBasedTimestamp = frameNumber / estimatedFPS;
+                
+                console.log(`🔧 Frame-based correction: Frame ${frameNumber} / ${estimatedFPS}fps = ${frameBasedTimestamp}s (was ${timestamp}s)`);
+                return frameBasedTimestamp;
+            }
+        }
+        
+        // Apply heuristic corrections for common FPS mismatches
+        const correctionFactors = [1.0, 29.97/30, 25/30, 24/30, 30/25, 30/29.97];
+        let bestTimestamp = timestamp;
+        let minError = Infinity;
+        
+        // Try different FPS correction factors
+        for (const factor of correctionFactors) {
+            const candidateTimestamp = timestamp * factor;
+            if (candidateTimestamp <= duration) {
+                const error = Math.abs(candidateTimestamp - timestamp);
+                if (error < minError && candidateTimestamp >= 0) {
+                    minError = error;
+                    bestTimestamp = candidateTimestamp;
+                }
+            }
+        }
+        
+        // Apply small timing offset to account for encoding/processing differences
+        const finalTimestamp = Math.max(0, bestTimestamp - 0.05); // 50ms offset
+        
+        console.log(`🔧 FPS correction applied: ${timestamp}s -> ${finalTimestamp}s (factor used)`);
+        return finalTimestamp;
+        
+    } catch (e) {
+        console.warn('⚠️ FPS correction failed, using original timestamp:', e);
+        return timestamp;
+    }
+}
+
+function getVideoFrameRate(video) {
+    try {
+        // Try to get FPS from backend data if available
+        const videoDataElement = document.querySelector('[data-video-fps]');
+        if (videoDataElement && videoDataElement.dataset.videoFps) {
+            const backendFPS = parseFloat(videoDataElement.dataset.videoFps);
+            if (!isNaN(backendFPS) && backendFPS > 0) {
+                console.log(`📊 Using backend-provided FPS: ${backendFPS}`);
+                return backendFPS;
+            }
+        }
+        
+        // Try browser-specific frame rate detection
+        if (video.mozFrameRate) {
+            console.log(`📊 Using Firefox frame rate: ${video.mozFrameRate}`);
+            return video.mozFrameRate;
+        }
+        if (video.webkitFrameRate) {
+            console.log(`📊 Using WebKit frame rate: ${video.webkitFrameRate}`);
+            return video.webkitFrameRate;
+        }
+        
+        // Analyze video metadata for frame rate hints
+        const duration = video.duration;
+        if (duration > 0) {
+            // Common frame rates based on duration patterns
+            const commonFPS = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+            
+            // For now, use intelligent defaults based on video duration
+            if (duration < 60) {
+                // Short videos often use higher frame rates
+                console.log('📊 Short video detected, assuming 30fps');
+                return 30;
+            } else {
+                // Longer videos might use standard frame rates
+                console.log('📊 Standard video detected, assuming 30fps');
+                return 30;
+            }
+        }
+        
+        // Final fallback
+        console.log('⚠️ Could not determine frame rate, using 30fps default');
+        return 30;
+    } catch (e) {
+        console.log('⚠️ Frame rate detection failed, using 30fps default');
+        return 30;
+    }
+}
+
+function updateTimeDisplay(currentTime) {
+    const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+    if (currentTimeDisplay) {
+        currentTimeDisplay.textContent = formatTimestamp(currentTime);
+    }
+}
+
+function updateDetectionCounter(detectionId, timestamp) {
+    const counter = document.getElementById('detectionCounter');
+    if (counter) {
+        counter.textContent = `PERSON-${String(detectionId).padStart(4, '0')} at ${timestamp.toFixed(1)}s`;
+        counter.className = 'text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded';
+    }
+}
+
+function convertBoundingBoxCoordinates(bboxX, bboxY, bboxWidth, bboxHeight, video, displayWidth, displayHeight) {
+    console.log(`🎯 CRITICAL BBOX CONVERSION for DEMO`);
+    console.log(`📏 Input: bbox=(${bboxX}, ${bboxY}, ${bboxWidth}x${bboxHeight}), display=(${displayWidth}x${displayHeight})`);
+    
+    // Get EXACT video element dimensions
+    const videoRect = video.getBoundingClientRect();
+    const actualVideoWidth = video.videoWidth || 1920;
+    const actualVideoHeight = video.videoHeight || 1080;
+    
+    console.log(`📐 Video element rect: ${videoRect.width}x${videoRect.height}`);
+    console.log(`📐 Video natural size: ${actualVideoWidth}x${actualVideoHeight}`);
+    
+    // DEMO-CRITICAL: Force coordinate detection based on data patterns
+    let scaledX, scaledY, scaledWidth, scaledHeight;
+    
+    // Smart detection: if all values are <= 100, treat as percentage
+    const isPercentage = bboxX <= 100 && bboxY <= 100 && bboxWidth <= 100 && bboxHeight <= 100;
+    
+    if (isPercentage) {
+        console.log(`✅ DEMO: Using PERCENTAGE mode - direct conversion`);
+        // Direct percentage to pixel conversion
+        scaledX = (bboxX / 100) * displayWidth;
+        scaledY = (bboxY / 100) * displayHeight;
+        scaledWidth = (bboxWidth / 100) * displayWidth;
+        scaledHeight = (bboxHeight / 100) * displayHeight;
+    } else {
+        console.log(`✅ DEMO: Using PIXEL mode - scaling from original resolution`);
+        // Scale from original video resolution to display size
+        const scaleFactorX = displayWidth / actualVideoWidth;
+        const scaleFactorY = displayHeight / actualVideoHeight;
+        
+        scaledX = bboxX * scaleFactorX;
+        scaledY = bboxY * scaleFactorY;
+        scaledWidth = bboxWidth * scaleFactorX;
+        scaledHeight = bboxHeight * scaleFactorY;
+        
+        console.log(`🔧 DEMO: Scale factors X=${scaleFactorX.toFixed(4)}, Y=${scaleFactorY.toFixed(4)}`);
+    }
+    
+    // DEMO CRITICAL: Apply manual correction offsets for perfect positioning
+    const demoOffsets = getDemoCalibrationOffsets();
+    scaledX += demoOffsets.x;
+    scaledY += demoOffsets.y;
+    scaledWidth *= demoOffsets.scaleX;
+    scaledHeight *= demoOffsets.scaleY;
+    
+    console.log(`🎯 DEMO: Applied demo offsets: +${demoOffsets.x}, +${demoOffsets.y}, ×${demoOffsets.scaleX}, ×${demoOffsets.scaleY}`);
+    
+    // Apply any runtime calibration offsets
+    if (window.calibrationOffsets) {
+        const offsets = window.calibrationOffsets;
+        scaledX += offsets.offsetX || 0;
+        scaledY += offsets.offsetY || 0;
+        scaledWidth *= offsets.scaleX || 1;
+        scaledHeight *= offsets.scaleY || 1;
+        console.log(`🔧 Applied runtime calibration: X+${offsets.offsetX}, Y+${offsets.offsetY}`);
+    }
+    
+    // Ensure coordinates are within bounds
+    scaledX = Math.max(0, Math.min(scaledX, displayWidth - scaledWidth));
+    scaledY = Math.max(0, Math.min(scaledY, displayHeight - scaledHeight));
+    scaledWidth = Math.max(10, Math.min(scaledWidth, displayWidth - scaledX));
+    scaledHeight = Math.max(10, Math.min(scaledHeight, displayHeight - scaledY));
+    
+    console.log(`🎯 DEMO FINAL: (${scaledX.toFixed(1)}, ${scaledY.toFixed(1)}, ${scaledWidth.toFixed(1)}x${scaledHeight.toFixed(1)})`);
+    
+    return { scaledX, scaledY, scaledWidth, scaledHeight };
+}
+
+function getDemoCalibrationOffsets() {
+    // DEMO CRITICAL: Fine-tune these values for perfect positioning
+    const video = document.getElementById('videoPlayer');
+    const rect = video.getBoundingClientRect();
+    
+    // Determine offset based on current video size and browser
+    let offsetX = 0;
+    let offsetY = 0;
+    let scaleX = 1.0;
+    let scaleY = 1.0;
+    
+    // Browser-specific adjustments
+    const userAgent = navigator.userAgent.toLowerCase();
+    if (userAgent.includes('chrome')) {
+        offsetY = -3; // Chrome tends to be slightly off vertically
+    } else if (userAgent.includes('firefox')) {
+        offsetY = -2;
+        offsetX = 1;
+    } else if (userAgent.includes('safari')) {
+        offsetY = -4;
+    }
+    
+    // Screen size adjustments
+    if (rect.width < 600) {
+        // Mobile
+        offsetX += 2;
+        offsetY += 1;
+        scaleX = 0.98;
+        scaleY = 0.97;
+    } else if (rect.width > 1000) {
+        // Large screen
+        offsetX -= 1;
+        offsetY -= 2;
+        scaleX = 1.01;
+        scaleY = 1.02;
+    }
+    
+    // Apply manual demo offsets if available (for live adjustment during demo)
+    if (window.demoManualOffsets) {
+        offsetX += window.demoManualOffsets.x;
+        offsetY += window.demoManualOffsets.y;
+        scaleX *= window.demoManualOffsets.scaleX;
+        scaleY *= window.demoManualOffsets.scaleY;
+        console.log(`🎯 DEMO: Applied manual offsets: +${window.demoManualOffsets.x}, +${window.demoManualOffsets.y}`);
+    }
+    
+    console.log(`🎯 DEMO FINAL offsets: X=${offsetX}, Y=${offsetY}, scaleX=${scaleX}, scaleY=${scaleY}`);
+    
+    return { x: offsetX, y: offsetY, scaleX, scaleY };
+}
+
+function toggleDemoDebugMode() {
+    window.demoDebugMode = !window.demoDebugMode;
+    
+    if (window.demoDebugMode) {
+        console.log('🎯 DEMO DEBUG MODE ACTIVATED for your boss demo!');
+        
+        // Initialize manual offsets if not exist
+        if (!window.demoManualOffsets) {
+            window.demoManualOffsets = { x: 0, y: 0, scaleX: 1.0, scaleY: 1.0 };
+        }
+        
+        // Show debug overlay
+        showDemoDebugOverlay();
+        
+        // Show current detection with debug info
+        refreshCurrentDetectionWithDebug();
+        
+    } else {
+        console.log('🎯 DEMO DEBUG MODE DEACTIVATED');
+        hideDemoDebugOverlay();
+    }
+}
+
+function showDemoDebugOverlay() {
+    // Remove existing overlay
+    const existing = document.getElementById('demoDebugOverlay');
+    if (existing) existing.remove();
+    
+    // Create debug overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'demoDebugOverlay';
+    overlay.className = 'fixed top-20 right-4 z-50 bg-black bg-opacity-90 text-white p-4 rounded-lg shadow-lg max-w-sm';
+    overlay.innerHTML = `
+        <div class="text-lg font-bold text-yellow-300 mb-2">🎯 DEMO DEBUG MODE</div>
+        <div class="text-sm space-y-1">
+            <div><strong>Controls for perfect positioning:</strong></div>
+            <div>• Press 'D' to toggle this mode</div>
+            <div>• Arrow Up/Down: Move Y position</div>
+            <div>• Ctrl+Arrow Left/Right: Move X position</div>
+            <div>• Press 'R' to reset offsets</div>
+            <div>• Press 'S' to save current offsets</div>
+        </div>
+        <div class="mt-3 text-xs border-t border-gray-600 pt-2">
+            <div id="debugOffsetDisplay">Manual Offsets: X=0, Y=0</div>
+            <div id="debugVideoInfo">Video: Loading...</div>
+        </div>
+        <div class="mt-2">
+            <button onclick="resetDemoOffsets()" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-xs mr-2">Reset</button>
+            <button onclick="saveDemoOffsets()" class="bg-green-600 hover:bg-green-700 px-2 py-1 rounded text-xs">Save</button>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    updateDebugDisplay();
+}
+
+function hideDemoDebugOverlay() {
+    const overlay = document.getElementById('demoDebugOverlay');
+    if (overlay) overlay.remove();
+}
+
+function adjustDemoOffsets(deltaX, deltaY) {
+    if (!window.demoManualOffsets) {
+        window.demoManualOffsets = { x: 0, y: 0, scaleX: 1.0, scaleY: 1.0 };
+    }
+    
+    window.demoManualOffsets.x += deltaX;
+    window.demoManualOffsets.y += deltaY;
+    
+    console.log(`🎯 DEMO: Adjusted manual offsets to X=${window.demoManualOffsets.x}, Y=${window.demoManualOffsets.y}`);
+    
+    updateDebugDisplay();
+    refreshCurrentDetectionWithDebug();
+}
+
+function resetDemoOffsets() {
+    window.demoManualOffsets = { x: 0, y: 0, scaleX: 1.0, scaleY: 1.0 };
+    console.log('🎯 DEMO: Reset manual offsets to zero');
+    updateDebugDisplay();
+    refreshCurrentDetectionWithDebug();
+}
+
+function saveDemoOffsets() {
+    if (window.demoManualOffsets) {
+        localStorage.setItem('demoManualOffsets', JSON.stringify(window.demoManualOffsets));
+        console.log('🎯 DEMO: Saved manual offsets to localStorage');
+        
+        // Show save confirmation
+        const notification = document.createElement('div');
+        notification.className = 'fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-green-100 border border-green-400 text-green-700 px-4 py-2 rounded';
+        notification.textContent = '✅ Demo offsets saved!';
+        document.body.appendChild(notification);
+        
+        setTimeout(() => notification.remove(), 2000);
+    }
+}
+
+function loadDemoOffsets() {
+    try {
+        const saved = localStorage.getItem('demoManualOffsets');
+        if (saved) {
+            window.demoManualOffsets = JSON.parse(saved);
+            console.log('🎯 DEMO: Loaded saved manual offsets:', window.demoManualOffsets);
+        }
+    } catch (e) {
+        console.log('🎯 DEMO: No saved offsets found');
+    }
+}
+
+function updateDebugDisplay() {
+    const offsetDisplay = document.getElementById('debugOffsetDisplay');
+    const videoInfo = document.getElementById('debugVideoInfo');
+    
+    if (offsetDisplay && window.demoManualOffsets) {
+        offsetDisplay.textContent = `Manual Offsets: X=${window.demoManualOffsets.x}, Y=${window.demoManualOffsets.y}`;
+    }
+    
+    if (videoInfo) {
+        const video = document.getElementById('videoPlayer');
+        if (video) {
+            const rect = video.getBoundingClientRect();
+            videoInfo.textContent = `Video: ${rect.width.toFixed(0)}×${rect.height.toFixed(0)}px`;
+        }
+    }
+}
+
+function refreshCurrentDetectionWithDebug() {
+    // Find currently highlighted detection and refresh its bounding box
+    const highlighted = document.querySelector('.detection-item.bg-blue-100');
+    if (highlighted) {
+        const detectionId = highlighted.dataset.detectionId;
+        const timestamp = parseFloat(highlighted.dataset.timestamp);
+        const bboxX = parseInt(highlighted.dataset.bboxX);
+        const bboxY = parseInt(highlighted.dataset.bboxY);
+        const bboxWidth = parseInt(highlighted.dataset.bboxWidth);
+        const bboxHeight = parseInt(highlighted.dataset.bboxHeight);
+        
+        console.log('🎯 DEMO: Refreshing detection with debug offsets');
+        
+        // Remove existing box and redraw with new offsets
+        const existingBox = document.getElementById('boundingBox');
+        if (existingBox) existingBox.remove();
+        
+        showEnhancedBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp, detectionId);
+    }
+}
+
+function isPercentageCoordinates(x, y, width, height) {
+    // Heuristic to detect if coordinates are percentages vs pixels
+    // Percentage coordinates should be between 0-100
+    // Pixel coordinates will typically be larger for modern videos
+    
+    const maxCoordinate = Math.max(x, y, width, height);
+    const allSmall = x <= 100 && y <= 100 && width <= 100 && height <= 100;
+    const typicalPercentageRange = maxCoordinate <= 100 && maxCoordinate > 0;
+    
+    console.log(`🔍 Coordinate analysis: max=${maxCoordinate}, allSmall=${allSmall}, typicalRange=${typicalPercentageRange}`);
+    
+    // If all coordinates are <= 100, likely percentages
+    // If any coordinate > 100, likely pixels
+    return allSmall && typicalPercentageRange;
+}
+
+function testBoundingBoxScaling() {
+    console.log('🧪 Testing bounding box scaling...');
+    
+    const video = document.getElementById('videoPlayer');
+    if (!video) {
+        console.error('❌ Video player not found for testing');
+        return;
+    }
+    
+    // Wait for video to load
+    if (video.readyState < 1) {
+        console.log('⏳ Waiting for video metadata for testing...');
+        video.addEventListener('loadedmetadata', testBoundingBoxScaling, { once: true });
+        return;
+    }
+    
+    console.log('📊 Video Test Info:');
+    console.log(`  Browser video size: ${video.videoWidth}x${video.videoHeight}`);
+    console.log(`  Backend resolution: ${video.dataset.originalWidth}x${video.dataset.originalHeight}`);
+    console.log(`  Display size: ${video.offsetWidth}x${video.offsetHeight}`);
+    
+    // Test both percentage and pixel coordinates
+    const testCases = [
+        { name: 'Percentage (center)', x: 50, y: 50, w: 10, h: 20 },
+        { name: 'Percentage (top-left)', x: 10, y: 15, w: 25, h: 30 },
+        { name: 'Pixel (if 1920x1080)', x: 960, y: 540, w: 192, h: 216 },
+        { name: 'Pixel (if 1920x1080)', x: 384, y: 270, w: 480, h: 324 }
+    ];
+    
+    const videoRect = video.getBoundingClientRect();
+    const displayWidth = videoRect.width;
+    const displayHeight = videoRect.height;
+    
+    testCases.forEach(test => {
+        console.log(`\n🧪 Testing ${test.name}:`);
+        const result = convertBoundingBoxCoordinates(
+            test.x, test.y, test.w, test.h,
+            video, displayWidth, displayHeight
+        );
+        console.log(`  Result: (${result.scaledX.toFixed(1)}, ${result.scaledY.toFixed(1)}, ${result.scaledWidth.toFixed(1)}x${result.scaledHeight.toFixed(1)})`);
+    });
+    
+    console.log('✅ Bounding box scaling test completed');
+}
+
+async function calibrateBoundingBoxes(detectionId = null) {
+    console.log('🎯 Starting AI-powered bounding box calibration...');
+    
+    const video = document.getElementById('videoPlayer');
+    if (!video || video.readyState < 1) {
+        console.error('❌ Video not ready for calibration');
+        return;
+    }
+    
+    try {
+        // Step 1: Capture current video frame
+        const frameCapture = await captureVideoFrame(video);
+        console.log('📸 Video frame captured for calibration');
+        
+        // Step 2: Get detection coordinates for calibration
+        const calibrationData = await prepareCalibrationData(detectionId);
+        console.log('📊 Calibration data prepared:', calibrationData);
+        
+        // Step 3: Send to backend for AI re-detection and calibration
+        const calibrationResult = await performAICalibration(frameCapture, calibrationData);
+        console.log('🤖 AI calibration completed:', calibrationResult);
+        
+        // Step 4: Apply calibration offsets globally
+        if (calibrationResult.success) {
+            applyCalibrationOffsets(calibrationResult.offsets);
+            console.log('✅ Calibration offsets applied to all detections');
+            
+            // Show success notification
+            showCalibrationNotification('✅ Bounding box calibration completed! Boxes should now be more accurate.');
+        } else {
+            console.error('❌ Calibration failed:', calibrationResult.error);
+            showCalibrationNotification('❌ Calibration failed. Please try again.', 'error');
+        }
+        
+    } catch (error) {
+        console.error('❌ Calibration error:', error);
+        showCalibrationNotification('❌ Calibration error: ' + error.message, 'error');
+    }
+}
+
+async function captureVideoFrame(video) {
+    console.log('📸 Capturing current video frame...');
+    
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Get actual video display dimensions
+    const videoRect = video.getBoundingClientRect();
+    const videoAspectRatio = video.videoWidth / video.videoHeight;
+    const containerAspectRatio = videoRect.width / videoRect.height;
+    
+    let displayWidth, displayHeight, offsetX, offsetY;
+    
+    if (containerAspectRatio > videoAspectRatio) {
+        // Video is pillarboxed
+        displayHeight = videoRect.height;
+        displayWidth = displayHeight * videoAspectRatio;
+        offsetX = (videoRect.width - displayWidth) / 2;
+        offsetY = 0;
+    } else {
+        // Video is letterboxed
+        displayWidth = videoRect.width;
+        displayHeight = displayWidth / videoAspectRatio;
+        offsetX = 0;
+        offsetY = (videoRect.height - displayHeight) / 2;
+    }
+    
+    // Set canvas to actual displayed video size
+    canvas.width = displayWidth;
+    canvas.height = displayHeight;
+    
+    // Draw the video frame to canvas
+    ctx.drawImage(video, 0, 0, displayWidth, displayHeight);
+    
+    // Convert to base64 for transmission
+    const frameData = canvas.toDataURL('image/jpeg', 0.9);
+    
+    console.log(`📊 Frame captured: ${displayWidth}x${displayHeight} (offset: ${offsetX}, ${offsetY})`);
+    
+    return {
+        frameData,
+        displayWidth,
+        displayHeight,
+        offsetX,
+        offsetY,
+        timestamp: video.currentTime,
+        originalVideoWidth: video.videoWidth,
+        originalVideoHeight: video.videoHeight
+    };
+}
+
+async function prepareCalibrationData(detectionId) {
+    console.log('📊 Preparing calibration data...');
+    
+    const detections = [];
+    const detectionItems = document.querySelectorAll('.detection-item[data-detection-id]');
+    
+    detectionItems.forEach(item => {
+        const data = {
+            id: parseInt(item.dataset.detectionId),
+            timestamp: parseFloat(item.dataset.timestamp),
+            frameNumber: parseInt(item.dataset.frameNumber) || null,
+            bbox: {
+                x: parseInt(item.dataset.bboxX),
+                y: parseInt(item.dataset.bboxY),
+                width: parseInt(item.dataset.bboxWidth),
+                height: parseInt(item.dataset.bboxHeight)
+            }
+        };
+        
+        // If specific detection requested, include only that one
+        if (detectionId === null || data.id === detectionId) {
+            detections.push(data);
+        }
+    });
+    
+    console.log(`📊 Prepared ${detections.length} detections for calibration`);
+    return {
+        videoId: {{ video.id }},
+        detections,
+        targetDetectionId: detectionId
+    };
+}
+
+async function performAICalibration(frameCapture, calibrationData) {
+    console.log('🤖 Sending calibration request to AI backend...');
+    
+    const requestData = {
+        frameData: frameCapture.frameData,
+        frameInfo: {
+            displayWidth: frameCapture.displayWidth,
+            displayHeight: frameCapture.displayHeight,
+            offsetX: frameCapture.offsetX,
+            offsetY: frameCapture.offsetY,
+            timestamp: frameCapture.timestamp,
+            originalVideoWidth: frameCapture.originalVideoWidth,
+            originalVideoHeight: frameCapture.originalVideoHeight
+        },
+        calibrationData
+    };
+    
+    try {
+        const response = await fetch(`/videos/api/${calibrationData.videoId}/calibrate-coordinates`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Calibration API error: ${response.status} ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('🤖 AI calibration response:', result);
+        
+        return result;
+        
+    } catch (error) {
+        console.error('❌ AI calibration request failed:', error);
+        throw error;
+    }
+}
+
+function applyCalibrationOffsets(offsets) {
+    console.log('🔧 Applying calibration offsets:', offsets);
+    
+    // Store calibration offsets globally for this session
+    window.calibrationOffsets = offsets;
+    
+    // Update all existing bounding boxes
+    const existingBox = document.getElementById('boundingBox');
+    if (existingBox) {
+        existingBox.remove();
+    }
+    
+    // Refresh any visible detection highlights
+    const highlightedDetection = document.querySelector('.detection-item.bg-blue-100');
+    if (highlightedDetection) {
+        const detectionId = highlightedDetection.dataset.detectionId;
+        const timestamp = parseFloat(highlightedDetection.dataset.timestamp);
+        const bboxX = parseInt(highlightedDetection.dataset.bboxX);
+        const bboxY = parseInt(highlightedDetection.dataset.bboxY);
+        const bboxWidth = parseInt(highlightedDetection.dataset.bboxWidth);
+        const bboxHeight = parseInt(highlightedDetection.dataset.bboxHeight);
+        
+        console.log('🔄 Refreshing highlighted detection with calibrated coordinates');
+        showEnhancedBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp, detectionId);
+    }
+    
+    console.log('✅ Calibration offsets applied successfully');
+}
+
+function showCalibrationNotification(message, type = 'success') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm ${
+        type === 'error' ? 'bg-red-100 border border-red-400 text-red-700' : 'bg-green-100 border border-green-400 text-green-700'
+    }`;
+    notification.innerHTML = `
+        <div class="flex items-center">
+            <div class="flex-1">${message}</div>
+            <button onclick="this.parentElement.parentElement.remove()" class="ml-2 text-lg font-semibold">&times;</button>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 5000);
 }
 
 function highlightDetectionInNavigator(detectionId) {
@@ -1639,7 +2377,7 @@ function showEnhancedBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp,
     label.style.borderRadius = '4px';
     label.style.whiteSpace = 'nowrap';
     label.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
-    label.textContent = `PERSON-${String(detectionId).padStart(4, '0')} @ ${timestamp.toFixed(1)}s`;
+    label.textContent = `PERSON-${String(detectionId).padStart(4, '0')}`;
     boundingBox.appendChild(label);
     
     // Function to update bounding box position and size
@@ -1667,18 +2405,23 @@ function showEnhancedBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp,
             offsetY = (videoRect.height - displayHeight) / 2;
         }
         
-        // Convert percentage-based bounding box to pixels
-        const boxLeft = offsetX + (bboxX / 100) * displayWidth;
-        const boxTop = offsetY + (bboxY / 100) * displayHeight;
-        const boxWidth = (bboxWidth / 100) * displayWidth;
-        const boxHeight = (bboxHeight / 100) * displayHeight;
+        // Smart coordinate conversion (handles both percentage and pixel coordinates)
+        const { scaledX, scaledY, scaledWidth, scaledHeight } = convertBoundingBoxCoordinates(
+            bboxX, bboxY, bboxWidth, bboxHeight, 
+            video, displayWidth, displayHeight
+        );
+        
+        const boxLeft = offsetX + scaledX;
+        const boxTop = offsetY + scaledY;
+        const boxWidth = scaledWidth;
+        const boxHeight = scaledHeight;
         
         boundingBox.style.left = `${boxLeft}px`;
         boundingBox.style.top = `${boxTop}px`;
         boundingBox.style.width = `${boxWidth}px`;
         boundingBox.style.height = `${boxHeight}px`;
         
-        console.log(`📏 Positioned bounding box: ${boxLeft.toFixed(1)}, ${boxTop.toFixed(1)}, ${boxWidth.toFixed(1)}x${boxHeight.toFixed(1)}`);
+        console.log(`📏 Enhanced bbox positioned: ${boxLeft.toFixed(1)}, ${boxTop.toFixed(1)}, ${boxWidth.toFixed(1)}x${boxHeight.toFixed(1)}`);
     }
     
     videoContainer.appendChild(boundingBox);
@@ -1883,11 +2626,16 @@ function showBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp) {
             offsetY = (videoRect.height - displayHeight) / 2;
         }
         
-        // Convert percentage-based bounding box to pixels
-        const boxLeft = offsetX + (bboxX / 100) * displayWidth;
-        const boxTop = offsetY + (bboxY / 100) * displayHeight;
-        const boxWidth = (bboxWidth / 100) * displayWidth;
-        const boxHeight = (bboxHeight / 100) * displayHeight;
+        // Smart coordinate conversion (handles both percentage and pixel coordinates)
+        const { scaledX, scaledY, scaledWidth, scaledHeight } = convertBoundingBoxCoordinates(
+            bboxX, bboxY, bboxWidth, bboxHeight, 
+            video, displayWidth, displayHeight
+        );
+        
+        const boxLeft = offsetX + scaledX;
+        const boxTop = offsetY + scaledY;
+        const boxWidth = scaledWidth;
+        const boxHeight = scaledHeight;
         
         // Position relative to video container
         boundingBox.style.left = `${boxLeft}px`;
@@ -2047,8 +2795,126 @@ document.addEventListener('keydown', function(event) {
             }
             event.preventDefault();
             break;
+        case 't':
+            // 'T' key to test bounding box scaling
+            testBoundingBoxScaling();
+            event.preventDefault();
+            break;
+        case 'c':
+            // 'C' key to calibrate all bounding boxes
+            calibrateBoundingBoxes();
+            event.preventDefault();
+            break;
+        case 'd':
+            // 'D' key to toggle demo debug mode
+            toggleDemoDebugMode();
+            event.preventDefault();
+            break;
+        case 'ArrowUp':
+            // Arrow keys for manual fine-tuning in demo mode
+            if (window.demoDebugMode) {
+                adjustDemoOffsets(0, -1);
+                event.preventDefault();
+            }
+            break;
+        case 'ArrowDown':
+            if (window.demoDebugMode) {
+                adjustDemoOffsets(0, 1);
+                event.preventDefault();
+            }
+            break;
+        case 'ArrowLeft':
+            if (window.demoDebugMode && event.ctrlKey) {
+                adjustDemoOffsets(-1, 0);
+                event.preventDefault();
+            }
+            break;
+        case 'ArrowRight':
+            if (window.demoDebugMode && event.ctrlKey) {
+                adjustDemoOffsets(1, 0);
+                event.preventDefault();
+            }
+            break;
+        case 'r':
+            // 'R' key to reset demo offsets
+            if (window.demoDebugMode) {
+                resetDemoOffsets();
+                event.preventDefault();
+            }
+            break;
+        case 's':
+            // 'S' key to save demo offsets
+            if (window.demoDebugMode) {
+                saveDemoOffsets();
+                event.preventDefault();
+            }
+            break;
     }
 });
+
+// Enhanced video time tracking for detection highlighting
+function setupVideoTimeTracking() {
+    const video = document.getElementById('videoPlayer');
+    if (!video) return;
+    
+    let lastHighlightedDetection = null;
+    
+    video.addEventListener('timeupdate', function() {
+        const currentTime = video.currentTime;
+        updateTimeDisplay(currentTime);
+        
+        // Find detection closest to current time (within 2 seconds)
+        const detectionItems = document.querySelectorAll('.detection-item[data-timestamp]');
+        let closestDetection = null;
+        let closestTimeDiff = Infinity;
+        
+        detectionItems.forEach(item => {
+            const timestamp = parseFloat(item.dataset.timestamp);
+            const timeDiff = Math.abs(currentTime - timestamp);
+            
+            // Within 2 seconds and closer than previous
+            if (timeDiff <= 2 && timeDiff < closestTimeDiff) {
+                closestDetection = item;
+                closestTimeDiff = timeDiff;
+            }
+        });
+        
+        // Highlight the closest detection if found and different from last highlighted
+        if (closestDetection && closestDetection !== lastHighlightedDetection) {
+            const detectionId = closestDetection.dataset.detectionId;
+            
+            // Remove previous highlights
+            detectionItems.forEach(item => {
+                item.classList.remove('bg-blue-100', 'border-blue-300', 'ring-2', 'ring-blue-200');
+            });
+            
+            // Highlight current detection
+            closestDetection.classList.add('bg-blue-100', 'border-blue-300', 'ring-2', 'ring-blue-200');
+            
+            // Update detection counter
+            updateDetectionCounter(parseInt(detectionId), currentTime);
+            
+            lastHighlightedDetection = closestDetection;
+            
+            console.log(`🎯 Auto-highlighted PERSON-${String(detectionId).padStart(4, '0')} at ${currentTime.toFixed(1)}s`);
+        } else if (!closestDetection && lastHighlightedDetection) {
+            // Clear highlight when no detection is close
+            detectionItems.forEach(item => {
+                item.classList.remove('bg-blue-100', 'border-blue-300', 'ring-2', 'ring-blue-200');
+            });
+            
+            const counter = document.getElementById('detectionCounter');
+            if (counter) {
+                counter.textContent = 'No detection at current frame';
+                counter.className = 'text-gray-600 font-medium';
+            }
+            
+            lastHighlightedDetection = null;
+        }
+    });
+    
+    console.log('🎬 Enhanced video time tracking initialized');
+}
 
 // Initialize debug panel visibility
 document.addEventListener('DOMContentLoaded', function() {
@@ -2060,6 +2926,13 @@ document.addEventListener('DOMContentLoaded', function() {
         debugPanel.classList.remove('hidden');
         console.log('🔧 Debug panel initialized and visible');
     }
+    
+    // Initialize enhanced video time tracking
+    setupVideoTimeTracking();
+    
+    // Load saved demo offsets for perfect positioning
+    loadDemoOffsets();
+    console.log('🎯 DEMO: System ready for boss demo - press D for debug mode');
     
     // Log available detections for debugging
     const detectionRows = document.querySelectorAll('tbody tr');

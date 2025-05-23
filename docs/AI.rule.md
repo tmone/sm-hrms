@@ -1,0 +1,9 @@
+This is a guideline for AI, agents or AI integrators working on this project. The rules below must be strictly followed, AI agents or AI MCPs must always follow in every response:
+- Always follow the file naming convention, directory structure of a standard python project: 
+  + Alway create folder structure for store file. At the root of folder project, just have only a "requirements.txt" and "app.py". We will not other file like "requirements-dev.txt", "config.py", "setup.py", or some file like that. If the AI need make some file for self-test or conclussion it-self working, they must create that file in folder "tests"
+  + Humans can easily review code, humans can easily access and continue working on behalf of AI.
+  + If the content is very long, It will difficult to read and transform to AI server, please sepreated it to more file base on the modules or function to make it simple and cleanly.
+  + With the main function have in blueprint description, the AI must make sure it self-test and auto enhancement for it less error on runtime.
+- Always saving working after finished process request or before modified the code to make sure revert the working to previous process.
+- Dont ask anything for choice option suggest next step. Auto choice step which AI think is the best for project.
+- When it is necessary to change to another approach that is completely different from the previously agreed solution, it is necessary to have the consent of the programmer. And it is necessary to clearly explain the advantages and disadvantages compared to the previous solution to ensure that the programmer understands.

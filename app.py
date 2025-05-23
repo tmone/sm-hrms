@@ -220,6 +220,10 @@ def create_app(config_name=None):
         frame_number = db.Column(db.Integer)
         confidence = db.Column(db.Float, default=0.0)
         
+        # Person tracking (for multi-frame tracking)
+        person_id = db.Column(db.String(50))  # e.g., "PERSON-0001"
+        track_id = db.Column(db.Integer)      # Internal tracking ID
+        
         # Bounding box coordinates
         bbox_x = db.Column(db.Integer)
         bbox_y = db.Column(db.Integer)
@@ -250,6 +254,8 @@ def create_app(config_name=None):
                 'timestamp': self.timestamp,
                 'frame_number': self.frame_number,
                 'confidence': self.confidence,
+                'person_id': self.person_id,
+                'track_id': self.track_id,
                 'bbox_x': self.bbox_x,
                 'bbox_y': self.bbox_y,
                 'bbox_width': self.bbox_width,

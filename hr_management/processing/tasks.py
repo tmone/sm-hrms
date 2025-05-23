@@ -13,9 +13,24 @@ import uuid
 try:
     import cv2
     CV2_AVAILABLE = True
+    print("✅ OpenCV available for video processing")
 except ImportError:
     CV2_AVAILABLE = False
-    print("OpenCV not available. Video processing will be limited.")
+    print("⚠️ OpenCV not available. Video processing will use mock data.")
+
+# Check for SAM/SAM2 availability
+try:
+    # Try importing SAM or SAM2 (Segment Anything Model)
+    # This would be for actual person detection/segmentation
+    import torch
+    TORCH_AVAILABLE = True
+    print("✅ PyTorch available for AI models")
+except ImportError:
+    TORCH_AVAILABLE = False
+    print("⚠️ PyTorch not available. AI model features disabled.")
+
+# Display system capabilities
+print(f"🖥️ System capabilities: CV2={CV2_AVAILABLE}, PyTorch={TORCH_AVAILABLE}")
 
 app = create_app()
 
@@ -33,6 +48,7 @@ def process_video(self, video_id):
             db.session.commit()
             
             # Step 1: Extract video metadata
+            print(f"🔍 Step 1/4: Extracting metadata for video {video_id}")
             self.update_state(state='PROGRESS', meta={'progress': 10, 'status': 'Extracting metadata'})
             metadata = extract_video_metadata(video.filepath)
             
@@ -42,17 +58,45 @@ def process_video(self, video_id):
             video.processing_progress = 20
             db.session.commit()
             
+            print(f"📊 Video metadata: duration={metadata.get('duration')}s, fps={metadata.get('fps')}, resolution={metadata.get('resolution')}")
+            
+            # CLEAR ALL EXISTING DETECTION DATA BEFORE RE-PROCESSING (Celery mode)
+            print(f"🗑️ [Celery] Clearing all existing detection data for video {video_id}")
+            try:
+                existing_detections = DetectedPerson.query.filter_by(video_id=video_id).all()
+                
+                if existing_detections:
+                    detection_count = len(existing_detections)
+                    print(f"   🔍 Found {detection_count} existing detections to delete")
+                    
+                    for detection in existing_detections:
+                        db.session.delete(detection)
+                    
+                    db.session.commit()
+                    print(f"   ✅ Successfully deleted {detection_count} existing detections")
+                else:
+                    print(f"   📝 No existing detections found for video {video_id}")
+                    
+            except Exception as e:
+                print(f"   ⚠️ Warning: Could not clear existing detections: {e}")
+                # Continue processing anyway - this is not a critical error
+            
             # Step 2: Detect persons
+            print(f"👥 Step 2/4: Detecting persons in video {video_id}")
             self.update_state(state='PROGRESS', meta={'progress': 30, 'status': 'Detecting persons'})
             detections = detect_persons_in_video(video.filepath)
             video.processing_progress = 60
             db.session.commit()
             
+            print(f"🎯 Found {len(detections)} person detections")
+            
             # Step 3: Save detections to database
+            print(f"💾 Step 3/4: Saving {len(detections)} detections to database")
             self.update_state(state='PROGRESS', meta={'progress': 80, 'status': 'Saving detections'})
             save_detections_to_db(video_id, detections, metadata.get('fps', 25))
             
             # Step 4: Complete processing
+            print(f"✅ Step 4/4: Person extraction completed for video {video_id}")
             video.status = 'completed'
             video.processing_progress = 100
             db.session.commit()
@@ -227,8 +271,48 @@ def detect_persons_in_video(filepath):
     # This is a simplified implementation
     # In production, you would use actual person detection models
     
+    print(f"🎬 Opening video file: {filepath}")
+    
+    if not CV2_AVAILABLE:
+        print("⚠️ OpenCV not available, creating mock person detections...")
+        # Return mock detections when OpenCV is not available
+        detections = []
+        for i in range(3):  # Create 3 mock persons
+            person_code = f"PERSON-{i+1:04d}"
+            detection = {
+                'person_code': person_code,
+                'start_frame': i * 30,
+                'end_frame': (i * 30) + 150,  # 5 seconds at 30fps
+                'start_time': i * 1.0,
+                'end_time': (i * 1.0) + 5.0,
+                'confidence': 0.85,
+                'bbox_data': [{
+                    'frame': i * 30,
+                    'x': 20 + (i * 10),  # Percentage
+                    'y': 30,
+                    'width': 15,
+                    'height': 40
+                }]
+            }
+            detections.append(detection)
+            print(f"👤 Mock detected person {person_code} at frame {i * 30} ({i * 1.0:.1f}s)")
+        
+        print(f"🎯 Mock person detection completed: {len(detections)} persons found")
+        return detections
+    
+    # Check if file exists
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"Video file not found: {filepath}")
+    
     cap = cv2.VideoCapture(filepath)
+    
+    if not cap.isOpened():
+        raise Exception(f"Could not open video file: {filepath}")
+    
     fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    print(f"📊 Video properties: FPS={fps}, Total frames={total_frames}")
     
     detections = []
     current_persons = {}
@@ -240,6 +324,11 @@ def detect_persons_in_video(filepath):
         ret, frame = cap.read()
         if not ret:
             break
+        
+        # Log progress every 100 frames
+        if frame_number % 100 == 0:
+            progress = (frame_number / min(total_frames, 300)) * 100
+            print(f"🔄 Processing frame {frame_number}/{min(total_frames, 300)} ({progress:.1f}%)")
         
         # Simulate person detection (replace with actual detection logic)
         # This would use YOLO, SAM, or other detection models
@@ -254,7 +343,7 @@ def detect_persons_in_video(filepath):
             end_frame = start_frame + int(5 * fps)
             end_time = start_time + 5
             
-            detections.append({
+            detection = {
                 'person_code': person_code,
                 'start_frame': start_frame,
                 'end_frame': end_frame,
@@ -268,7 +357,10 @@ def detect_persons_in_video(filepath):
                     'width': 15,
                     'height': 40
                 }]
-            })
+            }
+            
+            detections.append(detection)
+            print(f"👤 Detected person {person_code} at frame {start_frame} ({start_time:.1f}s)")
             
             person_counter += 1
         
@@ -276,10 +368,34 @@ def detect_persons_in_video(filepath):
         
         # Limit processing for demo
         if frame_number > 300:  # Process only first 300 frames
+            print(f"⏹️ Stopping processing at frame {frame_number} (demo limit)")
             break
     
     cap.release()
+    print(f"🎯 Person detection completed: {len(detections)} persons found")
     return detections
+
+def detect_persons_with_sam(filepath):
+    """Detect persons using SAM (Segment Anything Model) - Future implementation"""
+    # This is a placeholder for SAM/SAM2 integration
+    # In production, this would use actual SAM models for person detection
+    
+    print(f"🤖 SAM-based person detection for: {filepath}")
+    
+    if not TORCH_AVAILABLE:
+        print("⚠️ PyTorch not available, falling back to basic detection")
+        return detect_persons_in_video(filepath)
+    
+    # TODO: Implement actual SAM/SAM2 person detection
+    # Example integration points:
+    # 1. Load SAM model: model = sam_model_registry["vit_h"](checkpoint="sam_vit_h.pth")
+    # 2. Process video frames with SAM
+    # 3. Filter segments for person class
+    # 4. Track persons across frames
+    # 5. Generate detection data
+    
+    print("🚧 SAM integration not yet implemented, using fallback")
+    return detect_persons_in_video(filepath)
 
 def save_detections_to_db(video_id, detections, fps):
     """Save detection results to database"""

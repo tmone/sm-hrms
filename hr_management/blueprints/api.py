@@ -56,7 +56,7 @@ def processing_queue():
         
         try:
             sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-            from utils.conversion_manager import conversion_manager
+            from hr_management.utils.conversion_manager import conversion_manager
             
             all_tasks = conversion_manager.get_all_tasks()
             total_tasks = len(all_tasks)

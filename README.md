@@ -24,6 +24,31 @@ A modern Flask-based HRM system with advanced video processing and facial recogn
 - **Background Processing**: Celery-based task queue for heavy operations
 - **Database Management**: SQLite with SQLAlchemy ORM
 
+## Project Structure
+
+This project follows standard Python package structure:
+
+```
+hr-management-system/
+├── hr_management/          # Main application package
+│   ├── blueprints/        # Flask blueprints (routes)
+│   ├── models/            # Database models & AI models
+│   ├── processing/        # AI processing logic
+│   └── utils/             # Utility functions
+├── scripts/               # Management scripts
+├── templates/             # Jinja2 templates
+├── static/                # CSS, JS, images
+├── tests/                 # Unit tests
+├── docs/                  # Documentation
+├── datasets/              # Training data
+├── uploads/               # User uploads
+├── instance/              # Database & config
+├── app.py                 # Flask application factory
+├── run.py                 # Main entry point
+├── config.py              # Configuration settings
+└── setup.py               # Package installation
+```
+
 ## Quick Start
 
 ### Prerequisites

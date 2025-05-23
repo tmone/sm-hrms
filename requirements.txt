@@ -13,6 +13,25 @@ imageio-ffmpeg>=0.4.7
 pillow>=9.0.0
 numpy>=1.21.0
 
+# AI Models for Person Detection
+torch>=1.13.0
+torchvision>=0.14.0
+ultralytics>=8.0.0
+onnxruntime>=1.15.0
+
+# Transformer Models
+transformers>=4.30.0
+accelerate>=0.20.0
+timm>=0.9.0
+
+# SAM/SAM2 Models  
+segment-anything>=1.0
+sam2>=0.1.0
+
+# Additional CV libraries
+supervision>=0.20.0
+roboflow>=1.0.0
+
 # Optional Dependencies (install if available)
 Flask-SocketIO>=5.0.0
 Flask-Babel>=3.0.0

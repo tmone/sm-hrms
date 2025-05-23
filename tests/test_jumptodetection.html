@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test jumpToDetection Function</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .video-container { position: relative; display: inline-block; }
+        .detection-table { margin-top: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        button { margin: 2px; padding: 5px 10px; cursor: pointer; }
+        #boundingBox { position: absolute; border: 3px solid #ef4444; background: rgba(239, 68, 68, 0.1); }
+    </style>
+</head>
+<body>
+    <h1>Test jumpToDetection Function</h1>
+    
+    <div class="video-container">
+        <video id="videoPlayer" controls width="640" height="360" preload="metadata">
+            <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+    </div>
+    
+    <div class="detection-table">
+        <h2>Test Detections</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Bounding Box</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>5.5s</td>
+                    <td>10, 20, 100x150</td>
+                    <td>
+                        <button onclick="jumpToDetection(5.5, 1, 10, 20, 100, 150)">🎯 Go to Frame</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>12.3s</td>
+                    <td>50, 80, 120x180</td>
+                    <td>
+                        <button onclick="jumpToDetection(12.3, 2, 50, 80, 120, 180)">🎯 Go to Frame</button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <div id="debug" style="margin-top: 20px; padding: 10px; background: #f5f5f5; border-radius: 5px;">
+        <h3>Debug Info</h3>
+        <div id="debugOutput"></div>
+    </div>
+
+    <script>
+        function log(message) {
+            console.log(message);
+            const debugOutput = document.getElementById('debugOutput');
+            debugOutput.innerHTML += message + '<br>';
+        }
+
+        function jumpToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHeight) {
+            log(`🎯 Jumping to detection ${detectionId} at ${timestamp}s`);
+            log(`📊 Parameters: timestamp=${timestamp}, detectionId=${detectionId}, bbox=[${bboxX}, ${bboxY}, ${bboxWidth}x${bboxHeight}]`);
+            
+            const video = document.getElementById('videoPlayer');
+            if (!video) {
+                log('❌ Video player not found');
+                return;
+            }
+            
+            // Validate parameters
+            if (isNaN(timestamp) || timestamp < 0) {
+                log('❌ Invalid timestamp: ' + timestamp);
+                return;
+            }
+            
+            if (isNaN(bboxX) || isNaN(bboxY) || isNaN(bboxWidth) || isNaN(bboxHeight)) {
+                log('❌ Invalid bounding box coordinates: ' + JSON.stringify({ bboxX, bboxY, bboxWidth, bboxHeight }));
+                return;
+            }
+            
+            // Wait for video metadata to be loaded
+            if (video.readyState < 1) {
+                log('⏳ Waiting for video metadata to load...');
+                video.addEventListener('loadedmetadata', function() {
+                    performJump();
+                }, { once: true });
+            } else {
+                performJump();
+            }
+            
+            function performJump() {
+                log(`🎬 Video duration: ${video.duration}s, seeking to: ${timestamp}s`);
+                
+                // Validate timestamp against video duration
+                if (timestamp > video.duration) {
+                    log('⚠️ Timestamp exceeds video duration, adjusting...');
+                    timestamp = Math.min(timestamp, video.duration - 0.1);
+                }
+                
+                // Jump to the timestamp
+                video.currentTime = timestamp;
+                
+                // Show bounding box overlay
+                showBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp);
+                
+                log('✅ Jump to detection completed');
+            }
+        }
+
+        function showBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp) {
+            log(`📦 Showing bounding box: ${bboxX}, ${bboxY}, ${bboxWidth}x${bboxHeight}`);
+            
+            const video = document.getElementById('videoPlayer');
+            if (!video) {
+                log('❌ Video element not found for bounding box');
+                return;
+            }
+            
+            // Wait for video to be ready
+            if (video.readyState < 1 || video.videoWidth === 0) {
+                log('⏳ Waiting for video to load before showing bounding box...');
+                video.addEventListener('loadedmetadata', function() {
+                    showBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp);
+                }, { once: true });
+                return;
+            }
+            
+            // Remove existing bounding box
+            const existingBox = document.getElementById('boundingBox');
+            if (existingBox) {
+                existingBox.remove();
+            }
+            
+            // Get video container
+            const videoContainer = video.parentElement;
+            if (!videoContainer) {
+                log('❌ Video container not found');
+                return;
+            }
+            
+            // Create bounding box overlay
+            const boundingBox = document.createElement('div');
+            boundingBox.id = 'boundingBox';
+            boundingBox.style.position = 'absolute';
+            boundingBox.style.border = '3px solid #ef4444';
+            boundingBox.style.background = 'rgba(239, 68, 68, 0.1)';
+            boundingBox.style.pointerEvents = 'none';
+            boundingBox.style.zIndex = '10';
+            boundingBox.style.borderRadius = '4px';
+            
+            // Position the container relatively
+            videoContainer.style.position = 'relative';
+            
+            // Simple positioning for test (assumes percentage coordinates)
+            boundingBox.style.left = (bboxX / 100 * video.offsetWidth) + 'px';
+            boundingBox.style.top = (bboxY / 100 * video.offsetHeight) + 'px';
+            boundingBox.style.width = (bboxWidth / 100 * video.offsetWidth) + 'px';
+            boundingBox.style.height = (bboxHeight / 100 * video.offsetHeight) + 'px';
+            
+            videoContainer.appendChild(boundingBox);
+            
+            log('✅ Bounding box added to video container');
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                if (boundingBox && boundingBox.parentElement) {
+                    boundingBox.remove();
+                    log('🕒 Bounding box auto-removed');
+                }
+            }, 5000);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            const video = document.getElementById('videoPlayer');
+            log('🎬 Video element found: ' + (video ? 'Yes' : 'No'));
+            
+            video.addEventListener('loadedmetadata', function() {
+                log(`📊 Video metadata loaded: duration=${video.duration}s, size=${video.videoWidth}x${video.videoHeight}`);
+            });
+            
+            video.addEventListener('error', function(e) {
+                log('❌ Video error: ' + (e.target.error ? e.target.error.message : 'Unknown error'));
+            });
+        });
+    </script>
+</body>
+</html>

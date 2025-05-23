@@ -1,66 +1,148 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
 *.so
+
+# Distribution / packaging
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# celery beat schedule file
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
 
-# Flask
-instance/
-.webassets-cache
+# Spyder project settings
+.spyderproject
+.spyproject
 
-# Database
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# HR Management System specific
 *.db
-*.sqlite
-*.sqlite3
-
-# Environment variables
-.env
-.env.local
-.env.development
-.env.production
-
-# Uploads and generated files
 uploads/*
 !uploads/.gitkeep
+static/uploads/*
+!static/uploads/.gitkeep
 datasets/faces/*
 !datasets/faces/.gitkeep
 datasets/yolo/*
 !datasets/yolo/.gitkeep
-processing/temp/*
-!processing/temp/.gitkeep
+hr_management/processing/temp/*
+!hr_management/processing/temp/.gitkeep
 
-# IDE
+# AI Models (large files)
+*.pt
+*.pth
+*.onnx
+*.h5
+*.pkl
+*.bin
+
+# Video files (can be large)
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+
+# IDE specific
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
+# OS specific
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-
-# Logs
-*.log
-logs/
-
-# Node modules (if any)
-node_modules/
-
-# AI Models (too large for git)
-models/*.pkl
-models/*.pth
-models/*.h5
-models/*.onnx
-.claude/

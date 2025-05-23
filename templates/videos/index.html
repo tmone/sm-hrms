@@ -143,8 +143,8 @@
                                             </a>
                                         {% endif %}
                                         
-                                        <!-- Process Button (only for uploaded videos) -->
-                                        {% if video.status == 'uploaded' %}
+                                        <!-- Process Button (for uploaded and completed videos) -->
+                                        {% if video.status == 'uploaded' or video.status == 'completed' %}
                                         <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST" class="inline">
                                             <input type="hidden" name="extract_persons" value="true">
                                             <button type="submit" 
@@ -391,9 +391,16 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`🔍 Found ${statusElements.length} status elements`);
         
         statusElements.forEach(element => {
-            const videoId = element.id.replace('status-', '');
-            convertingVideos.push(parseInt(videoId));
-            console.log(`📋 Found converting video: ${videoId} (element ID: ${element.id})`);
+            const videoIdStr = element.id.replace('status-', '');
+            const videoId = parseInt(videoIdStr);
+            
+            // Only add valid video IDs (not NaN) and check if element contains "Converting" text
+            if (!isNaN(videoId) && element.textContent && element.textContent.includes('Converting')) {
+                convertingVideos.push(videoId);
+                console.log(`📋 Found converting video: ${videoId} (element ID: ${element.id})`);
+            } else {
+                console.log(`⚠️ Skipping element ${element.id}: videoId=${videoId}, isConverting=${element.textContent ? element.textContent.includes('Converting') : false}`);
+            }
         });
         
         console.log('🔄 Converting videos array:', convertingVideos);

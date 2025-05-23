@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(python:*)",
+      "Bash(rm:*)",
+      "Bash(git init:*)",
+      "Bash(git config:*)",
+      "Bash(touch:*)",
+      "Bash(git add:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(source:*)",
+      "Bash(./env/Scripts/python.exe app.py)",
+      "Bash(grep:*)",
+      "Bash(./env/Scripts/python.exe test_video_feature.py)",
+      "Bash(./env/Scripts/python.exe:*)",
+      "Bash(mv:*)",
+      "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg \"def.*serve\" blueprints/videos.py)",
+      "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg -A 15 \"def serve_video_static\" blueprints/videos.py)",
+      "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg -A 15 \"def stream_video\" blueprints/videos.py)",
+      "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg -A 30 \"def stream_video\" blueprints/videos.py)",
+      "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg -A 50 \"def stream_video\" blueprints/videos.py)",
+      "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg -A 80 \"def stream_video\" blueprints/videos.py)",
+      "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg -B 5 -A 20 \"range_match.*=\" blueprints/videos.py)",
+      "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg \"@videos_bp.route.*serve\\|@videos_bp.route.*stream\" blueprints/videos.py)",
+      "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg -B 1 \"def serve_video_static\\|def stream_video\" blueprints/videos.py)",
+      "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg -r \"processing-queue\" --type py)",
+      "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg \"processing-queue\" --type py)",
+      "Bash(/home/tmone/.npm-global/lib/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg \"api_bp\" app.py)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": []
+  }
+}

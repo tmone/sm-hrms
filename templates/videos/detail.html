@@ -94,23 +94,6 @@
                         </video>
                         <div class="mt-2 text-sm text-green-600 bg-green-50 p-2 rounded">
                             ✅ <strong>Converted Video:</strong> This video has been automatically converted to web-compatible MP4 format.
-                            <div class="mt-2 space-x-2">
-                                <a href="{{ url_for('videos.stream_video', filename=video.processed_path) }}" 
-                                   class="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700" 
-                                   target="_blank">Test Direct Link</a>
-                                <button onclick="testVideoPlayback('{{ video.processed_path }}')" 
-                                        class="text-xs bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700">
-                                    🔍 Debug Playback
-                                </button>
-                                <button onclick="reconvertVideo({{ video.id }})" 
-                                        class="text-xs bg-orange-600 text-white px-2 py-1 rounded hover:bg-orange-700">
-                                    🔄 Re-convert
-                                </button>
-                                <button onclick="debugVideoStatus({{ video.id }})" 
-                                        class="text-xs bg-gray-600 text-white px-2 py-1 rounded hover:bg-gray-700">
-                                    🐛 Debug Status
-                                </button>
-                            </div>
                         </div>
                     {% elif video.status == 'uploaded' and video.file_path %}
                         <div id="videoContainer">
@@ -195,7 +178,37 @@
                             {% if video.status == 'processing' %}
                                 <div class="text-center">
                                     <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                                    <p class="text-gray-600">Video is being processed...</p>
+                                    <p class="text-gray-600 mb-4">Extracting persons from video...</p>
+                                    
+                                    <!-- Progress Bar -->
+                                    <div class="max-w-md mx-auto">
+                                        <div class="flex justify-between text-sm text-blue-600 mb-2">
+                                            <span>Progress</span>
+                                            <span id="processingPercent">0%</span>
+                                        </div>
+                                        <div class="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
+                                            <div id="processingProgressBar" class="bg-blue-600 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+                                        </div>
+                                        <div class="text-sm text-blue-600 mt-2">
+                                            <div id="processingMessage">Initializing person extraction...</div>
+                                        </div>
+                                        
+                                        <!-- Cancel Button -->
+                                        <div class="mt-4">
+                                            <form action="{{ url_for('videos.cancel_processing', id=video.id) }}" method="POST" class="inline">
+                                                <button type="submit" class="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700" onclick="return confirm('Cancel person extraction? This will stop the current process and allow you to retry.')">
+                                                    🛑 Cancel Processing
+                                                </button>
+                                            </form>
+                                            
+                                            <!-- Debug Progress Test Button (Development Only) -->
+                                            {% if config.DEBUG or video.status == 'processing' %}
+                                            <button onclick="testProgressUI()" class="ml-2 px-3 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600">
+                                                🧪 Test Progress UI
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </div>
                                 </div>
                             {% elif video.status == 'failed' %}
                                 <div class="text-center">
@@ -318,6 +331,15 @@
                                 <div class="bg-blue-50 border border-blue-200 rounded-md p-4">
                                     <h4 class="text-sm font-medium text-blue-800 mb-3">Process Video Options</h4>
                                     
+                                    {% if video.detected_persons and video.detected_persons|length > 0 %}
+                                    <div class="bg-amber-50 border border-amber-200 rounded p-2 mb-3">
+                                        <p class="text-xs text-amber-700">
+                                            ⚠️ <strong>Note:</strong> This video has {{ video.detected_persons|length }} existing detection(s). 
+                                            Processing will <strong>clear all existing data</strong> and re-extract persons from scratch.
+                                        </p>
+                                    </div>
+                                    {% endif %}
+                                    
                                     <div class="space-y-2">
                                         <label class="flex items-center">
                                             <input type="checkbox" name="extract_persons" value="true" checked class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
@@ -336,7 +358,7 @@
                                     </div>
                                 </div>
                                 
-                                <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                                <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" onclick="return confirm('Start person extraction for this video?{% if video.detected_persons and video.detected_persons|length > 0 %} This will delete {{ video.detected_persons|length }} existing detection(s) and start fresh.{% endif %}')">
                                     Process Video
                                 </button>
                             </form>
@@ -391,6 +413,27 @@
                                     <button onclick="toggleDebugPanel()" class="mt-2 text-xs bg-gray-300 px-2 py-1 rounded">Hide Debug</button>
                                 </div>
                             </div>
+                        {% elif video.status == 'processing' %}
+                            <!-- Processing status with cancel option -->
+                            <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-3">
+                                <h4 class="text-sm font-medium text-yellow-800 mb-2">⏳ Person Extraction In Progress</h4>
+                                <p class="text-sm text-yellow-700 mb-3">
+                                    The system is currently extracting persons from this video. 
+                                    {% if video.processing_started_at %}
+                                        Started: {{ video.processing_started_at.strftime('%b %d at %H:%M') }}
+                                    {% endif %}
+                                </p>
+                                <p class="text-xs text-yellow-600">
+                                    If the process appears stuck, you can cancel and retry.
+                                </p>
+                            </div>
+                            
+                            <!-- Cancel Processing -->
+                            <form action="{{ url_for('videos.cancel_processing', id=video.id) }}" method="POST">
+                                <button type="submit" class="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700" onclick="return confirm('Cancel person extraction? This will stop the current process and reset the video so you can retry.')">
+                                    🛑 Cancel Processing
+                                </button>
+                            </form>
                         {% elif video.status == 'completed' %}
                             <button class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
                                 Run Face Recognition
@@ -400,10 +443,58 @@
                                 Export Results
                             </button>
                         {% elif video.status == 'failed' %}
-                            <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST">
-                                <input type="hidden" name="extract_persons" value="true">
-                                <button type="submit" class="w-full px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700">
-                                    Retry Processing
+                            <!-- Error status message -->
+                            <div class="bg-red-50 border border-red-200 rounded-md p-4 mb-3">
+                                <h4 class="text-sm font-medium text-red-800 mb-2">❌ Person Extraction Failed</h4>
+                                <p class="text-sm text-red-700 mb-3">
+                                    {% if video.error_message %}
+                                        Error: {{ video.error_message }}
+                                    {% else %}
+                                        The person extraction process failed. You can retry with the same or different options.
+                                    {% endif %}
+                                </p>
+                                
+                                {% if video.processing_completed_at %}
+                                    <p class="text-xs text-red-600">
+                                        Failed at: {{ video.processing_completed_at.strftime('%b %d, %Y at %H:%M') }}
+                                    </p>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- Retry Processing Form -->
+                            <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST" class="space-y-3">
+                                <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4">
+                                    <h4 class="text-sm font-medium text-yellow-800 mb-3">🔄 Retry Person Extraction</h4>
+                                    
+                                    {% if video.detected_persons and video.detected_persons|length > 0 %}
+                                    <div class="bg-red-50 border border-red-200 rounded p-2 mb-3">
+                                        <p class="text-xs text-red-700">
+                                            ⚠️ <strong>Warning:</strong> This video has {{ video.detected_persons|length }} existing detection(s). 
+                                            Retry will <strong>delete all existing data</strong> and start fresh person extraction.
+                                        </p>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <div class="space-y-2">
+                                        <label class="flex items-center">
+                                            <input type="checkbox" name="extract_persons" value="true" checked class="rounded border-gray-300 text-yellow-600 shadow-sm focus:border-yellow-300 focus:ring focus:ring-yellow-200 focus:ring-opacity-50">
+                                            <span class="ml-2 text-sm text-gray-700">Extract persons from video</span>
+                                        </label>
+                                        
+                                        <label class="flex items-center">
+                                            <input type="checkbox" name="face_recognition" value="true" class="rounded border-gray-300 text-yellow-600 shadow-sm focus:border-yellow-300 focus:ring focus:ring-yellow-200 focus:ring-opacity-50">
+                                            <span class="ml-2 text-sm text-gray-700">Run face recognition</span>
+                                        </label>
+                                        
+                                        <label class="flex items-center">
+                                            <input type="checkbox" name="extract_frames" value="true" class="rounded border-gray-300 text-yellow-600 shadow-sm focus:border-yellow-300 focus:ring focus:ring-yellow-200 focus:ring-opacity-50">
+                                            <span class="ml-2 text-sm text-gray-700">Extract key frames</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <button type="submit" class="w-full px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700" onclick="return confirm('Retry person extraction for this video?{% if video.detected_persons and video.detected_persons|length > 0 %} This will permanently delete {{ video.detected_persons|length }} existing detection(s) and start fresh extraction.{% endif %}')">
+                                    🔄 Retry Person Extraction
                                 </button>
                             </form>
                         {% endif %}
@@ -415,6 +506,15 @@
                         <button class="w-full px-4 py-2 border border-red-300 rounded-md text-red-700 hover:bg-red-50">
                             Delete Video
                         </button>
+                        
+                        <!-- Temporary testing button (remove in production) -->
+                        {% if video.status in ['uploaded', 'completed'] %}
+                        <form action="{{ url_for('videos.simulate_error', id=video.id) }}" method="POST" class="mt-2">
+                            <button type="submit" class="w-full px-4 py-2 border border-orange-300 rounded-md text-orange-700 hover:bg-orange-50 text-sm" onclick="return confirm('Simulate an error to test retry functionality?')">
+                                🧪 Simulate Error (Testing)
+                            </button>
+                        </form>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -466,12 +566,35 @@
                                 {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {{ detection.bbox_x }}, {{ detection.bbox_y }}, 
-                                {{ detection.bbox_width }}x{{ detection.bbox_height }}
+                                {% if detection.bbox_x is number and detection.bbox_y is number and detection.bbox_width is number and detection.bbox_height is number %}
+                                    {{ detection.bbox_x }}, {{ detection.bbox_y }}, 
+                                    {{ detection.bbox_width }}x{{ detection.bbox_height }}
+                                {% else %}
+                                    <span class="text-red-500">Invalid bbox data</span>
+                                {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                 {% if not detection.is_identified %}
-                                    <button class="text-blue-600 hover:text-blue-900">Identify</button>
+                                    {% if detection.bbox_x is number and detection.bbox_y is number and detection.bbox_width is number and detection.bbox_height is number and detection.timestamp is number %}
+                                        <button onclick="jumpToDetection({{ detection.timestamp }}, {{ detection.id }}, {{ detection.bbox_x }}, {{ detection.bbox_y }}, {{ detection.bbox_width }}, {{ detection.bbox_height }})" 
+                                                class="text-blue-600 hover:text-blue-900 mr-2"
+                                                data-detection-id="{{ detection.id }}"
+                                                data-timestamp="{{ detection.timestamp }}"
+                                                data-bbox-x="{{ detection.bbox_x }}"
+                                                data-bbox-y="{{ detection.bbox_y }}" 
+                                                data-bbox-width="{{ detection.bbox_width }}"
+                                                data-bbox-height="{{ detection.bbox_height }}">
+                                            🎯 Go to Frame
+                                        </button>
+                                    {% else %}
+                                        <span class="text-red-500">❌ Invalid data</span>
+                                    {% endif %}
+                                    <button onclick="identifyPerson({{ detection.id }})" 
+                                            class="text-green-600 hover:text-green-900">
+                                        👤 Identify
+                                    </button>
+                                {% else %}
+                                    <span class="text-gray-400">✅ Identified</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -784,8 +907,310 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('📡 Socket.IO not available, using AJAX polling...');
             setupAjaxPolling();
         }
+    } else if (videoStatus === 'processing') {
+        console.log('🔄 Video is processing (person extraction), setting up progress tracking...');
+        setupProcessingPolling();
     }
 });
+
+function setupProcessingPolling() {
+    console.log('🔄 Setting up person extraction progress polling...');
+    
+    // Track polling state
+    window.processingPollCount = 0;
+    window.processingStartTime = Date.now();
+    window.lastProgressUpdate = Date.now();
+    window.maxPollAttempts = 300; // 10 minutes at 2-second intervals
+    window.stuckTimeout = 60000; // 60 seconds without progress = stuck
+    
+    // Initial check immediately
+    checkProcessingStatus();
+    
+    // Check status every 2 seconds for frequent updates
+    const processingInterval = setInterval(function() {
+        checkProcessingStatus();
+    }, 2000);
+    
+    // Store interval ID so we can clear it if needed
+    window.processingProgressInterval = processingInterval;
+    
+    // Clear interval when page is hidden/unloaded
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden && window.processingProgressInterval) {
+            clearInterval(window.processingProgressInterval);
+            console.log('⏸️ Paused person extraction tracking (page hidden)');
+        } else if (!document.hidden && '{{ video.status }}' === 'processing') {
+            // Resume when page becomes visible again
+            window.processingProgressInterval = setInterval(checkProcessingStatus, 2000);
+            console.log('▶️ Resumed person extraction tracking (page visible)');
+        }
+    });
+}
+
+function checkProcessingStatus() {
+    const videoId = {{ video.id }};
+    
+    window.processingPollCount++;
+    const elapsedTime = Date.now() - window.processingStartTime;
+    const timeSinceLastUpdate = Date.now() - window.lastProgressUpdate;
+    
+    console.log(`🔍 Checking person extraction status for video ${videoId} (attempt ${window.processingPollCount}, elapsed: ${Math.round(elapsedTime/1000)}s)`);
+    
+    // Check for timeout scenarios
+    if (window.processingPollCount > window.maxPollAttempts) {
+        console.error('⏰ Processing timeout: exceeded maximum poll attempts');
+        showProcessingError('Processing timed out after 10 minutes', true);
+        return;
+    }
+    
+    if (timeSinceLastUpdate > window.stuckTimeout) {
+        console.error('⏰ Processing appears stuck: no progress for over 60 seconds');
+        showProcessingError('Processing appears stuck. No progress detected for over 1 minute.', true);
+        return;
+    }
+    
+    fetch(`/videos/api/${videoId}/processing-status`)
+        .then(response => {
+            console.log(`📡 Processing API Response status: ${response.status}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('📊 Person extraction status data received:', data);
+            console.log('   🔧 Data details:', JSON.stringify(data, null, 2));
+            updateProcessingUI(data);
+        })
+        .catch(error => {
+            console.error('❌ Error checking person extraction status:', error);
+            
+            // After 3 consecutive failures, show error UI
+            window.consecutiveFailures = (window.consecutiveFailures || 0) + 1;
+            
+            if (window.consecutiveFailures >= 3) {
+                showProcessingError('Network error: Unable to check processing status', true);
+            } else {
+                const message = document.getElementById('processingMessage');
+                if (message) {
+                    message.textContent = `⚠️ Connection error (${window.consecutiveFailures}/3). Retrying...`;
+                }
+            }
+        });
+}
+
+function updateProcessingUI(data) {
+    console.log('🎨 Updating person extraction UI with data:', data);
+    
+    const progressBar = document.getElementById('processingProgressBar');
+    const progressPercent = document.getElementById('processingPercent');
+    const progressMessage = document.getElementById('processingMessage');
+    
+    // Reset consecutive failures on successful response
+    window.consecutiveFailures = 0;
+    
+    // Log current UI elements
+    console.log('📋 Processing UI Elements found:', {
+        progressBar: !!progressBar,
+        progressPercent: !!progressPercent, 
+        progressMessage: !!progressMessage
+    });
+    
+    if (data.status === 'completed') {
+        console.log('✅ Person extraction completed!');
+        if (progressBar) progressBar.style.width = '100%';
+        if (progressPercent) progressPercent.textContent = '100%';
+        if (progressMessage) progressMessage.textContent = 'Person extraction completed successfully!';
+        
+        // Clear the progress interval
+        if (window.processingProgressInterval) {
+            clearInterval(window.processingProgressInterval);
+            window.processingProgressInterval = null;
+        }
+        
+        setTimeout(() => location.reload(), 2000);
+        
+    } else if (data.status === 'failed') {
+        console.log('❌ Person extraction failed:', data.error_message);
+        showProcessingError(data.error_message || 'Unknown error', true);
+        
+    } else if (data.status === 'processing') {
+        const progress = data.progress || 0;
+        const message = data.progress_message || 'Processing...';
+        
+        console.log(`🔄 Person extraction: ${progress.toFixed(1)}% - ${message}`);
+        
+        // Track progress updates for stuck detection
+        const currentProgress = Math.floor(progress);
+        if (currentProgress > (window.lastProgress || 0)) {
+            window.lastProgress = currentProgress;
+            window.lastProgressUpdate = Date.now();
+        }
+        
+        // Update progress bar with animation
+        if (progressBar) {
+            progressBar.style.width = `${progress}%`;
+            progressBar.style.transition = 'width 0.3s ease-in-out';
+            
+            // Add visual feedback when progress updates
+            if (progress > (window.lastVisualProgress || 0)) {
+                progressBar.style.backgroundColor = '#22c55e'; // Green flash
+                setTimeout(() => {
+                    progressBar.style.backgroundColor = '#2563eb'; // Back to blue
+                }, 300);
+                window.lastVisualProgress = progress;
+            }
+            
+            console.log(`   📊 Updated progress bar to ${progress}%`);
+        } else {
+            console.warn('   ⚠️ Progress bar element not found!');
+        }
+        
+        if (progressPercent) {
+            progressPercent.textContent = `${progress.toFixed(1)}%`;
+            console.log(`   🔢 Updated progress text to ${progress.toFixed(1)}%`);
+        } else {
+            console.warn('   ⚠️ Progress percent element not found!');
+        }
+        
+        // Update messages
+        if (progressMessage) {
+            progressMessage.textContent = message;
+            console.log(`   💬 Updated progress message to: ${message}`);
+        } else {
+            console.warn('   ⚠️ Progress message element not found!');
+        }
+        
+        // Update page title to show progress
+        document.title = `Processing ${progress.toFixed(1)}% - ${message}`;
+        
+    } else {
+        console.log('⚠️ Unknown processing status:', data.status);
+        if (progressMessage) {
+            progressMessage.textContent = `Status: ${data.status}`;
+        }
+    }
+}
+
+function showProcessingError(errorMessage, showRetryButton = false) {
+    console.error('💥 Showing processing error:', errorMessage);
+    
+    // Clear polling interval
+    if (window.processingProgressInterval) {
+        clearInterval(window.processingProgressInterval);
+        window.processingProgressInterval = null;
+    }
+    
+    const progressBar = document.getElementById('processingProgressBar');
+    const progressPercent = document.getElementById('processingPercent');
+    const progressMessage = document.getElementById('processingMessage');
+    
+    // Update UI to show error
+    if (progressBar) {
+        progressBar.style.width = '0%';
+        progressBar.style.backgroundColor = '#dc2626'; // Red color
+    }
+    if (progressPercent) {
+        progressPercent.textContent = 'Error';
+        progressPercent.style.color = '#dc2626';
+    }
+    
+    if (progressMessage) {
+        progressMessage.innerHTML = showRetryButton ? 
+            `❌ ${errorMessage}<br>
+             <button onclick="cancelProcessing()" class="mt-2 px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700">
+                🛑 Cancel & Reset
+             </button>
+             <button onclick="location.reload()" class="mt-2 ml-2 px-3 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-700">
+                ↻ Refresh Page
+             </button>` :
+            `❌ ${errorMessage}`;
+        progressMessage.style.color = '#dc2626';
+    }
+    
+    // Update page title
+    document.title = 'Processing Failed - Person Extraction Error';
+}
+
+function cancelProcessing() {
+    const videoId = {{ video.id }};
+    
+    console.log('🛑 Cancelling processing for video:', videoId);
+    
+    // Show loading state
+    const progressMessage = document.getElementById('processingMessage');
+    if (progressMessage) {
+        progressMessage.innerHTML = '🛑 Cancelling processing...';
+        progressMessage.style.color = '#dc2626';
+    }
+    
+    // Make POST request to cancel processing
+    fetch(`/videos/${videoId}/cancel-processing`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }
+    })
+    .then(response => {
+        if (response.ok) {
+            console.log('✅ Successfully cancelled processing');
+            location.reload();
+        } else {
+            throw new Error(`HTTP ${response.status}`);
+        }
+    })
+    .catch(error => {
+        console.error('❌ Error cancelling processing:', error);
+        if (progressMessage) {
+            progressMessage.innerHTML = `❌ Failed to cancel processing: ${error.message}<br>
+                <button onclick="cancelProcessing()" class="mt-2 px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700">
+                    🛑 Try Again
+                </button>`;
+        }
+    });
+}
+
+function retryProcessing() {
+    const videoId = {{ video.id }};
+    
+    console.log('🔄 Retrying person extraction for video:', videoId);
+    
+    // Show loading state
+    const progressMessage = document.getElementById('processingMessage');
+    if (progressMessage) {
+        progressMessage.innerHTML = '🔄 Restarting person extraction...';
+        progressMessage.style.color = '#2563eb';
+    }
+    
+    // Make POST request to restart processing
+    fetch(`/videos/${videoId}/process`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'extract_persons=true&face_recognition=false&extract_frames=false'
+    })
+    .then(response => {
+        if (response.ok) {
+            console.log('✅ Successfully restarted person extraction');
+            // Restart progress tracking
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+        } else {
+            throw new Error(`HTTP ${response.status}`);
+        }
+    })
+    .catch(error => {
+        console.error('❌ Error restarting processing:', error);
+        if (progressMessage) {
+            progressMessage.innerHTML = `❌ Failed to restart processing: ${error.message}<br>
+                <button onclick="retryProcessing()" class="mt-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">
+                    🔄 Try Again
+                </button>`;
+        }
+    });
+}
 
 // Add video event listeners
 document.addEventListener('DOMContentLoaded', function() {
@@ -896,6 +1321,343 @@ function toggleDebugPanel() {
     }
 }
 
+// Person detection and identification functionality
+function jumpToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHeight) {
+    console.log(`🎯 Jumping to detection ${detectionId} at ${timestamp}s`);
+    console.log(`📊 Parameters: timestamp=${timestamp}, detectionId=${detectionId}, bbox=[${bboxX}, ${bboxY}, ${bboxWidth}x${bboxHeight}]`);
+    
+    const video = document.getElementById('videoPlayer');
+    if (!video) {
+        console.error('❌ Video player not found');
+        alert('Video player not found!');
+        return;
+    }
+    
+    // Validate parameters
+    if (isNaN(timestamp) || timestamp < 0) {
+        console.error('❌ Invalid timestamp:', timestamp);
+        alert('Invalid timestamp: ' + timestamp);
+        return;
+    }
+    
+    if (isNaN(bboxX) || isNaN(bboxY) || isNaN(bboxWidth) || isNaN(bboxHeight)) {
+        console.error('❌ Invalid bounding box coordinates:', { bboxX, bboxY, bboxWidth, bboxHeight });
+        alert('Invalid bounding box coordinates');
+        return;
+    }
+    
+    // Wait for video metadata to be loaded
+    if (video.readyState < 1) {
+        console.log('⏳ Waiting for video metadata to load...');
+        video.addEventListener('loadedmetadata', function() {
+            performJump();
+        }, { once: true });
+    } else {
+        performJump();
+    }
+    
+    function performJump() {
+        console.log(`🎬 Video duration: ${video.duration}s, seeking to: ${timestamp}s`);
+        
+        // Validate timestamp against video duration
+        if (timestamp > video.duration) {
+            console.warn('⚠️ Timestamp exceeds video duration, adjusting...');
+            timestamp = Math.min(timestamp, video.duration - 0.1);
+        }
+        
+        // Jump to the timestamp
+        video.currentTime = timestamp;
+        
+        // Play video if paused
+        if (video.paused) {
+            video.play().catch(e => console.log('Could not auto-play video:', e));
+        }
+        
+        // Highlight the detection in the table
+        highlightDetectionRow(detectionId);
+        
+        // Show bounding box overlay (if video container supports it)
+        showBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp);
+        
+        // Scroll video into view
+        video.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        console.log('✅ Jump to detection completed');
+    }
+}
+
+function highlightDetectionRow(detectionId) {
+    // Remove existing highlights
+    const allRows = document.querySelectorAll('tbody tr');
+    allRows.forEach(row => {
+        row.classList.remove('bg-blue-50', 'border-blue-200');
+    });
+    
+    // Find and highlight the current detection row
+    // This is a simple approach - in production you might want to add data attributes
+    const rows = document.querySelectorAll('tbody tr');
+    const detectionIndex = Array.from(rows).findIndex(row => {
+        const actionCell = row.querySelector('td:last-child');
+        return actionCell && actionCell.innerHTML.includes(`identifyPerson(${detectionId})`);
+    });
+    
+    if (detectionIndex >= 0 && rows[detectionIndex]) {
+        rows[detectionIndex].classList.add('bg-blue-50', 'border-blue-200');
+        rows[detectionIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+function showBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp) {
+    console.log(`📦 Showing bounding box: ${bboxX}, ${bboxY}, ${bboxWidth}x${bboxHeight}`);
+    
+    const video = document.getElementById('videoPlayer');
+    if (!video) {
+        console.error('❌ Video element not found for bounding box');
+        return;
+    }
+    
+    // Wait for video to be ready
+    if (video.readyState < 1 || video.videoWidth === 0) {
+        console.log('⏳ Waiting for video to load before showing bounding box...');
+        video.addEventListener('loadedmetadata', function() {
+            showBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp);
+        }, { once: true });
+        return;
+    }
+    
+    // Remove existing bounding box
+    const existingBox = document.getElementById('boundingBox');
+    if (existingBox) {
+        existingBox.remove();
+    }
+    
+    // Get video container
+    const videoContainer = video.parentElement;
+    if (!videoContainer) {
+        console.error('❌ Video container not found');
+        return;
+    }
+    
+    // Create bounding box overlay
+    const boundingBox = document.createElement('div');
+    boundingBox.id = 'boundingBox';
+    boundingBox.style.position = 'absolute';
+    boundingBox.style.border = '3px solid #ef4444';
+    boundingBox.style.background = 'rgba(239, 68, 68, 0.1)';
+    boundingBox.style.pointerEvents = 'none';
+    boundingBox.style.zIndex = '10';
+    boundingBox.style.borderRadius = '4px';
+    boundingBox.style.transition = 'all 0.3s ease';
+    
+    // Add label
+    const label = document.createElement('div');
+    label.style.position = 'absolute';
+    label.style.top = '-25px';
+    label.style.left = '0';
+    label.style.background = '#ef4444';
+    label.style.color = 'white';
+    label.style.padding = '2px 6px';
+    label.style.fontSize = '12px';
+    label.style.borderRadius = '4px';
+    label.style.whiteSpace = 'nowrap';
+    label.textContent = `Person at ${timestamp.toFixed(1)}s`;
+    boundingBox.appendChild(label);
+    
+    // Position the container relatively
+    videoContainer.style.position = 'relative';
+    
+    // Function to update bounding box position and size
+    function updateBoundingBox() {
+        const videoRect = video.getBoundingClientRect();
+        const containerRect = videoContainer.getBoundingClientRect();
+        
+        // Calculate actual video display dimensions (accounting for aspect ratio)
+        const videoAspectRatio = video.videoWidth / video.videoHeight;
+        const containerAspectRatio = videoRect.width / videoRect.height;
+        
+        let displayWidth, displayHeight, offsetX, offsetY;
+        
+        if (containerAspectRatio > videoAspectRatio) {
+            // Video is pillarboxed (black bars on sides)
+            displayHeight = videoRect.height;
+            displayWidth = displayHeight * videoAspectRatio;
+            offsetX = (videoRect.width - displayWidth) / 2;
+            offsetY = 0;
+        } else {
+            // Video is letterboxed (black bars on top/bottom)
+            displayWidth = videoRect.width;
+            displayHeight = displayWidth / videoAspectRatio;
+            offsetX = 0;
+            offsetY = (videoRect.height - displayHeight) / 2;
+        }
+        
+        // Convert percentage-based bounding box to pixels
+        const boxLeft = offsetX + (bboxX / 100) * displayWidth;
+        const boxTop = offsetY + (bboxY / 100) * displayHeight;
+        const boxWidth = (bboxWidth / 100) * displayWidth;
+        const boxHeight = (bboxHeight / 100) * displayHeight;
+        
+        // Position relative to video container
+        boundingBox.style.left = `${boxLeft}px`;
+        boundingBox.style.top = `${boxTop}px`;
+        boundingBox.style.width = `${boxWidth}px`;
+        boundingBox.style.height = `${boxHeight}px`;
+    }
+    
+    // Add bounding box to container
+    videoContainer.appendChild(boundingBox);
+    
+    // Update position when video metadata loads
+    if (video.readyState >= 1) {
+        updateBoundingBox();
+    } else {
+        video.addEventListener('loadedmetadata', updateBoundingBox, { once: true });
+    }
+    
+    // Update position on window resize
+    window.addEventListener('resize', updateBoundingBox);
+    
+    // Auto-hide bounding box after 10 seconds
+    setTimeout(() => {
+        if (boundingBox && boundingBox.parentElement) {
+            boundingBox.style.opacity = '0';
+            setTimeout(() => {
+                if (boundingBox && boundingBox.parentElement) {
+                    boundingBox.remove();
+                }
+            }, 300);
+        }
+    }, 10000);
+    
+    // Hide bounding box when video time changes significantly
+    let lastTime = timestamp;
+    function checkVideoTime() {
+        if (Math.abs(video.currentTime - lastTime) > 2) {
+            if (boundingBox && boundingBox.parentElement) {
+                boundingBox.style.opacity = '0';
+                setTimeout(() => {
+                    if (boundingBox && boundingBox.parentElement) {
+                        boundingBox.remove();
+                    }
+                }, 300);
+            }
+            video.removeEventListener('timeupdate', checkVideoTime);
+        }
+    }
+    video.addEventListener('timeupdate', checkVideoTime);
+}
+
+function identifyPerson(detectionId) {
+    console.log(`👤 Identifying person in detection ${detectionId}`);
+    
+    // Simple identification modal (you can enhance this)
+    const employeeName = prompt('Enter employee name for identification:');
+    
+    if (employeeName && employeeName.trim()) {
+        console.log(`✅ Identifying detection ${detectionId} as: ${employeeName}`);
+        
+        // Here you would typically make an API call to save the identification
+        // For now, we'll just show a success message
+        alert(`Person identified as: ${employeeName}\n\nNote: Full identification functionality requires backend API implementation.`);
+        
+        // You could implement this API call:
+        /*
+        fetch(`/api/detections/${detectionId}/identify`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                employee_name: employeeName
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Refresh the page or update the UI
+                location.reload();
+            }
+        });
+        */
+    }
+}
+
+// Helper function to format timestamp for display
+function formatTimestamp(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
+// Test function to simulate progress updates (Development/Debug only)
+function testProgressUI() {
+    console.log('🧪 Testing progress UI updates...');
+    
+    const progressSteps = [
+        { progress: 10, message: 'Extracting video metadata...' },
+        { progress: 25, message: 'Initializing person detection...' },
+        { progress: 40, message: 'Analyzing video frames...' },
+        { progress: 60, message: 'Detecting persons in video...' },
+        { progress: 75, message: 'Processing detection results...' },
+        { progress: 90, message: 'Saving detection data...' },
+        { progress: 100, message: 'Person extraction completed!' }
+    ];
+    
+    let stepIndex = 0;
+    const testInterval = setInterval(() => {
+        if (stepIndex >= progressSteps.length) {
+            clearInterval(testInterval);
+            console.log('🧪 Progress UI test completed');
+            return;
+        }
+        
+        const step = progressSteps[stepIndex];
+        const testData = {
+            status: stepIndex === progressSteps.length - 1 ? 'completed' : 'processing',
+            progress: step.progress,
+            progress_message: step.message
+        };
+        
+        console.log(`🧪 Test step ${stepIndex + 1}: ${step.progress}% - ${step.message}`);
+        updateProcessingUI(testData);
+        
+        stepIndex++;
+    }, 1000); // Update every second for testing
+}
+
+// Add keyboard shortcuts for detection navigation
+document.addEventListener('keydown', function(event) {
+    // Only work when video is focused or no input is focused
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+        return;
+    }
+    
+    const video = document.getElementById('videoPlayer');
+    if (!video) return;
+    
+    switch(event.key) {
+        case 'ArrowLeft':
+            // Jump backward 5 seconds
+            video.currentTime = Math.max(0, video.currentTime - 5);
+            event.preventDefault();
+            break;
+        case 'ArrowRight':
+            // Jump forward 5 seconds
+            video.currentTime = Math.min(video.duration, video.currentTime + 5);
+            event.preventDefault();
+            break;
+        case ' ':
+            // Space to play/pause
+            if (video.paused) {
+                video.play();
+            } else {
+                video.pause();
+            }
+            event.preventDefault();
+            break;
+    }
+});
+
 // Initialize debug panel visibility
 document.addEventListener('DOMContentLoaded', function() {
     const videoStatus = '{{ video.status }}';
@@ -906,146 +1668,29 @@ document.addEventListener('DOMContentLoaded', function() {
         debugPanel.classList.remove('hidden');
         console.log('🔧 Debug panel initialized and visible');
     }
+    
+    // Log available detections for debugging
+    const detectionRows = document.querySelectorAll('tbody tr');
+    console.log(`📊 Found ${detectionRows.length} detection rows in table`);
+    
+    // Add fallback event handlers for detection buttons using data attributes
+    document.addEventListener('click', function(event) {
+        const button = event.target.closest('button[data-detection-id]');
+        if (button && button.textContent.includes('🎯 Go to Frame')) {
+            event.preventDefault();
+            
+            const detectionId = parseInt(button.dataset.detectionId);
+            const timestamp = parseFloat(button.dataset.timestamp);
+            const bboxX = parseInt(button.dataset.bboxX);
+            const bboxY = parseInt(button.dataset.bboxY);
+            const bboxWidth = parseInt(button.dataset.bboxWidth);
+            const bboxHeight = parseInt(button.dataset.bboxHeight);
+            
+            console.log('🔄 Using fallback event handler for jumpToDetection');
+            jumpToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHeight);
+        }
+    });
 });
 
-// Video playback debugging function
-function testVideoPlayback(filename) {
-    console.log('🔍 Testing video playback for:', filename);
-    
-    // Test direct streaming URL
-    const streamUrl = `/videos/stream/${filename}`;
-    const staticUrl = `/videos/serve/${filename}`;
-    
-    // Create a test video element
-    const testVideo = document.createElement('video');
-    testVideo.preload = 'metadata';
-    testVideo.muted = true;
-    
-    testVideo.addEventListener('loadstart', () => {
-        console.log('📡 Video load started');
-    });
-    
-    testVideo.addEventListener('loadedmetadata', () => {
-        console.log('📊 Video metadata loaded:', {
-            duration: testVideo.duration,
-            width: testVideo.videoWidth,
-            height: testVideo.videoHeight,
-            readyState: testVideo.readyState
-        });
-    });
-    
-    testVideo.addEventListener('canplay', () => {
-        console.log('✅ Video can play - format is compatible');
-    });
-    
-    testVideo.addEventListener('error', (e) => {
-        console.error('❌ Video error:', {
-            error: testVideo.error,
-            code: testVideo.error?.code,
-            message: testVideo.error?.message,
-            networkState: testVideo.networkState,
-            readyState: testVideo.readyState
-        });
-        
-        // Try alternative URL
-        console.log('🔄 Trying alternative URL...');
-        testVideo.src = staticUrl;
-    });
-    
-    // Start testing
-    testVideo.src = streamUrl;
-    
-    // Also test HTTP response
-    fetch(streamUrl, { 
-        method: 'HEAD',
-        headers: { 'Range': 'bytes=0-1024' }
-    })
-    .then(response => {
-        console.log('📡 HTTP Response:', {
-            status: response.status,
-            contentType: response.headers.get('content-type'),
-            contentLength: response.headers.get('content-length'),
-            acceptRanges: response.headers.get('accept-ranges'),
-            contentRange: response.headers.get('content-range')
-        });
-    })
-    .catch(error => {
-        console.error('📡 HTTP Error:', error);
-    });
-}
-
-// Reconvert video function
-function reconvertVideo(videoId) {
-    if (!confirm('Re-convert this video? This will overwrite the current converted version.')) {
-        return;
-    }
-    
-    console.log('🔄 Starting reconversion for video ID:', videoId);
-    
-    // Make POST request to reconvert
-    fetch(`/videos/${videoId}/convert`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        }
-    })
-    .then(response => {
-        if (response.ok) {
-            console.log('✅ Reconversion started successfully');
-            alert('Reconversion started! The page will refresh to show progress.');
-            location.reload();
-        } else {
-            console.error('❌ Reconversion failed:', response.status);
-            alert('Failed to start reconversion. Please try again.');
-        }
-    })
-    .catch(error => {
-        console.error('❌ Reconversion error:', error);
-        alert('Error starting reconversion. Please try again.');
-    });
-}
-
-// Debug video status function
-function debugVideoStatus(videoId) {
-    console.log('🐛 Getting debug status for video ID:', videoId);
-    
-    fetch(`/videos/api/debug/${videoId}`)
-    .then(response => response.json())
-    .then(data => {
-        console.log('🐛 Debug Status:', data);
-        
-        // Display in a readable format
-        const debugInfo = `
-📹 VIDEO INFO:
-- ID: ${data.video_info.id}
-- Status: ${data.video_info.status}
-- Filename: ${data.video_info.filename}
-- Processed Path: ${data.video_info.processed_path || 'None'}
-- Started: ${data.video_info.processing_started_at || 'Never'}
-- Log: ${data.video_info.processing_log || 'None'}
-- Error: ${data.video_info.error_message || 'None'}
-
-🔧 CONVERSION MANAGER:
-- Total Tasks: ${data.conversion_manager.total_tasks}
-- Video Task Exists: ${data.conversion_manager.video_task_exists}
-- All Task IDs: ${data.conversion_manager.all_task_ids.join(', ') || 'None'}
-
-${data.conversion_manager.video_task_data ? `
-📊 VIDEO TASK DATA:
-- Task ID: ${data.conversion_manager.video_task_data.task_id}
-- Status: ${data.conversion_manager.video_task_data.status}
-- Progress: ${data.conversion_manager.video_task_data.progress}%
-- Message: ${data.conversion_manager.video_task_data.message}
-- Started: ${data.conversion_manager.video_task_data.started_at}
-` : '❌ No active conversion task found'}
-        `;
-        
-        alert(debugInfo);
-    })
-    .catch(error => {
-        console.error('🐛 Debug error:', error);
-        alert('Failed to get debug information');
-    });
-}
 </script>
 {% endblock %}

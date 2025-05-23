@@ -445,12 +445,12 @@ def create_app(config_name=None):
     
     # Register blueprints
     try:
-        from blueprints.dashboard import dashboard_bp
-        from blueprints.employees import employees_bp  
-        from blueprints.videos import videos_bp
-        from blueprints.face_recognition import face_recognition_bp
-        from blueprints.auth import auth_bp
-        from blueprints.api import api_bp
+        from hr_management.blueprints.dashboard import dashboard_bp
+        from hr_management.blueprints.employees import employees_bp  
+        from hr_management.blueprints.videos import videos_bp
+        from hr_management.blueprints.face_recognition import face_recognition_bp
+        from hr_management.blueprints.auth import auth_bp
+        from hr_management.blueprints.api import api_bp
         
         app.register_blueprint(dashboard_bp, url_prefix='/')
         app.register_blueprint(employees_bp, url_prefix='/employees')

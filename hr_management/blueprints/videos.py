@@ -244,9 +244,16 @@ def process_video(id):
         video = Video.query.get_or_404(id)
         
         # Check if video is in the right status
-        if video.status not in ['uploaded', 'failed']:
-            flash('Only uploaded or failed videos can be processed', 'warning')
+        if video.status not in ['uploaded', 'failed', 'completed']:
+            flash('Only uploaded, completed, or failed videos can be processed', 'warning')
             return redirect(url_for('videos.detail', id=id))
+        
+        # Log retry attempt for failed videos
+        if video.status == 'failed':
+            print(f"🔄 Retrying person extraction for failed video {video.id}: {video.filename}")
+            print(f"📝 Previous error: {video.error_message}")
+        else:
+            print(f"🚀 Starting person extraction for video {video.id}: {video.filename} (status: {video.status})")
         
         # Update video status to processing
         video.status = 'processing'
@@ -262,15 +269,89 @@ def process_video(id):
         # Save processing status
         db.session.commit()
         
-        # Here you would queue the actual processing task
-        # For now, we'll simulate by marking as completed
-        # In a real implementation, you'd use Celery or similar:
-        # process_video_task.delay(video.id, extract_persons, face_recognition, extract_frames)
+        # CLEAR ALL EXISTING DETECTION DATA BEFORE RE-PROCESSING
+        print(f"🗑️ Clearing all existing detection data for video {video.id}")
+        try:
+            DetectedPerson = current_app.DetectedPerson
+            existing_detections = DetectedPerson.query.filter_by(video_id=video.id).all()
+            
+            if existing_detections:
+                detection_count = len(existing_detections)
+                print(f"   🔍 Found {detection_count} existing detections to delete")
+                
+                for detection in existing_detections:
+                    db.session.delete(detection)
+                
+                db.session.commit()
+                print(f"   ✅ Successfully deleted {detection_count} existing detections")
+            else:
+                print(f"   📝 No existing detections found for video {video.id}")
+                
+        except Exception as e:
+            print(f"   ⚠️ Warning: Could not clear existing detections: {e}")
+            # Continue processing anyway - this is not a critical error
         
-        flash(f'Processing started for "{video.filename}". This may take a while depending on video length.', 'info')
+        # Reset any previous processing state
+        video.processing_progress = 0
+        video.error_message = None
+        video.processing_completed_at = None
         
-        # For demo purposes, you could add some mock detected persons here
-        # This would normally be done by the background processing task
+        # Queue the actual processing task using Celery
+        try:
+            from processing.tasks import process_video as process_video_task
+            
+            # Store task options in video record for reference
+            processing_options = {
+                'extract_persons': bool(extract_persons),
+                'face_recognition': bool(face_recognition), 
+                'extract_frames': bool(extract_frames)
+            }
+            video.processing_log = f"Processing options: {processing_options} - Started at {datetime.utcnow()}"
+            db.session.commit()
+            
+            # Check if Celery worker is available
+            try:
+                from processing.tasks import celery
+                # Try to get worker stats to check if workers are running
+                inspect = celery.control.inspect()
+                active_workers = inspect.active()
+                
+                if not active_workers:
+                    print("⚠️ No Celery workers detected! Starting fallback processing...")
+                    start_fallback_processing(video, processing_options, current_app._get_current_object())
+                    flash(f'Person extraction started for "{video.filename}" (fallback mode - no Celery workers detected).', 'info')
+                else:
+                    print(f"✅ Celery workers detected: {list(active_workers.keys())}")
+                    # Start Celery task
+                    task = process_video_task.delay(video.id)
+                    video.task_id = task.id
+                    db.session.commit()
+                    
+                    print(f"🚀 Started person extraction task {task.id} for video {video.id}: {video.filename}")
+                    flash(f'Person extraction started for "{video.filename}". This may take a while depending on video length.', 'info')
+                    
+            except Exception as celery_error:
+                print(f"⚠️ Celery connection error: {celery_error}. Starting fallback processing...")
+                start_fallback_processing(video, processing_options, current_app._get_current_object())
+                flash(f'Person extraction started for "{video.filename}" (fallback mode - Celery unavailable).', 'info')
+            
+        except ImportError:
+            # Fallback for when Celery is not available
+            print("⚠️ Celery not available, starting fallback processing...")
+            processing_options = {
+                'extract_persons': bool(extract_persons),
+                'face_recognition': bool(face_recognition), 
+                'extract_frames': bool(extract_frames)
+            }
+            start_fallback_processing(video, processing_options, current_app._get_current_object())
+            flash(f'Person extraction started for "{video.filename}" (fallback mode).', 'info')
+        except Exception as e:
+            # Handle other errors
+            print(f"❌ Error starting processing: {e}")
+            video.status = 'failed'
+            video.error_message = f'Failed to start processing: {str(e)}'
+            db.session.commit()
+            flash(f'Error starting person extraction: {str(e)}', 'error')
         
         return redirect(url_for('videos.detail', id=id))
         
@@ -527,7 +608,7 @@ def convert_video(id):
                     import sys
                     import os
                     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-                    from utils.video_processor import VideoProcessor
+                    from hr_management.utils.video_processor import VideoProcessor
                     
                     processor = VideoProcessor()
                     available_methods = processor.get_available_methods()
@@ -616,7 +697,7 @@ def conversion_status(id):
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from utils.conversion_manager import conversion_manager
+    from hr_management.utils.conversion_manager import conversion_manager
     
     Video = current_app.Video
     video = Video.query.get_or_404(id)
@@ -652,6 +733,196 @@ def conversion_status(id):
     print(f"📡 API Response for video {id}: status={response['status']}, progress={response['progress']}%")
     return jsonify(response)
 
+@videos_bp.route('/api/<int:id>/processing-status')
+@login_required
+def processing_status(id):
+    """Get person extraction processing status with progress for AJAX polling"""
+    Video = current_app.Video
+    video = Video.query.get_or_404(id)
+    
+    # Get basic video status
+    response = {
+        'status': video.status,
+        'error_message': video.error_message,
+        'processing_started_at': video.processing_started_at.isoformat() if video.processing_started_at else None,
+        'processing_completed_at': video.processing_completed_at.isoformat() if video.processing_completed_at else None,
+        'progress': getattr(video, 'processing_progress', 0) or 0,
+        'progress_message': 'Initializing...',
+        'task_id': getattr(video, 'task_id', None)
+    }
+    
+    # If processing, get detailed progress from Celery task or fallback processing
+    if video.status == 'processing':
+        # First check if we have a Celery task
+        if hasattr(video, 'task_id') and video.task_id:
+            try:
+                from celery.result import AsyncResult
+                from processing.tasks import celery
+                from datetime import datetime, timedelta
+                
+                task_result = AsyncResult(video.task_id, app=celery)
+                
+                # Check if task has been running too long (over 10 minutes)
+                if video.processing_started_at:
+                    elapsed = datetime.utcnow() - video.processing_started_at
+                    if elapsed > timedelta(minutes=10):
+                        print(f"⏰ Task {video.task_id} has been running for {elapsed}, marking as failed")
+                        video.status = 'failed'
+                        video.error_message = f'Task timed out after {elapsed}'
+                        video.processing_completed_at = datetime.utcnow()
+                        db.session.commit()
+                        
+                        response.update({
+                            'status': 'failed',
+                            'progress': 0,
+                            'progress_message': 'Task timed out',
+                            'error_message': f'Task timed out after {elapsed}'
+                        })
+                        print(f"📡 Processing API Response for video {id}: TIMEOUT after {elapsed}")
+                        return jsonify(response)
+                
+                if task_result.state == 'PROGRESS':
+                    task_info = task_result.info or {}
+                    progress = task_info.get('progress', 0)
+                    message = task_info.get('status', 'Processing...')
+                    
+                    response.update({
+                        'progress': progress,
+                        'progress_message': message,
+                        'celery_state': task_result.state
+                    })
+                    
+                    print(f"🔄 Person extraction progress for video {id}: {progress}% - {message}")
+                    
+                elif task_result.state == 'SUCCESS':
+                    response.update({
+                        'progress': 100,
+                        'progress_message': 'Person extraction completed!',
+                        'celery_state': task_result.state
+                    })
+                    print(f"✅ Person extraction completed for video {id}")
+                    
+                elif task_result.state == 'FAILURE':
+                    error_msg = str(task_result.info) if task_result.info else 'Unknown error'
+                    
+                    # Update video status in database
+                    video.status = 'failed'
+                    video.error_message = error_msg
+                    video.processing_completed_at = datetime.utcnow()
+                    db.session.commit()
+                    
+                    response.update({
+                        'status': 'failed',
+                        'progress': 0,
+                        'progress_message': f'Failed: {error_msg}',
+                        'celery_state': task_result.state,
+                        'error_message': error_msg
+                    })
+                    print(f"❌ Person extraction failed for video {id}: {error_msg}")
+                    
+                elif task_result.state == 'PENDING':
+                    # Task is queued but not started yet
+                    response.update({
+                        'progress': 0,
+                        'progress_message': 'Task queued, waiting to start...',
+                        'celery_state': task_result.state
+                    })
+                    
+                else:
+                    response.update({
+                        'progress': 10,
+                        'progress_message': f'Task state: {task_result.state}',
+                        'celery_state': task_result.state
+                    })
+                    
+            except ImportError:
+                print(f"⚠️ Celery not available for status check")
+                response.update({
+                    'progress': 0,
+                    'progress_message': 'Celery not available',
+                    'error_message': 'Celery worker not running'
+                })
+            except Exception as e:
+                print(f"⚠️ Error checking Celery task status: {e}")
+                
+                # If we can't check the task status and it's been a while, mark as failed
+                if video.processing_started_at:
+                    elapsed = datetime.utcnow() - video.processing_started_at
+                    if elapsed > timedelta(minutes=5):
+                        video.status = 'failed'
+                        video.error_message = f'Unable to check task status: {str(e)}'
+                        video.processing_completed_at = datetime.utcnow()
+                        db.session.commit()
+                        
+                        response.update({
+                            'status': 'failed',
+                            'progress': 0,
+                            'progress_message': 'Unable to check task status',
+                            'error_message': str(e)
+                        })
+                else:
+                    response.update({
+                        'progress': 0,
+                        'progress_message': 'Error checking task status',
+                        'error_message': str(e)
+                    })
+        else:
+            # Fallback processing (no Celery task ID) - use video.processing_progress
+            from datetime import datetime, timedelta
+            
+            # Check if processing has been running too long
+            if video.processing_started_at:
+                elapsed = datetime.utcnow() - video.processing_started_at
+                if elapsed > timedelta(minutes=10):
+                    print(f"⏰ Fallback processing has been running for {elapsed}, marking as failed")
+                    video.status = 'failed'
+                    video.error_message = f'Processing timed out after {elapsed}'
+                    video.processing_completed_at = datetime.utcnow()
+                    db.session.commit()
+                    
+                    response.update({
+                        'status': 'failed',
+                        'progress': 0,
+                        'progress_message': 'Processing timed out',
+                        'error_message': f'Processing timed out after {elapsed}'
+                    })
+                    print(f"📡 Processing API Response for video {id}: TIMEOUT after {elapsed}")
+                    return jsonify(response)
+            
+            # Get progress from video.processing_progress
+            progress = getattr(video, 'processing_progress', 0) or 0
+            
+            # Determine message based on progress
+            if progress < 25:
+                message = 'Extracting video metadata...'
+            elif progress < 70:
+                message = 'Detecting persons in video...'
+            elif progress < 100:
+                message = 'Saving detection results...'
+            else:
+                message = 'Finalizing processing...'
+            
+            response.update({
+                'progress': progress,
+                'progress_message': message,
+                'processing_mode': 'fallback'
+            })
+            
+            print(f"🔄 Fallback processing progress for video {id}: {progress}% - {message}")
+            print(f"   📊 Database progress: {getattr(video, 'processing_progress', 'None')}")
+            print(f"   📅 Started: {video.processing_started_at}")
+            print(f"   🕒 Elapsed: {elapsed if 'elapsed' in locals() else 'Unknown'}")
+    
+        # Update response with any database-stored progress for non-Celery processing
+        if hasattr(video, 'processing_progress') and video.processing_progress:
+            if response['progress'] == 0:  # Only update if we didn't get progress from Celery
+                response['progress'] = video.processing_progress
+                print(f"   🔄 Using database progress: {response['progress']}%")
+    
+    print(f"📡 Processing API Response for video {id}: status={response['status']}, progress={response['progress']}%, message='{response['progress_message']}'")
+    print(f"   🔧 Response details: {response}")
+    return jsonify(response)
+
 @videos_bp.route('/api/conversion-tasks')
 @login_required 
 def get_conversion_tasks():
@@ -659,7 +930,7 @@ def get_conversion_tasks():
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from utils.conversion_manager import conversion_manager
+    from hr_management.utils.conversion_manager import conversion_manager
     
     return jsonify(conversion_manager.get_all_tasks())
 
@@ -670,7 +941,7 @@ def get_conversion_task(task_id):
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from utils.conversion_manager import conversion_manager
+    from hr_management.utils.conversion_manager import conversion_manager
     
     task = conversion_manager.get_task(task_id)
     if task:
@@ -685,7 +956,7 @@ def debug_video_status(id):
     import sys
     import os
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from utils.conversion_manager import conversion_manager
+    from hr_management.utils.conversion_manager import conversion_manager
     
     Video = current_app.Video
     video = Video.query.get_or_404(id)
@@ -714,6 +985,128 @@ def debug_video_status(id):
     
     return jsonify(debug_info)
 
+@videos_bp.route('/<int:id>/cancel-processing', methods=['POST'])
+@login_required
+def cancel_processing(id):
+    """Cancel stuck processing and reset video to processable state"""
+    try:
+        Video = current_app.Video
+        db = current_app.db
+        
+        video = Video.query.get_or_404(id)
+        
+        if video.status != 'processing':
+            flash('Video is not currently processing', 'warning')
+            return redirect(url_for('videos.detail', id=id))
+        
+        # Cancel Celery task if exists
+        if hasattr(video, 'task_id') and video.task_id:
+            try:
+                from celery.result import AsyncResult
+                from processing.tasks import celery
+                
+                task_result = AsyncResult(video.task_id, app=celery)
+                task_result.revoke(terminate=True)  # Forcefully terminate the task
+                print(f"🛑 Cancelled Celery task {video.task_id} for video {video.id}")
+                
+            except Exception as e:
+                print(f"⚠️ Error cancelling Celery task: {e}")
+        
+        # Reset video to a processable state
+        # If video was originally converted, set back to completed
+        # If video was originally uploaded, set back to uploaded
+        if video.processed_path:
+            video.status = 'completed'
+            print(f"🔄 Reset converted video {video.id} to 'completed' status")
+        else:
+            video.status = 'uploaded'
+            print(f"🔄 Reset video {video.id} to 'uploaded' status")
+        
+        # Clear processing data
+        video.processing_started_at = None
+        video.processing_completed_at = None
+        video.processing_progress = 0
+        video.error_message = None
+        video.task_id = None
+        
+        db.session.commit()
+        
+        print(f"✅ Successfully cancelled processing for video {video.id}: {video.filename}")
+        flash(f'Processing cancelled for "{video.filename}". You can now retry person extraction.', 'success')
+        
+        return redirect(url_for('videos.detail', id=id))
+        
+    except Exception as e:
+        flash(f'Error cancelling processing: {str(e)}', 'error')
+        return redirect(url_for('videos.detail', id=id))
+
+@videos_bp.route('/<int:id>/simulate-error', methods=['POST'])
+@login_required
+def simulate_error(id):
+    """Simulate a processing error for testing (development only)"""
+    try:
+        Video = current_app.Video
+        db = current_app.db
+        
+        video = Video.query.get_or_404(id)
+        
+        # Set video to failed state with a test error message
+        video.status = 'failed'
+        video.error_message = 'Simulated error for testing retry functionality'
+        video.processing_completed_at = datetime.utcnow()
+        video.processing_progress = 0
+        
+        db.session.commit()
+        
+        print(f"🧪 Simulated error for video {video.id}: {video.filename}")
+        flash(f'Simulated error for "{video.filename}" - you can now test the retry functionality', 'warning')
+        
+        return redirect(url_for('videos.detail', id=id))
+        
+    except Exception as e:
+        flash(f'Error simulating failure: {str(e)}', 'error')
+        return redirect(url_for('videos.detail', id=id))
+
+@videos_bp.route('/celery-status')
+@login_required
+def celery_status():
+    """Check Celery worker status"""
+    try:
+        from processing.tasks import celery
+        
+        inspect = celery.control.inspect()
+        active_workers = inspect.active()
+        worker_stats = inspect.stats()
+        
+        status = {
+            'workers_available': bool(active_workers),
+            'active_workers': list(active_workers.keys()) if active_workers else [],
+            'worker_count': len(active_workers) if active_workers else 0,
+            'worker_stats': worker_stats,
+            'celery_available': True
+        }
+        
+        if active_workers:
+            print(f"✅ Celery status check: {len(active_workers)} workers active")
+        else:
+            print("⚠️ Celery status check: No workers detected")
+        
+        return jsonify(status)
+        
+    except ImportError:
+        return jsonify({
+            'workers_available': False,
+            'celery_available': False,
+            'error': 'Celery not installed'
+        })
+    except Exception as e:
+        print(f"❌ Error checking Celery status: {e}")
+        return jsonify({
+            'workers_available': False,
+            'celery_available': False,
+            'error': str(e)
+        })
+
 @videos_bp.route('/dependency-status')
 @login_required
 def dependency_status():
@@ -722,7 +1115,7 @@ def dependency_status():
         import sys
         import os
         sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-        from utils.video_processor import VideoProcessor
+        from hr_management.utils.video_processor import VideoProcessor
         
         processor = VideoProcessor()
         available_methods = processor.get_available_methods()
@@ -822,14 +1215,162 @@ def detect_video_format(file_path):
     except:
         return False, 'Unknown'
 
+def start_fallback_processing(video, processing_options, app):
+    """Start processing in a background thread when Celery is not available"""
+    import threading
+    import sys
+    import os
+    from datetime import datetime
+    
+    def process_in_background():
+        with app.app_context():
+            try:
+                # Get database and models from app context
+                db = app.db
+                Video = app.Video
+                sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+                
+                # Re-fetch the video object in this thread's session to avoid session issues
+                video_obj = Video.query.get(video.id)
+                if not video_obj:
+                    print(f"❌ Video {video.id} not found in database")
+                    return
+                
+                print(f"🔄 Starting fallback processing for video {video_obj.id} in background thread...")
+                
+                # Get video path
+                upload_folder = app.config.get('UPLOAD_FOLDER', 'static/uploads')
+                if video_obj.processed_path:
+                    video_path = os.path.join(upload_folder, video_obj.processed_path)
+                    print(f"📁 Using converted video: {video_path}")
+                else:
+                    video_path = os.path.join(upload_folder, video_obj.file_path)
+                    print(f"📁 Using original video: {video_path}")
+                
+                # Check if video file exists
+                if not os.path.exists(video_path):
+                    raise FileNotFoundError(f"Video file not found: {video_path}")
+                
+                print(f"✅ Video file exists: {video_path} ({os.path.getsize(video_path)} bytes)")
+                
+                # Step 1: Extract video metadata
+                print(f"🔍 Step 1/4: Extracting metadata for video {video_obj.id}")
+                video_obj.processing_progress = 10
+                db.session.commit()
+                
+                from processing.standalone_tasks import extract_video_metadata
+                metadata = extract_video_metadata(video_path)
+                video_obj.duration = metadata.get('duration')
+                video_obj.fps = metadata.get('fps') 
+                video_obj.resolution = metadata.get('resolution')
+                video_obj.processing_progress = 25
+                db.session.commit()
+                
+                print(f"📊 Video metadata: duration={metadata.get('duration')}s, fps={metadata.get('fps')}, resolution={metadata.get('resolution')}")
+                
+                # CLEAR ALL EXISTING DETECTION DATA BEFORE RE-PROCESSING (Fallback mode)
+                print(f"🗑️ [Fallback] Clearing all existing detection data for video {video_obj.id}")
+                try:
+                    DetectedPerson = app.DetectedPerson
+                    existing_detections = DetectedPerson.query.filter_by(video_id=video_obj.id).all()
+                    
+                    if existing_detections:
+                        detection_count = len(existing_detections)
+                        print(f"   🔍 Found {detection_count} existing detections to delete")
+                        
+                        for detection in existing_detections:
+                            db.session.delete(detection)
+                        
+                        db.session.commit()
+                        print(f"   ✅ Successfully deleted {detection_count} existing detections")
+                    else:
+                        print(f"   📝 No existing detections found for video {video_obj.id}")
+                        
+                except Exception as e:
+                    print(f"   ⚠️ Warning: Could not clear existing detections: {e}")
+                    # Continue processing anyway - this is not a critical error
+                
+                # Step 2: Detect persons
+                print(f"👥 Step 2/4: Detecting persons in video {video_obj.id}")
+                video_obj.processing_progress = 30
+                db.session.commit()
+                
+                from processing.standalone_tasks import detect_persons_in_video
+                print(f"🔄 Starting person detection...")
+                detections = detect_persons_in_video(video_path)
+                video_obj.processing_progress = 70
+                db.session.commit()
+                
+                print(f"🎯 Found {len(detections)} person detections")
+                
+                # Step 3: Save detections to database
+                print(f"💾 Step 3/4: Saving {len(detections)} detections to database")
+                video_obj.processing_progress = 80
+                db.session.commit()
+                
+                from processing.standalone_tasks import save_detections_to_db
+                # Import DetectedPerson model
+                DetectedPerson = app.DetectedPerson if hasattr(app, 'DetectedPerson') else None
+                save_detections_to_db(video_obj.id, detections, metadata.get('fps', 25), db, DetectedPerson)
+                video_obj.processing_progress = 90
+                db.session.commit()
+                
+                # Step 4: Complete processing
+                print(f"✅ Step 4/4: Person extraction completed for video {video_obj.id}")
+                video_obj.status = 'completed'
+                video_obj.processing_progress = 100
+                video_obj.processing_completed_at = datetime.utcnow()
+                
+                # Update processing log
+                if video_obj.processing_log:
+                    video_obj.processing_log += f"\nCompleted at {datetime.utcnow()} - Found {len(detections)} persons"
+                else:
+                    video_obj.processing_log = f"Completed at {datetime.utcnow()} - Found {len(detections)} persons"
+                
+                db.session.commit()
+                
+                print(f"🎉 Fallback processing completed successfully for video {video_obj.id}: {video_obj.filename}")
+                
+            except Exception as e:
+                import traceback
+                
+                error_trace = traceback.format_exc()
+                print(f"❌ Fallback processing failed for video {video.id}: {e}")
+                print(f"📋 Full error trace:\n{error_trace}")
+                
+                try:
+                    # Get database and models from app context
+                    db = app.db
+                    Video = app.Video
+                    
+                    # Re-fetch video in case of session issues
+                    video_obj = Video.query.get(video.id)
+                    if video_obj:
+                        video_obj.status = 'failed'
+                        video_obj.error_message = f'Processing failed: {str(e)}'
+                        video_obj.processing_completed_at = datetime.utcnow()
+                        db.session.commit()
+                        print(f"💾 Updated video {video.id} status to failed")
+                except Exception as db_error:
+                    print(f"❌ Failed to update database status: {db_error}")
+    
+    # Start background thread
+    print(f"🧵 Starting background thread for video {video.id} fallback processing...")
+    thread = threading.Thread(target=process_in_background)
+    thread.daemon = True
+    thread.start()
+    print(f"✅ Background thread started for video {video.id}")
+    
+    print(f"🧵 Started fallback processing thread for video {video.id}")
+
 def start_auto_conversion(video, input_path, upload_folder, app):
     """Start automatic conversion using conversion manager"""
     import sys
     import os
     from datetime import datetime
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from utils.conversion_manager import conversion_manager, create_conversion_processor
-    from utils.video_processor import VideoProcessor
+    from hr_management.utils.conversion_manager import conversion_manager, create_conversion_processor
+    from hr_management.utils.video_processor import VideoProcessor
     
     # Generate output path
     output_filename = f"{uuid.uuid4()}_converted_{video.filename}"
@@ -910,7 +1451,7 @@ if SOCKETIO_AVAILABLE:
                     import sys
                     import os
                     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-                    from utils.conversion_manager import conversion_manager
+                    from hr_management.utils.conversion_manager import conversion_manager
                     
                     task = conversion_manager.get_task_by_video_id(video_id)
                     

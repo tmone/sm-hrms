@@ -1,0 +1,43 @@
+include README.md
+include requirements.txt
+include MANIFEST.in
+
+# Documentation
+recursive-include docs *
+
+# Templates and static files
+recursive-include templates *
+recursive-include static *
+
+# Configuration files
+include instance/*.db
+include instance/*.cfg
+
+# Data directories
+recursive-include datasets *
+include datasets/faces/.gitkeep
+include datasets/yolo/.gitkeep
+
+# Upload directories
+include uploads/.gitkeep
+include static/uploads/.gitkeep
+
+# Models directory
+include hr_management/models/*.pt
+include hr_management/models/*.onnx
+include hr_management/models/*.pth
+
+# Processing temp directory
+include hr_management/processing/temp/.gitkeep
+
+# Scripts
+include scripts/*.py
+
+# Tests
+recursive-include tests *
+
+# Exclude compiled files
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *~
+global-exclude __pycache__

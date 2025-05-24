@@ -280,7 +280,7 @@ def process_video_with_enhanced_detection(video_path, output_base_dir="processin
             'error': str(e)
         }
 
-def enhanced_person_detection_task(video_path):
+def enhanced_person_detection_task(video_path, gpu_config=None):
     """Simulate enhanced detection task for integration"""
     try:
         result = process_video_with_enhanced_detection(video_path)

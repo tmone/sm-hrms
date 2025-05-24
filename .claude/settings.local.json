@@ -32,7 +32,9 @@
       "Bash(git remote add:*)",
       "Bash(git push:*)",
       "Bash(cp:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(awk:*)",
+      "Bash(sqlite3:*)"
     ],
     "deny": []
   }

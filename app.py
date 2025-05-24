@@ -171,8 +171,11 @@ def create_app(config_name=None):
         processing_started_at = db.Column(db.DateTime)
         processing_completed_at = db.Column(db.DateTime)
         processed_path = db.Column(db.String(500))
+        annotated_video_path = db.Column(db.String(500))  # Enhanced detection annotated video
         processing_log = db.Column(db.Text)
         error_message = db.Column(db.Text)
+        task_id = db.Column(db.String(100))  # Celery task ID
+        processing_progress = db.Column(db.Integer, default=0)
         
         # Detection statistics
         person_count = db.Column(db.Integer, default=0)
@@ -201,6 +204,8 @@ def create_app(config_name=None):
                 'priority': self.priority,
                 'processing_started_at': self.processing_started_at.isoformat() if self.processing_started_at else None,
                 'processing_completed_at': self.processing_completed_at.isoformat() if self.processing_completed_at else None,
+                'processed_path': self.processed_path,
+                'annotated_video_path': self.annotated_video_path,
                 'person_count': self.person_count,
                 'frame_count': self.frame_count,
                 'processed_frames': self.processed_frames,
@@ -449,6 +454,14 @@ def create_app(config_name=None):
         upload_folder = app.config.get('UPLOAD_FOLDER', 'static/uploads')
         return send_from_directory(upload_folder, filename)
     
+    # Add static file serving for processing outputs (detected videos)
+    @app.route('/processing/outputs/<path:filename>')
+    def processing_output_file(filename):
+        from flask import send_from_directory
+        import os
+        outputs_dir = os.path.join('processing', 'outputs')
+        return send_from_directory(outputs_dir, filename)
+    
     # Register blueprints
     try:
         from hr_management.blueprints.dashboard import dashboard_bp
@@ -464,6 +477,10 @@ def create_app(config_name=None):
         app.register_blueprint(face_recognition_bp, url_prefix='/face-recognition')
         app.register_blueprint(auth_bp, url_prefix='/auth')
         app.register_blueprint(api_bp, url_prefix='/api')
+        
+        # GPU management blueprint
+        from hr_management.blueprints import gpu_management_bp
+        app.register_blueprint(gpu_management_bp, url_prefix='/gpu')
         
         print("All blueprints registered successfully")
         
@@ -518,10 +535,10 @@ def main():
     try:
         if SOCKETIO_AVAILABLE and socketio:
             print("Starting with WebSocket support...")
-            socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+            socketio.run(app, debug=True, host='0.0.0.0', port=5001, allow_unsafe_werkzeug=True)
         else:
             print("Starting in standard mode...")
-            app.run(debug=True, host='0.0.0.0', port=5000)
+            app.run(debug=True, host='0.0.0.0', port=5001)
     except KeyboardInterrupt:
         print("\nApplication stopped by user")
     except Exception as e:

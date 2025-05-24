@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 import threading
 import time
+import json
 
 # Try to import SocketIO for real-time features
 try:
@@ -106,18 +107,7 @@ def upload():
             # Save file
             file.save(upload_path)
             
-            # Check if video format is web-compatible
-            is_web_compatible, format_detected = detect_video_format(upload_path)
-            
-            # Determine initial status based on format compatibility
-            if is_web_compatible:
-                initial_status = 'uploaded'
-                status_message = f'Video "{filename}" uploaded successfully! Format: {format_detected}'
-            else:
-                initial_status = 'converting'
-                status_message = f'Video "{filename}" uploaded! Detected format: {format_detected}. Auto-converting to web-compatible MP4...'
-            
-            # Create video record
+            # Create video record with processing status
             video = Video(
                 filename=filename,
                 file_path=unique_filename,  # Store just the filename
@@ -125,20 +115,34 @@ def upload():
                 title=request.form.get('title', ''),
                 description=request.form.get('description', ''),
                 priority=request.form.get('priority', 'normal'),
-                status=initial_status,
-                processing_started_at=datetime.utcnow() if not is_web_compatible else None
+                status='processing',  # Start processing immediately
+                processing_started_at=datetime.utcnow()
             )
             
             # Save to database
             db.session.add(video)
             db.session.commit()
             
-            # Auto-convert if not web-compatible
-            if not is_web_compatible:
-                start_auto_conversion(video, upload_path, upload_folder, current_app._get_current_object())
-                flash(status_message + ' Conversion will complete in the background.', 'info')
-            else:
-                flash(status_message + ' You can now process it to extract persons.', 'success')
+            # Auto-start person extraction with GPU acceleration
+            print(f"🚀 Auto-starting person extraction for uploaded video: {filename}")
+            
+            # Processing options for auto-extraction
+            processing_options = {
+                'extract_persons': True,
+                'face_recognition': False,  # Can be enabled if needed
+                'extract_frames': False,
+                'use_enhanced_detection': True,
+                'use_gpu': True  # Enable GPU acceleration
+            }
+            
+            # Store processing options in video record
+            video.processing_log = f"Auto-extraction started at {datetime.utcnow()} with GPU acceleration"
+            db.session.commit()
+            
+            # Start enhanced processing with GPU
+            start_enhanced_gpu_processing(video, processing_options, current_app._get_current_object())
+            
+            flash(f'Video "{filename}" uploaded! Person extraction started automatically with GPU acceleration. The annotated video will be available for playback once processing is complete.', 'info')
             
             return redirect(url_for('videos.index'))
             
@@ -165,36 +169,116 @@ def detail(id):
     
     video = Video.query.get_or_404(id)
     
-    # Get detections
-    detections = DetectedPerson.query.filter_by(video_id=id).all()
+    # Get pagination parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = 50  # Show 50 detections per page
+    
+    # Get paginated detections
+    detections_pagination = DetectedPerson.query.filter_by(video_id=id).order_by(
+        DetectedPerson.timestamp.asc()
+    ).paginate(page=page, per_page=per_page, error_out=False)
+    
+    detections = detections_pagination.items
+    
+    # Get total count for stats
+    total_detections = DetectedPerson.query.filter_by(video_id=id).count()
+    identified_count = DetectedPerson.query.filter_by(video_id=id, is_identified=True).count()
     
     return render_template('videos/detail.html',
                          video=video,
-                         detections=detections)
+                         detections=detections,
+                         pagination=detections_pagination,
+                         total_detections=total_detections,
+                         identified_count=identified_count,
+                         current_page=page)
 
 @videos_bp.route('/<int:id>/delete', methods=['POST'])
 @login_required
 def delete(id):
     try:
         Video = current_app.Video
+        DetectedPerson = current_app.DetectedPerson
         db = current_app.db
         
         video = Video.query.get_or_404(id)
         
-        # Delete physical file
-        if os.path.exists(video.file_path):
-            os.remove(video.file_path)
+        # If video is processing, first try to cancel any active tasks
+        if video.status == 'processing':
+            print(f"⚠️ Attempting to delete video {id} that is currently processing")
+            
+            # Try to cancel Celery task if exists
+            if hasattr(video, 'task_id') and video.task_id:
+                try:
+                    from celery.result import AsyncResult
+                    from processing.tasks import celery
+                    
+                    task_result = AsyncResult(video.task_id, app=celery)
+                    task_result.revoke(terminate=True)
+                    print(f"🛑 Cancelled Celery task {video.task_id} for video {video.id}")
+                except Exception as e:
+                    print(f"⚠️ Could not cancel Celery task: {e}")
+            
+            # Force update status to allow deletion
+            video.status = 'cancelled'
+            db.session.commit()
+            print(f"🔄 Changed video {id} status from 'processing' to 'cancelled' for deletion")
+        
+        # Delete all detected persons first to avoid foreign key constraint issues
+        try:
+            deleted_count = DetectedPerson.query.filter_by(video_id=id).delete()
+            db.session.commit()
+            print(f"🗑️ Deleted {deleted_count} detected persons for video {id}")
+        except Exception as e:
+            print(f"⚠️ Error deleting detected persons: {e}")
+            db.session.rollback()
+        
+        # Delete physical files
+        upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
+        
+        # Delete original file
+        if video.file_path:
+            file_path = os.path.join(upload_folder, video.file_path)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    print(f"🗑️ Deleted original file: {file_path}")
+                except Exception as e:
+                    print(f"⚠️ Could not delete original file: {e}")
         
         # Delete processed file if exists
-        if video.processed_path and os.path.exists(video.processed_path):
-            os.remove(video.processed_path)
+        if video.processed_path:
+            processed_path = os.path.join(upload_folder, video.processed_path)
+            if os.path.exists(processed_path):
+                try:
+                    os.remove(processed_path)
+                    print(f"🗑️ Deleted processed file: {processed_path}")
+                except Exception as e:
+                    print(f"⚠️ Could not delete processed file: {e}")
+        
+        # Delete annotated video if exists
+        if hasattr(video, 'annotated_video_path') and video.annotated_video_path:
+            # Check in processing/outputs directory
+            annotated_path = os.path.join('processing/outputs', video.annotated_video_path)
+            if os.path.exists(annotated_path):
+                try:
+                    os.remove(annotated_path)
+                    print(f"🗑️ Deleted annotated video: {annotated_path}")
+                except Exception as e:
+                    print(f"⚠️ Could not delete annotated video: {e}")
         
         # Delete from database
         db.session.delete(video)
         db.session.commit()
         
         flash(f'Video "{video.filename}" deleted successfully!', 'success')
+        print(f"✅ Successfully deleted video {id}: {video.filename}")
+        
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"❌ Error deleting video {id}: {str(e)}")
+        print(f"📋 Error trace:\n{error_trace}")
+        
         if hasattr(current_app, 'db'):
             current_app.db.session.rollback()
         flash(f'Error deleting video: {str(e)}', 'error')
@@ -384,40 +468,226 @@ def api_detail(id):
     
     return jsonify(video_data)
 
-@videos_bp.route('/<int:id>/delete', methods=['POST'])
+@videos_bp.route('/api/<int:id>/detections')
 @login_required
-def delete_video(id):
-    """Delete a video and its file"""
-    try:
-        Video = current_app.Video
-        db = current_app.db
+def api_detections(id):
+    """API endpoint for paginated detections"""
+    DetectedPerson = current_app.DetectedPerson
+    
+    # Get pagination parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    
+    # Limit per_page to prevent abuse
+    per_page = min(per_page, 100)
+    
+    # Get paginated detections
+    detections_pagination = DetectedPerson.query.filter_by(video_id=id).order_by(
+        DetectedPerson.timestamp.asc()
+    ).paginate(page=page, per_page=per_page, error_out=False)
+    
+    detections = detections_pagination.items
+    
+    # Build response
+    response = {
+        'detections': [d.to_dict() for d in detections],
+        'total': detections_pagination.total,
+        'page': page,
+        'per_page': per_page,
+        'pages': detections_pagination.pages,
+        'has_prev': detections_pagination.has_prev,
+        'has_next': detections_pagination.has_next,
+        'prev_num': detections_pagination.prev_num,
+        'next_num': detections_pagination.next_num
+    }
+    
+    return jsonify(response)
+
+@videos_bp.route('/debug/<int:id>')
+@login_required
+def debug_video(id):
+    """Debug endpoint to check video paths"""
+    Video = current_app.Video
+    video = Video.query.get_or_404(id)
+    
+    import os
+    upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
+    outputs_dir = os.path.join('processing', 'outputs')
+    
+    info = {
+        'id': video.id,
+        'filename': video.filename,
+        'file_path': video.file_path,
+        'processed_path': video.processed_path,
+        'annotated_video_path': video.annotated_video_path,
+        'status': video.status,
+        'paths_checked': {}
+    }
+    
+    # Check if files exist
+    if video.file_path:
+        full_path = os.path.join(upload_folder, video.file_path)
+        info['paths_checked']['original'] = {
+            'path': full_path,
+            'exists': os.path.exists(full_path)
+        }
+    
+    if video.processed_path:
+        full_path = os.path.join(upload_folder, video.processed_path)
+        info['paths_checked']['processed'] = {
+            'path': full_path,
+            'exists': os.path.exists(full_path)
+        }
+    
+    if video.annotated_video_path:
+        # Check multiple locations
+        paths_to_check = [
+            ('outputs_dir', os.path.join(outputs_dir, video.annotated_video_path)),
+            ('outputs_dir_with_detected', os.path.join(outputs_dir, f'detected_{video.annotated_video_path}')),
+            ('uploads_dir', os.path.join(upload_folder, video.annotated_video_path)),
+            ('raw_path', video.annotated_video_path)
+        ]
         
-        video = Video.query.get_or_404(id)
-        filename = video.filename
+        info['paths_checked']['annotated'] = {}
+        for name, path in paths_to_check:
+            info['paths_checked']['annotated'][name] = {
+                'path': path,
+                'exists': os.path.exists(path)
+            }
+    
+    # List files in outputs directory
+    if os.path.exists(outputs_dir):
+        info['outputs_dir_contents'] = os.listdir(outputs_dir)[:10]  # First 10 files
+    
+    return f"<pre>{json.dumps(info, indent=2)}</pre>"
+
+@videos_bp.route('/check-detected/<path:filename>')
+@login_required
+def check_detected_file(filename):
+    """Check if detected video file exists and get its info"""
+    import os
+    
+    outputs_dir = os.path.join('processing', 'outputs')
+    file_path = os.path.join(outputs_dir, filename)
+    
+    info = {
+        'requested_filename': filename,
+        'outputs_dir': outputs_dir,
+        'full_path': file_path,
+        'exists': os.path.exists(file_path)
+    }
+    
+    if os.path.exists(file_path):
+        stats = os.stat(file_path)
+        info['size_bytes'] = stats.st_size
+        info['size_mb'] = stats.st_size / (1024 * 1024)
         
-        # Delete the physical file
-        upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
-        file_path = os.path.join(upload_folder, video.file_path)
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        # Try to read with proper path
+        try:
+            with open(file_path, 'rb') as f:
+                header = f.read(32)
+                info['header_hex'] = header.hex()[:64]
+                info['can_read'] = True
+        except Exception as e:
+            info['read_error'] = str(e)
+            info['can_read'] = False
+    else:
+        # List what's actually in the directory
+        if os.path.exists(outputs_dir):
+            files = os.listdir(outputs_dir)
+            info['files_in_outputs'] = [f for f in files if filename[:20] in f]
         
-        # Delete processed file if exists
-        if video.processed_path:
-            processed_path = os.path.join('static/processed', video.processed_path)
-            if os.path.exists(processed_path):
-                os.remove(processed_path)
+    return f"<pre>{json.dumps(info, indent=2)}</pre>"
+
+@videos_bp.route('/fix-annotated/<int:id>')
+@login_required
+def fix_annotated_path(id):
+    """Fix missing annotated video path by finding the file in outputs directory"""
+    Video = current_app.Video
+    db = current_app.db
+    video = Video.query.get_or_404(id)
+    
+    import os
+    outputs_dir = os.path.join('processing', 'outputs')
+    
+    if not os.path.exists(outputs_dir):
+        return "Outputs directory not found", 404
+    
+    # Look for annotated video file
+    base_name = video.file_path.rsplit('.', 1)[0] if video.file_path else ''
+    found_files = []
+    
+    for file in os.listdir(outputs_dir):
+        if file.endswith('.mp4') and 'annotated' in file:
+            # Check if this file matches our video
+            if base_name and base_name in file:
+                found_files.append(file)
+            elif video.file_path and video.file_path.replace('.mp4', '') in file:
+                found_files.append(file)
+    
+    if found_files:
+        # Use the most recent annotated file
+        annotated_file = sorted(found_files)[-1]
         
-        # Delete from database
-        db.session.delete(video)
+        # Update the database
+        video.annotated_video_path = annotated_file
+        
+        # Also update processed_path if not set
+        if not video.processed_path:
+            video.processed_path = annotated_file
+        
         db.session.commit()
         
-        flash(f'Video "{filename}" has been deleted successfully.', 'success')
-    except Exception as e:
-        if hasattr(current_app, 'db'):
-            current_app.db.session.rollback()
-        flash(f'Error deleting video: {str(e)}', 'error')
+        return f"""
+        <h2>Fixed annotated video path!</h2>
+        <pre>
+Video ID: {video.id}
+Filename: {video.filename}
+Updated annotated_video_path to: {video.annotated_video_path}
+Updated processed_path to: {video.processed_path}
+        </pre>
+        <p><a href="{url_for('videos.detail', id=video.id)}">Go back to video</a></p>
+        """
+    else:
+        files_in_output = os.listdir(outputs_dir)[:20]
+        return f"""
+        <h2>No annotated video found</h2>
+        <p>Looking for files matching: {base_name}</p>
+        <p>Files in outputs directory:</p>
+        <pre>{json.dumps(files_in_output, indent=2)}</pre>
+        """
+
+@videos_bp.route('/test/<path:filename>')
+@login_required
+def test_video(filename):
+    """Test endpoint to diagnose video serving issues"""
+    upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
+    file_path = os.path.join(upload_folder, filename)
     
-    return redirect(url_for('videos.index'))
+    info = {
+        'filename': filename,
+        'file_path': file_path,
+        'exists': os.path.exists(file_path),
+        'upload_folder': upload_folder,
+        'absolute_path': os.path.abspath(file_path)
+    }
+    
+    if os.path.exists(file_path):
+        try:
+            stats = os.stat(file_path)
+            info['size_mb'] = stats.st_size / (1024 * 1024)
+            info['permissions'] = oct(stats.st_mode)
+            
+            # Try to read first bytes
+            with open(file_path, 'rb') as f:
+                header = f.read(32)
+                info['header_hex'] = header.hex()[:64]
+                info['header_ascii'] = ''.join(chr(b) if 32 <= b < 127 else '.' for b in header)
+        except Exception as e:
+            info['error'] = str(e)
+    
+    return f"<pre>{json.dumps(info, indent=2)}</pre>"
+
 
 @videos_bp.route('/stream/<path:filename>')
 @login_required
@@ -426,8 +696,21 @@ def stream_video(filename):
     upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
     file_path = os.path.join(upload_folder, filename)
     
+    print(f"🎬 Stream request for: {filename}")
+    print(f"📁 Full path: {file_path}")
+    print(f"📊 File exists: {os.path.exists(file_path)}")
+    
     if not os.path.exists(file_path):
+        print(f"❌ File not found: {file_path}")
         return "Video file not found", 404
+    
+    # Log file size and permissions
+    try:
+        file_stats = os.stat(file_path)
+        print(f"📊 File size: {file_stats.st_size / (1024*1024):.2f} MB")
+        print(f"📊 File permissions: {oct(file_stats.st_mode)}")
+    except Exception as e:
+        print(f"❌ Error getting file stats: {e}")
     
     # Detect file format from header
     def detect_file_format(file_path):
@@ -572,173 +855,192 @@ def download_video(filename):
 def serve_video_static(filename):
     """Static file serving method as fallback"""
     upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
-    return send_from_directory(upload_folder, filename)
+    file_path = os.path.join(upload_folder, filename)
+    
+    print(f"📁 Static serve request for: {filename}")
+    print(f"📊 File exists: {os.path.exists(file_path)}")
+    
+    if not os.path.exists(file_path):
+        return f"File not found: {filename}", 404
+    
+    # Try to serve with explicit mimetype
+    mimetype = 'video/mp4'
+    if filename.lower().endswith('.avi'):
+        mimetype = 'video/x-msvideo'
+    elif filename.lower().endswith('.mov'):
+        mimetype = 'video/quicktime'
+    elif filename.lower().endswith('.mkv'):
+        mimetype = 'video/x-matroska'
+    
+    return send_from_directory(upload_folder, filename, mimetype=mimetype)
 
-@videos_bp.route('/<int:id>/convert', methods=['POST'])
+@videos_bp.route('/serve-annotated/<path:filename>')
 @login_required
-def convert_video(id):
-    """Convert video to web-compatible format"""
+def serve_annotated_video(filename):
+    """Serve annotated videos from processing outputs"""
     try:
-        Video = current_app.Video
-        db = current_app.db
+        import mimetypes
         
-        video = Video.query.get_or_404(id)
+        # Check multiple possible locations
+        possible_paths = [
+            os.path.join('processing', 'outputs', filename),  # Direct in outputs
+            os.path.join('static', 'uploads', filename),      # In uploads (if moved)
+            os.path.join('processing', 'outputs', f'detected_{filename}'),  # With detected_ prefix
+            filename  # Absolute path
+        ]
         
-        # Check if video needs conversion
-        upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
-        input_path = os.path.join(upload_folder, video.file_path)
+        full_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                full_path = path
+                break
+                
+        if not full_path:
+            print(f"❌ Annotated video not found in any location:")
+            for path in possible_paths:
+                print(f"   - {path}")
+            return "Annotated video file not found", 404
         
-        if not os.path.exists(input_path):
-            flash('Video file not found', 'error')
-            return redirect(url_for('videos.detail', id=id))
+        print(f"✅ Serving annotated video from: {full_path}")
         
-        # Check if already converting
-        if video.status == 'converting':
-            flash('Video is already being converted', 'warning')
-            return redirect(url_for('videos.detail', id=id))
+        # Determine the directory and filename
+        directory = os.path.dirname(full_path)
+        file_name = os.path.basename(full_path)
         
-        # Get app instance for background thread
-        app = current_app._get_current_object()
+        # Get proper mimetype
+        mimetype, _ = mimetypes.guess_type(file_name)
+        if not mimetype:
+            mimetype = 'video/mp4'  # Default to MP4
+            
+        print(f"📹 Serving with mimetype: {mimetype}")
         
-        # Start conversion in background
-        def convert_in_background():
-            # Create application context for background thread
-            with app.app_context():
-                try:
-                    # Import video processor
-                    import sys
-                    import os
-                    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-                    from hr_management.utils.video_processor import VideoProcessor
-                    
-                    processor = VideoProcessor()
-                    available_methods = processor.get_available_methods()
-                    
-                    if not available_methods:
-                        video.status = 'failed'
-                        video.error_message = 'No video conversion libraries available. Please install: pip install moviepy opencv-python'
-                        app.db.session.commit()
-                        return
-                    
-                    # Update status to converting
-                    video.status = 'converting'
-                    video.processing_started_at = datetime.utcnow()
-                    video.error_message = None
-                    app.db.session.commit()
-                    
-                    # Generate output path
-                    output_filename = f"{uuid.uuid4()}_converted_{video.filename}"
-                    output_path = os.path.join(upload_folder, output_filename)
-                    
-                    # Convert video (prefer moviepy/opencv over ffmpeg for easier installation)
-                    print(f"🔄 Starting manual conversion: {input_path} -> {output_path}")
-                    print(f"📊 Available methods: {available_methods}")
-                    
-                    success, output_file, message = processor.convert_video(
-                        input_path,
-                        output_path,
-                        method='auto',  # Will try moviepy first, then opencv
-                        quality='medium'
-                    )
-                    
-                    print(f"🎯 Manual conversion result: success={success}, message={message}")
-                    
-                    if success:
-                        # Update video record
-                        video.status = 'completed'
-                        video.processed_path = output_filename
-                        video.processing_completed_at = datetime.utcnow()
-                        video.error_message = None
-                        
-                        # Get converted video info
-                        try:
-                            info = processor.get_video_info(output_path)
-                            if info and info.get('format') == 'readable':
-                                video.duration = info.get('duration', 0)
-                                video.resolution = f"{info.get('width', 0)}x{info.get('height', 0)}"
-                                video.fps = info.get('fps', 0)
-                                video.codec = 'h264'
-                        except Exception as info_error:
-                            # Don't fail conversion if we can't get info
-                            print(f"Warning: Could not get video info: {info_error}")
-                        
-                        app.db.session.commit()
-                    else:
-                        video.status = 'failed'
-                        video.error_message = f'Conversion failed: {message}'
-                        video.processing_completed_at = datetime.utcnow()
-                        app.db.session.commit()
-                        
-                except Exception as e:
-                    try:
-                        video.status = 'failed'
-                        video.error_message = f'Conversion error: {str(e)}'
-                        video.processing_completed_at = datetime.utcnow()
-                        app.db.session.commit()
-                    except Exception as db_error:
-                        print(f"Database error in conversion thread: {db_error}")
-                        print(f"Original conversion error: {e}")
-        
-        # Start background thread
-        thread = threading.Thread(target=convert_in_background)
-        thread.daemon = True
-        thread.start()
-        
-        flash('Video conversion started! This may take several minutes.', 'info')
-        return redirect(url_for('videos.detail', id=id))
+        # Use send_file for better compatibility
+        return send_file(full_path, mimetype=mimetype, as_attachment=False)
         
     except Exception as e:
-        flash(f'Error starting conversion: {str(e)}', 'error')
-        return redirect(url_for('videos.detail', id=id))
+        print(f"❌ Error serving annotated video: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"Error serving annotated video: {str(e)}", 500
 
-@videos_bp.route('/api/<int:id>/conversion-status')
+@videos_bp.route('/detected/<path:filename>')
+@login_required  
+def serve_detected_video(filename):
+    """Serve detected/annotated videos with proper streaming support"""
+    try:
+        # The detected videos are in processing/outputs
+        outputs_dir = os.path.join('processing', 'outputs')
+        file_path = os.path.join(outputs_dir, filename)
+        
+        print(f"🎯 Detected video request: {filename}")
+        print(f"📁 Looking in: {outputs_dir}")
+        print(f"📊 Full path: {file_path}")
+        print(f"✅ Exists: {os.path.exists(file_path)}")
+        
+        if not os.path.exists(file_path):
+            # Try without detected_ prefix if it was already included
+            if filename.startswith('detected_'):
+                alt_filename = filename[9:]  # Remove 'detected_' prefix
+                alt_path = os.path.join(outputs_dir, alt_filename)
+                if os.path.exists(alt_path):
+                    file_path = alt_path
+                    print(f"✅ Found at alternate path: {alt_path}")
+                else:
+                    return f"Detected video not found: {filename}", 404
+            else:
+                return f"Detected video not found: {filename}", 404
+        
+        # Get file size for range requests
+        file_size = os.path.getsize(file_path)
+        
+        # Handle range requests for proper video streaming
+        range_header = request.headers.get('Range', None)
+        if range_header:
+            byte_start = 0
+            byte_end = file_size - 1
+            
+            if range_header.startswith('bytes='):
+                range_match = range_header[6:]
+                if '-' in range_match:
+                    start, end = range_match.split('-', 1)
+                    if start:
+                        byte_start = int(start)
+                    if end:
+                        byte_end = int(end)
+            
+            content_length = byte_end - byte_start + 1
+            
+            def generate_range():
+                with open(file_path, 'rb') as f:
+                    f.seek(byte_start)
+                    remaining = content_length
+                    while remaining:
+                        chunk_size = min(8192, remaining)
+                        data = f.read(chunk_size)
+                        if not data:
+                            break
+                        remaining -= len(data)
+                        yield data
+            
+            return Response(
+                generate_range(),
+                206,  # Partial Content
+                headers={
+                    'Content-Range': f'bytes {byte_start}-{byte_end}/{file_size}',
+                    'Accept-Ranges': 'bytes',
+                    'Content-Length': str(content_length),
+                    'Content-Type': 'video/mp4',
+                    'Cache-Control': 'no-cache'
+                }
+            )
+        
+        # No range request - send full file
+        return send_file(file_path, mimetype='video/mp4', as_attachment=False)
+        
+    except Exception as e:
+        print(f"❌ Error serving detected video: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"Error serving detected video: {str(e)}", 500
+
+@videos_bp.route('/stream-detected/<path:filename>')
 @login_required
-def conversion_status(id):
-    """Get conversion status with progress for AJAX polling"""
-    import sys
+def stream_detected_video(filename):
+    """Stream detected videos directly from outputs directory"""
     import os
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from hr_management.utils.conversion_manager import conversion_manager
     
-    Video = current_app.Video
-    video = Video.query.get_or_404(id)
+    outputs_dir = os.path.join('processing', 'outputs')
+    file_path = os.path.join(outputs_dir, filename)
     
-    # Get basic video status
-    response = {
-        'status': video.status,
-        'error_message': video.error_message,
-        'processing_started_at': video.processing_started_at.isoformat() if video.processing_started_at else None,
-        'processing_completed_at': video.processing_completed_at.isoformat() if video.processing_completed_at else None,
-        'processed_path': video.processed_path,
-        'progress': 0.0,
-        'progress_message': ''
-    }
+    print(f"🎬 Stream detected video request: {filename}")
+    print(f"📁 Full path: {file_path}")
+    print(f"✅ Exists: {os.path.exists(file_path)}")
     
-    # If converting, get detailed progress from conversion manager
-    if video.status == 'converting':
-        task = conversion_manager.get_task_by_video_id(id)
-        if task:
-            response.update({
-                'progress': task.progress,
-                'progress_message': task.message,
-                'task_id': task.task_id
-            })
-            print(f"🔄 API: Sending progress for video {id}: {task.progress}% - {task.message}")
-        else:
-            print(f"⚠️ API: No conversion task found for video {id}")
-            response.update({
-                'progress': 0.0,
-                'progress_message': 'No active conversion task found'
-            })
+    if not os.path.exists(file_path):
+        # List files to help debug
+        if os.path.exists(outputs_dir):
+            files = [f for f in os.listdir(outputs_dir) if f.endswith('.mp4')]
+            print(f"📁 MP4 files in outputs: {files[:5]}")
+        return f"Detected video not found: {filename}", 404
     
-    print(f"📡 API Response for video {id}: status={response['status']}, progress={response['progress']}%")
-    return jsonify(response)
+    # Use send_file for simplicity - Flask will handle range requests
+    try:
+        return send_file(
+            file_path,
+            mimetype='video/mp4',
+            as_attachment=False,
+            conditional=True  # This enables range request support
+        )
+    except Exception as e:
+        print(f"❌ Error serving detected video: {e}")
+        return f"Error serving file: {str(e)}", 500
 
 @videos_bp.route('/api/<int:id>/processing-status')
 @login_required
 def processing_status(id):
     """Get person extraction processing status with progress for AJAX polling"""
     Video = current_app.Video
+    db = current_app.db
     video = Video.query.get_or_404(id)
     
     # Get basic video status
@@ -1066,6 +1368,35 @@ def simulate_error(id):
         
     except Exception as e:
         flash(f'Error simulating failure: {str(e)}', 'error')
+        return redirect(url_for('videos.detail', id=id))
+
+@videos_bp.route('/<int:id>/force-reset', methods=['POST'])
+@login_required
+def force_reset(id):
+    """Force reset a stuck video to allow deletion or reprocessing"""
+    try:
+        Video = current_app.Video
+        db = current_app.db
+        
+        video = Video.query.get_or_404(id)
+        old_status = video.status
+        
+        # Force reset the video status
+        video.status = 'failed'
+        video.error_message = f'Force reset from stuck "{old_status}" status'
+        video.processing_completed_at = datetime.utcnow()
+        video.processing_progress = 0
+        video.task_id = None  # Clear any task references
+        
+        db.session.commit()
+        
+        print(f"🔧 Force reset video {video.id}: {video.filename} from '{old_status}' to 'failed'")
+        flash(f'Video "{video.filename}" has been reset. You can now delete or reprocess it.', 'success')
+        
+        return redirect(url_for('videos.detail', id=id))
+        
+    except Exception as e:
+        flash(f'Error resetting video: {str(e)}', 'error')
         return redirect(url_for('videos.detail', id=id))
 
 @videos_bp.route('/api/<int:video_id>/calibrate-coordinates', methods=['POST'])
@@ -1584,41 +1915,185 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def detect_video_format(file_path):
-    """Detect if video format is web-compatible"""
-    try:
-        with open(file_path, 'rb') as f:
-            header = f.read(32)
-            
-            # Check for web-compatible formats
-            if header.startswith(b'ftypmp4') or header[4:8] == b'ftyp':
-                return True, 'MP4'
-            elif header.startswith(b'\x1a\x45\xdf\xa3'):
-                # Check if it's WebM (web-compatible) or MKV (needs conversion)
-                # WebM usually has 'webm' in the header further down
+
+def start_enhanced_gpu_processing(video, processing_options, app):
+    """Start enhanced processing with GPU acceleration for faster performance"""
+    import threading
+    import sys
+    import os
+    from datetime import datetime
+    
+    def gpu_process_in_background():
+        with app.app_context():
+            try:
+                # Get database and models from app context
+                db = app.db
+                Video = app.Video
+                DetectedPerson = app.DetectedPerson
+                sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+                
+                # Re-fetch the video object in this thread's session
+                video_obj = Video.query.get(video.id)
+                if not video_obj:
+                    print(f"❌ Video {video.id} not found in database")
+                    return
+                
+                print(f"🚀 Starting GPU-accelerated person extraction for video {video_obj.id}: {video_obj.filename}")
+                
+                # Get video path
+                upload_folder = app.config.get('UPLOAD_FOLDER', 'static/uploads')
+                video_path = os.path.join(upload_folder, video_obj.file_path)
+                
+                # Check if video file exists
+                if not os.path.exists(video_path):
+                    raise FileNotFoundError(f"Video file not found: {video_path}")
+                
+                print(f"✅ Video file exists: {video_path} ({os.path.getsize(video_path)} bytes)")
+                
+                # Step 1: Clear existing detections
+                print(f"🗑️ Step 1/5: Clearing existing detection data for video {video_obj.id}")
+                video_obj.processing_progress = 5
+                db.session.commit()
+                
+                existing_detections = DetectedPerson.query.filter_by(video_id=video_obj.id).all()
+                if existing_detections:
+                    detection_count = len(existing_detections)
+                    for detection in existing_detections:
+                        db.session.delete(detection)
+                    db.session.commit()
+                    print(f"   ✅ Deleted {detection_count} existing detections")
+                
+                # Step 2: Run GPU-accelerated person detection
+                print(f"🤖 Step 2/5: Running GPU-accelerated person detection...")
+                video_obj.processing_progress = 20
+                db.session.commit()
+                
+                # Import GPU-optimized detection module
                 try:
-                    with open(file_path, 'rb') as f2:
-                        first_1kb = f2.read(1024)
-                        if b'webm' in first_1kb.lower():
-                            return True, 'WebM'
+                    from processing.gpu_enhanced_detection import gpu_person_detection_task
+                    print("🎮 Using GPU-accelerated detection")
+                    gpu_available = True
+                except ImportError:
+                    print("⚠️ GPU detection module not found, falling back to CPU detection")
+                    gpu_available = False
+                    try:
+                        from processing.enhanced_detection import enhanced_person_detection_task as gpu_person_detection_task
+                    except ImportError:
+                        from processing.enhanced_detection_fallback import enhanced_person_detection_task as gpu_person_detection_task
+                
+                # Configure GPU processing
+                gpu_config = {
+                    'use_gpu': processing_options.get('use_gpu', True) and gpu_available,
+                    'batch_size': 8 if gpu_available else 4,  # Larger batch size for GPU
+                    'device': 'cuda:0' if gpu_available else 'cpu',
+                    'fp16': True if gpu_available else False,  # Use half precision on GPU
+                    'num_workers': 4 if gpu_available else 2
+                }
+                
+                print(f"🎮 GPU Config: {gpu_config}")
+                
+                result = gpu_person_detection_task(video_path, gpu_config, video_obj.id, app)
+                
+                if 'error' in result:
+                    raise Exception(f"GPU detection failed: {result['error']}")
+                
+                video_obj.processing_progress = 60
+                db.session.commit()
+                
+                print(f"🎯 GPU detection completed - found {len(result['detections'])} tracked detections")
+                
+                # Step 3: Save detections to database
+                print(f"💾 Step 3/5: Saving {len(result['detections'])} detections...")
+                video_obj.processing_progress = 75
+                db.session.commit()
+                
+                for detection_data in result['detections']:
+                    detection = DetectedPerson(
+                        video_id=video_obj.id,
+                        frame_number=detection_data['frame_number'],
+                        timestamp=detection_data['timestamp'],
+                        bbox_x=detection_data['x'],
+                        bbox_y=detection_data['y'],
+                        bbox_width=detection_data['width'],
+                        bbox_height=detection_data['height'],
+                        confidence=detection_data['confidence'],
+                        person_id=detection_data.get('person_id'),
+                        track_id=detection_data.get('track_id')
+                    )
+                    db.session.add(detection)
+                
+                db.session.commit()
+                print(f"✅ Saved {len(result['detections'])} detections")
+                
+                # Step 4: Update video metadata
+                print(f"📊 Step 4/5: Updating video metadata")
+                video_obj.processing_progress = 90
+                
+                if 'processing_summary' in result:
+                    summary = result['processing_summary']
+                    video_obj.duration = summary.get('duration')
+                    
+                    # Store annotated video path for playback
+                    if result.get('annotated_video_path'):
+                        annotated_path = result['annotated_video_path']
+                        # Handle both full path and filename only formats
+                        if annotated_path.startswith('processing/outputs/'):
+                            relative_path = annotated_path.replace('processing/outputs/', '')
+                        elif '/' in annotated_path:
+                            # Extract just the filename from any path
+                            relative_path = os.path.basename(annotated_path)
                         else:
-                            return False, 'MKV'
-                except:
-                    return False, 'MKV'
-            elif header.startswith(b'RIFF') and b'AVI ' in header:
-                return False, 'AVI'
-            elif header.startswith(b'FLV'):
-                return False, 'FLV'
-            elif header.startswith(b'IMKH'):
-                return False, 'IMKH'
-            elif header.startswith(b'\x00\x00\x00'):
-                # Could be QuickTime/MOV - usually needs conversion for web
-                return False, 'MOV'
-            else:
-                # Unknown format - assume needs conversion for safety
-                return False, 'Unknown'
-    except:
-        return False, 'Unknown'
+                            # Already just the filename
+                            relative_path = annotated_path
+                            
+                        video_obj.annotated_video_path = relative_path
+                        video_obj.processed_path = relative_path  # Use annotated video as processed video
+                        print(f"📁 Stored annotated video path: {relative_path}")
+                
+                db.session.commit()
+                
+                # Step 5: Complete processing
+                print(f"✅ Step 5/5: GPU processing completed for video {video_obj.id}")
+                video_obj.status = 'completed'
+                video_obj.processing_progress = 100
+                video_obj.processing_completed_at = datetime.utcnow()
+                
+                # Update processing log
+                unique_persons = len(set(d.get('person_id') for d in result['detections'] if d.get('person_id')))
+                video_obj.processing_log += f"\nGPU processing completed at {datetime.utcnow()} - Found {unique_persons} unique persons"
+                
+                db.session.commit()
+                
+                print(f"🎉 GPU-accelerated processing completed successfully!")
+                print(f"📊 Results: {unique_persons} unique persons, {len(result['detections'])} detections")
+                print(f"📁 Annotated video ready for playback: {result.get('annotated_video_path', 'N/A')}")
+                
+            except Exception as e:
+                import traceback
+                
+                error_trace = traceback.format_exc()
+                print(f"❌ GPU processing failed for video {video.id}: {e}")
+                print(f"📋 Full error trace:\n{error_trace}")
+                
+                try:
+                    db = app.db
+                    Video = app.Video
+                    
+                    video_obj = Video.query.get(video.id)
+                    if video_obj:
+                        video_obj.status = 'failed'
+                        video_obj.error_message = f'GPU processing failed: {str(e)}'
+                        video_obj.processing_completed_at = datetime.utcnow()
+                        db.session.commit()
+                except Exception as db_error:
+                    print(f"❌ Failed to update database: {db_error}")
+    
+    # Start background thread
+    print(f"🧵 Starting GPU processing thread for video {video.id}...")
+    thread = threading.Thread(target=gpu_process_in_background)
+    thread.daemon = True
+    thread.start()
+    print(f"✅ GPU processing thread started")
 
 def start_enhanced_fallback_processing(video, processing_options, app):
     """Start enhanced processing with person tracking and video annotation"""
@@ -1726,6 +2201,16 @@ def start_enhanced_fallback_processing(video, processing_options, app):
                 if 'processing_summary' in result:
                     summary = result['processing_summary']
                     video_obj.duration = summary.get('duration')
+                    
+                    # Store annotated video path for video player
+                    if result.get('annotated_video_path'):
+                        # Store relative path from the uploads directory
+                        annotated_path = result['annotated_video_path']
+                        if annotated_path.startswith('processing/outputs/'):
+                            # Convert to relative path that can be served
+                            relative_path = annotated_path.replace('processing/outputs/', '')
+                            video_obj.annotated_video_path = relative_path
+                            print(f"📁 Stored annotated video path: {relative_path}")
                     
                     # Store enhanced processing info
                     video_obj.processing_log += f"\nEnhanced processing completed:"
@@ -1929,45 +2414,6 @@ def start_fallback_processing(video, processing_options, app):
     
     print(f"🧵 Started fallback processing thread for video {video.id}")
 
-def start_auto_conversion(video, input_path, upload_folder, app):
-    """Start automatic conversion using conversion manager"""
-    import sys
-    import os
-    from datetime import datetime
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from hr_management.utils.conversion_manager import conversion_manager, create_conversion_processor
-    from hr_management.utils.video_processor import VideoProcessor
-    
-    # Generate output path
-    output_filename = f"{uuid.uuid4()}_converted_{video.filename}"
-    output_path = os.path.join(upload_folder, output_filename)
-    
-    # Create conversion task
-    task_id = conversion_manager.create_task(video.id, input_path, output_path)
-    
-    # Update video status to converting BEFORE starting the task
-    video.status = 'converting'
-    video.processing_started_at = datetime.utcnow()
-    video.processing_log = f"Conversion Task ID: {task_id}"
-    video.error_message = None
-    app.db.session.commit()
-    
-    print(f"🔄 Video {video.id} status updated to 'converting' with task {task_id[:8]}")
-    
-    # Create processor
-    processor = VideoProcessor()
-    conversion_processor = create_conversion_processor(processor)
-    
-    # Start conversion
-    success = conversion_manager.start_conversion(task_id, app, conversion_processor)
-    
-    if success:
-        print(f"✅ Auto-conversion task {task_id[:8]} started for video: {video.filename}")
-    else:
-        print(f"❌ Failed to start auto-conversion task for video: {video.filename}")
-        video.status = 'failed'
-        video.error_message = 'Failed to start conversion task'
-        app.db.session.commit()
 
 # WebSocket event handlers for real-time progress updates
 if SOCKETIO_AVAILABLE:

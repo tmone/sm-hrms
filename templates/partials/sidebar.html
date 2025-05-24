@@ -75,6 +75,15 @@
                 </a>
             </li>
             
+            <li>
+                <a href="{{ url_for('gpu_management.index') }}" 
+                   class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors
+                          {% if request.endpoint and request.endpoint.startswith('gpu_management') %}bg-blue-700{% endif %}">
+                    <i class="fas fa-microchip mr-3"></i>
+                    GPU Management
+                </a>
+            </li>
+            
             <!-- Reporting Section -->
             <li class="mt-6">
                 <div class="px-4 py-2 text-blue-200 text-sm font-semibold uppercase tracking-wide">

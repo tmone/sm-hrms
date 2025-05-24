@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+
+{% block title %}GPU Management - HR Management System{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h1 class="h2 mb-4">GPU Management & Configuration</h1>
+            
+            <!-- GPU Status Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">GPU Status</h5>
+                </div>
+                <div class="card-body">
+                    <div id="gpu-status-loading" class="text-center py-3">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Checking GPU status...</p>
+                    </div>
+                    <div id="gpu-status-content" style="display: none;"></div>
+                </div>
+            </div>
+            
+            <!-- Video Codec Information -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Video Codec Support</h5>
+                </div>
+                <div class="card-body">
+                    <button id="check-codecs-btn" class="btn btn-info mb-3">Check Available Codecs</button>
+                    <div id="codec-info" style="display: none;"></div>
+                </div>
+            </div>
+            
+            <!-- GPU Setup -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">GPU Setup & Installation</h5>
+                </div>
+                <div class="card-body">
+                    <p>Install GPU acceleration libraries for faster video processing.</p>
+                    <button id="install-gpu-btn" class="btn btn-primary" onclick="installGPUSupport()">
+                        Install GPU Support
+                    </button>
+                    <div id="install-progress" class="mt-3" style="display: none;">
+                        <div class="alert alert-info">
+                            <div class="spinner-border spinner-border-sm me-2" role="status">
+                                <span class="visually-hidden">Installing...</span>
+                            </div>
+                            Installing GPU libraries... This may take several minutes.
+                        </div>
+                    </div>
+                    <div id="install-results" class="mt-3"></div>
+                </div>
+            </div>
+            
+            <!-- Performance Testing -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Performance Testing</h5>
+                </div>
+                <div class="card-body">
+                    <p>Run performance tests to compare CPU vs GPU processing speed.</p>
+                    <button id="test-performance-btn" class="btn btn-success" onclick="testGPUPerformance()">
+                        Run Performance Tests
+                    </button>
+                    <div id="test-progress" class="mt-3" style="display: none;">
+                        <div class="alert alert-info">
+                            <div class="spinner-border spinner-border-sm me-2" role="status">
+                                <span class="visually-hidden">Testing...</span>
+                            </div>
+                            Running performance tests...
+                        </div>
+                    </div>
+                    <div id="test-results" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Check GPU status on page load
+document.addEventListener('DOMContentLoaded', function() {
+    checkGPUStatus();
+});
+
+function checkGPUStatus() {
+    fetch('/gpu/status')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('gpu-status-loading').style.display = 'none';
+            document.getElementById('gpu-status-content').style.display = 'block';
+            
+            let statusHtml = '<div class="row">';
+            
+            // System Information
+            statusHtml += '<div class="col-md-6"><h6>System Information</h6><ul class="list-unstyled">';
+            statusHtml += `<li><strong>Platform:</strong> ${data.platform}</li>`;
+            statusHtml += `<li><strong>Python:</strong> ${data.python_version.split(' ')[0]}</li>`;
+            statusHtml += `<li><strong>OpenCV:</strong> ${data.opencv_version}</li>`;
+            if (data.torch_version) {
+                statusHtml += `<li><strong>PyTorch:</strong> ${data.torch_version}</li>`;
+            }
+            statusHtml += '</ul></div>';
+            
+            // GPU Information
+            statusHtml += '<div class="col-md-6"><h6>GPU Information</h6>';
+            
+            if (data.cuda_available) {
+                statusHtml += '<div class="alert alert-success">';
+                statusHtml += '<i class="fas fa-check-circle"></i> CUDA is available!';
+                statusHtml += `<br>CUDA Version: ${data.cuda_version}`;
+                statusHtml += '</div>';
+                
+                if (data.gpu_devices.length > 0) {
+                    statusHtml += '<h6>GPU Devices:</h6><ul>';
+                    data.gpu_devices.forEach(device => {
+                        statusHtml += `<li><strong>${device.name}</strong>`;
+                        statusHtml += `<ul>`;
+                        statusHtml += `<li>Memory: ${device.memory_total}</li>`;
+                        statusHtml += `<li>Compute Capability: ${device.compute_capability}</li>`;
+                        statusHtml += `</ul></li>`;
+                    });
+                    statusHtml += '</ul>';
+                }
+            } else {
+                statusHtml += '<div class="alert alert-warning">';
+                statusHtml += '<i class="fas fa-exclamation-triangle"></i> CUDA is not available';
+                statusHtml += '<br>GPU acceleration is disabled. Install GPU support below.';
+                statusHtml += '</div>';
+            }
+            
+            if (data.nvidia_driver && data.nvidia_driver !== 'Not found') {
+                statusHtml += `<p><strong>NVIDIA Driver:</strong><br>${data.nvidia_driver}</p>`;
+            }
+            
+            statusHtml += '</div></div>';
+            
+            // OpenCV CUDA Support
+            if (data.opencv_cuda) {
+                statusHtml += '<div class="alert alert-info mt-3">';
+                statusHtml += '<i class="fas fa-info-circle"></i> OpenCV is compiled with CUDA support';
+                statusHtml += '</div>';
+            }
+            
+            document.getElementById('gpu-status-content').innerHTML = statusHtml;
+        })
+        .catch(error => {
+            document.getElementById('gpu-status-loading').style.display = 'none';
+            document.getElementById('gpu-status-content').style.display = 'block';
+            document.getElementById('gpu-status-content').innerHTML = 
+                '<div class="alert alert-danger">Error checking GPU status: ' + error + '</div>';
+        });
+}
+
+function installGPUSupport() {
+    document.getElementById('install-gpu-btn').disabled = true;
+    document.getElementById('install-progress').style.display = 'block';
+    document.getElementById('install-results').innerHTML = '';
+    
+    fetch('/gpu/install', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('install-progress').style.display = 'none';
+        document.getElementById('install-gpu-btn').disabled = false;
+        
+        let resultsHtml = '';
+        
+        if (data.success) {
+            resultsHtml += '<div class="alert alert-success">';
+            resultsHtml += '<i class="fas fa-check-circle"></i> GPU support installed successfully!';
+            resultsHtml += '</div>';
+        } else {
+            resultsHtml += '<div class="alert alert-danger">';
+            resultsHtml += '<i class="fas fa-times-circle"></i> Some installations failed';
+            resultsHtml += '</div>';
+        }
+        
+        if (data.results) {
+            resultsHtml += '<h6>Installation Details:</h6>';
+            resultsHtml += '<div class="accordion" id="installAccordion">';
+            
+            data.results.forEach((result, index) => {
+                const statusClass = result.success ? 'success' : 'danger';
+                const statusIcon = result.success ? 'check' : 'times';
+                
+                resultsHtml += `
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="heading${index}">
+                            <button class="accordion-button collapsed" type="button" 
+                                    data-bs-toggle="collapse" data-bs-target="#collapse${index}">
+                                <i class="fas fa-${statusIcon}-circle text-${statusClass} me-2"></i>
+                                ${result.command.split(' ').slice(-1)[0]}
+                            </button>
+                        </h2>
+                        <div id="collapse${index}" class="accordion-collapse collapse" 
+                             data-bs-parent="#installAccordion">
+                            <div class="accordion-body">
+                                <pre class="bg-light p-2"><code>${result.output}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            resultsHtml += '</div>';
+        }
+        
+        document.getElementById('install-results').innerHTML = resultsHtml;
+        
+        // Refresh GPU status
+        checkGPUStatus();
+    })
+    .catch(error => {
+        document.getElementById('install-progress').style.display = 'none';
+        document.getElementById('install-gpu-btn').disabled = false;
+        document.getElementById('install-results').innerHTML = 
+            '<div class="alert alert-danger">Error installing GPU support: ' + error + '</div>';
+    });
+}
+
+function testGPUPerformance() {
+    document.getElementById('test-performance-btn').disabled = true;
+    document.getElementById('test-progress').style.display = 'block';
+    document.getElementById('test-results').innerHTML = '';
+    
+    fetch('/gpu/test', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('test-progress').style.display = 'none';
+        document.getElementById('test-performance-btn').disabled = false;
+        
+        let resultsHtml = '';
+        
+        if (data.success) {
+            resultsHtml += '<div class="alert alert-success mb-3">';
+            resultsHtml += '<i class="fas fa-check-circle"></i> Performance tests completed!';
+            resultsHtml += '</div>';
+            
+            resultsHtml += '<table class="table table-striped">';
+            resultsHtml += '<thead><tr><th>Test</th><th>CPU Time</th><th>GPU Time</th><th>Speedup</th></tr></thead>';
+            resultsHtml += '<tbody>';
+            
+            data.tests.forEach(test => {
+                if (test.error) {
+                    resultsHtml += `<tr>`;
+                    resultsHtml += `<td>${test.name}</td>`;
+                    resultsHtml += `<td colspan="3" class="text-danger">Error: ${test.error}</td>`;
+                    resultsHtml += `</tr>`;
+                } else {
+                    const speedupClass = test.speedup && test.speedup !== 'N/A' && parseFloat(test.speedup) > 1 
+                        ? 'text-success' : '';
+                    resultsHtml += `<tr>`;
+                    resultsHtml += `<td>${test.name}</td>`;
+                    resultsHtml += `<td>${test.cpu_time}</td>`;
+                    resultsHtml += `<td>${test.gpu_time}</td>`;
+                    resultsHtml += `<td class="${speedupClass}"><strong>${test.speedup}</strong></td>`;
+                    resultsHtml += `</tr>`;
+                }
+            });
+            
+            resultsHtml += '</tbody></table>';
+            resultsHtml += `<p class="text-muted">Test completed at: ${new Date(data.timestamp).toLocaleString()}</p>`;
+        } else {
+            resultsHtml += '<div class="alert alert-danger">';
+            resultsHtml += '<i class="fas fa-times-circle"></i> Error running performance tests: ' + data.error;
+            resultsHtml += '</div>';
+        }
+        
+        document.getElementById('test-results').innerHTML = resultsHtml;
+    })
+    .catch(error => {
+        document.getElementById('test-progress').style.display = 'none';
+        document.getElementById('test-performance-btn').disabled = false;
+        document.getElementById('test-results').innerHTML = 
+            '<div class="alert alert-danger">Error running tests: ' + error + '</div>';
+    });
+}
+
+// Check codec information
+document.getElementById('check-codecs-btn').addEventListener('click', function() {
+    this.disabled = true;
+    
+    fetch('/gpu/codec-info')
+        .then(response => response.json())
+        .then(data => {
+            let codecHtml = '<h6>Available Video Codecs:</h6>';
+            codecHtml += '<table class="table table-sm">';
+            codecHtml += '<thead><tr><th>Codec</th><th>Name</th><th>Status</th></tr></thead>';
+            codecHtml += '<tbody>';
+            
+            data.codecs.forEach(codec => {
+                const statusClass = codec.available ? 'success' : 'danger';
+                const statusIcon = codec.available ? 'check' : 'times';
+                const statusText = codec.available ? 'Available' : 'Not Available';
+                
+                codecHtml += `<tr>`;
+                codecHtml += `<td><code>${codec.fourcc}</code></td>`;
+                codecHtml += `<td>${codec.name}</td>`;
+                codecHtml += `<td><span class="badge bg-${statusClass}">`;
+                codecHtml += `<i class="fas fa-${statusIcon}"></i> ${statusText}</span></td>`;
+                codecHtml += `</tr>`;
+            });
+            
+            codecHtml += '</tbody></table>';
+            
+            if (data.video_io_info && data.video_io_info.length > 0) {
+                codecHtml += '<h6 class="mt-3">OpenCV Video I/O Configuration:</h6>';
+                codecHtml += '<pre class="bg-light p-2"><code>';
+                codecHtml += data.video_io_info.join('\n');
+                codecHtml += '</code></pre>';
+            }
+            
+            document.getElementById('codec-info').innerHTML = codecHtml;
+            document.getElementById('codec-info').style.display = 'block';
+            document.getElementById('check-codecs-btn').disabled = false;
+        })
+        .catch(error => {
+            document.getElementById('codec-info').innerHTML = 
+                '<div class="alert alert-danger">Error checking codecs: ' + error + '</div>';
+            document.getElementById('codec-info').style.display = 'block';
+            document.getElementById('check-codecs-btn').disabled = false;
+        });
+});
+</script>
+{% endblock %}

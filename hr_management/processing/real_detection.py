@@ -238,6 +238,18 @@ def detect_persons_yolo(filepath):
                                     width_percent = ((x2 - x1) / frame_width) * 100
                                     height_percent = ((y2 - y1) / frame_height) * 100
                                     
+                                    # Calculate actual pixel width
+                                    bbox_width_pixels = x2 - x1
+                                    
+                                    # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+                                    # Small bounding boxes typically contain low-quality person images
+                                    # that are not suitable for face recognition training
+                                    MIN_BBOX_WIDTH = 128
+                                    
+                                    if bbox_width_pixels < MIN_BBOX_WIDTH:
+                                        print(f"⚠️ Skipping person detection: bbox width {bbox_width_pixels:.0f}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                                        continue
+                                    
                                     # Create detection record
                                     person_code = f"PERSON-{person_counter:04d}"
                                     timestamp = frame_number / fps
@@ -254,12 +266,13 @@ def detect_persons_yolo(filepath):
                                             'x': x_percent,
                                             'y': y_percent,
                                             'width': width_percent,
-                                            'height': height_percent
+                                            'height': height_percent,
+                                            'width_pixels': bbox_width_pixels  # Store pixel width for reference
                                         }]
                                     }
                                     
                                     detections.append(detection)
-                                    print(f"👤 YOLO detected person {person_code} at {timestamp:.1f}s (confidence: {confidence:.2f})")
+                                    print(f"👤 YOLO detected person {person_code} at {timestamp:.1f}s (confidence: {confidence:.2f}, width: {bbox_width_pixels:.0f}px)")
                                     
                                     person_counter += 1
             
@@ -352,6 +365,18 @@ def detect_persons_torch(filepath):
                         width_percent = ((x2 - x1) / frame_width) * 100
                         height_percent = ((y2 - y1) / frame_height) * 100
                         
+                        # Calculate actual pixel width
+                        bbox_width_pixels = x2 - x1
+                        
+                        # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+                        # Small bounding boxes typically contain low-quality person images
+                        # that are not suitable for face recognition training
+                        MIN_BBOX_WIDTH = 128
+                        
+                        if bbox_width_pixels < MIN_BBOX_WIDTH:
+                            print(f"⚠️ Skipping person detection: bbox width {bbox_width_pixels:.0f}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                            continue
+                        
                         person_code = f"PERSON-{person_counter:04d}"
                         timestamp = frame_number / fps
                         
@@ -367,12 +392,13 @@ def detect_persons_torch(filepath):
                                 'x': x_percent,
                                 'y': y_percent,
                                 'width': width_percent,
-                                'height': height_percent
+                                'height': height_percent,
+                                'width_pixels': bbox_width_pixels  # Store pixel width for reference
                             }]
                         }
                         
                         detections.append(detection)
-                        print(f"👤 PyTorch detected person {person_code} at {timestamp:.1f}s")
+                        print(f"👤 PyTorch detected person {person_code} at {timestamp:.1f}s (confidence: {score:.2f}, width: {bbox_width_pixels:.0f}px)")
                         person_counter += 1
             
             frame_number += 1

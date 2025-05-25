@@ -394,6 +394,19 @@ def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, n
                         x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                         confidence = float(box.conf[0].cpu().numpy())
                         
+                        # Calculate bounding box dimensions
+                        bbox_width = int(x2 - x1)
+                        bbox_height = int(y2 - y1)
+                        
+                        # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+                        # Small bounding boxes typically contain low-quality person images
+                        # that are not suitable for face recognition training
+                        MIN_BBOX_WIDTH = 128
+                        
+                        if bbox_width < MIN_BBOX_WIDTH:
+                            print(f"⚠️ Skipping person detection: bbox width {bbox_width}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                            continue
+                        
                         # Simple tracking based on position
                         person_id = assign_person_id(
                             x1, y1, x2, y2, frame_num, 
@@ -405,8 +418,8 @@ def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, n
                             'timestamp': timestamp,
                             'x': int(x1),
                             'y': int(y1),
-                            'width': int(x2 - x1),
-                            'height': int(y2 - y1),
+                            'width': bbox_width,
+                            'height': bbox_height,
                             'confidence': confidence,
                             'person_id': person_id,
                             'track_id': f"TRACK-{person_id:04d}"
@@ -422,6 +435,19 @@ def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, n
                     timestamp = frame_num / 30.0  # Assuming 30 fps
                     x1, y1, x2, y2 = det['bbox']
                     
+                    # Calculate bounding box dimensions
+                    bbox_width = int(x2 - x1)
+                    bbox_height = int(y2 - y1)
+                    
+                    # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+                    # Small bounding boxes typically contain low-quality person images
+                    # that are not suitable for face recognition training
+                    MIN_BBOX_WIDTH = 128
+                    
+                    if bbox_width < MIN_BBOX_WIDTH:
+                        print(f"⚠️ Skipping person detection: bbox width {bbox_width}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                        continue
+                    
                     # Simple tracking based on position
                     person_id = assign_person_id(
                         x1, y1, x2, y2, frame_num,
@@ -433,8 +459,8 @@ def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, n
                         'timestamp': timestamp,
                         'x': int(x1),
                         'y': int(y1),
-                        'width': int(x2 - x1),
-                        'height': int(y2 - y1),
+                        'width': bbox_width,
+                        'height': bbox_height,
                         'confidence': det.get('confidence', 0.8),
                         'person_id': person_id,
                         'track_id': f"TRACK-{person_id:04d}"

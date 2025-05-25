@@ -158,6 +158,19 @@ def detect_persons_in_frame(frame, frame_number, fps):
                         confidence = box.conf[0].cpu().numpy()
                         
                         if confidence > 0.5:  # Higher confidence for tracking
+                            # Calculate bounding box dimensions
+                            bbox_width = int(x2 - x1)
+                            bbox_height = int(y2 - y1)
+                            
+                            # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+                            # Small bounding boxes typically contain low-quality person images
+                            # that are not suitable for face recognition training
+                            MIN_BBOX_WIDTH = 128
+                            
+                            if bbox_width < MIN_BBOX_WIDTH:
+                                print(f"⚠️ Skipping person: bbox width {bbox_width}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                                continue
+                            
                             # Convert to our detection format
                             detection = {
                                 'frame_number': frame_number,
@@ -165,8 +178,8 @@ def detect_persons_in_frame(frame, frame_number, fps):
                                 'bbox': {
                                     'x': int(x1),
                                     'y': int(y1),
-                                    'width': int(x2 - x1),
-                                    'height': int(y2 - y1)
+                                    'width': bbox_width,
+                                    'height': bbox_height
                                 },
                                 'confidence': float(confidence),
                                 'center': (int((x1 + x2) / 2), int((y1 + y2) / 2))

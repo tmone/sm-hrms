@@ -265,6 +265,15 @@ def extract_persons_data(video_path, person_tracks, persons_dir):
             if ret:
                 x, y, w, h = detection['bbox']
                 
+                # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+                # Small bounding boxes typically contain low-quality person images
+                # that are not suitable for face recognition training
+                MIN_BBOX_WIDTH = 128
+                
+                if w < MIN_BBOX_WIDTH:
+                    logger.info(f"⚠️ Skipping {person_id} frame {frame_number}: bbox width {w:.0f}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                    continue
+                
                 # Extract person region with some padding
                 padding = 10
                 x1 = max(0, int(x - padding))

@@ -189,6 +189,17 @@ def extract_persons_data(video_path, person_tracks, persons_dir):
         # Simulate extracted images
         for i, detection in enumerate(detections):
             frame_number = detection['frame_number']
+            
+            # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+            # Small bounding boxes typically contain low-quality person images
+            # that are not suitable for face recognition training
+            MIN_BBOX_WIDTH = 128
+            
+            bbox_width = detection['bbox'][2]  # bbox format is [x, y, width, height]
+            if bbox_width < MIN_BBOX_WIDTH:
+                logger.info(f"⚠️ Skipping {person_id} frame {frame_number}: bbox width {bbox_width}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                continue
+            
             img_filename = f"{person_id}_frame_{frame_number:06d}.jpg"
             img_path = os.path.join(person_dir, img_filename)
             

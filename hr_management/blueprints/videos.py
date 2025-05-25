@@ -169,16 +169,89 @@ def detail(id):
     
     video = Video.query.get_or_404(id)
     
-    # Get pagination parameters
+    # Get view mode (individual detections or grouped by person)
+    view_mode = request.args.get('view', 'grouped')  # Default to grouped view
     page = request.args.get('page', 1, type=int)
-    per_page = 50  # Show 50 detections per page
+    per_page = 50  # Show 50 items per page
     
-    # Get paginated detections
-    detections_pagination = DetectedPerson.query.filter_by(video_id=id).order_by(
-        DetectedPerson.timestamp.asc()
-    ).paginate(page=page, per_page=per_page, error_out=False)
-    
-    detections = detections_pagination.items
+    if view_mode == 'grouped':
+        # Get all detections to group by person
+        all_detections = DetectedPerson.query.filter_by(video_id=id).order_by(
+            DetectedPerson.timestamp.asc()
+        ).all()
+        
+        # Group detections by person_id
+        person_groups = {}
+        for detection in all_detections:
+            # Normalize person_id for grouping
+            if detection.person_id:
+                if str(detection.person_id).isdigit():
+                    person_key = int(detection.person_id)
+                else:
+                    person_key = detection.person_id
+            elif detection.track_id:
+                person_key = detection.track_id
+            else:
+                person_key = f"unknown_{detection.id}"
+            
+            if person_key not in person_groups:
+                person_groups[person_key] = {
+                    'person_id': person_key,
+                    'detections': [],
+                    'first_seen': detection.timestamp,
+                    'last_seen': detection.timestamp,
+                    'total_detections': 0,
+                    'confidence_avg': 0,
+                    'is_identified': detection.is_identified
+                }
+            
+            person_groups[person_key]['detections'].append(detection)
+            person_groups[person_key]['last_seen'] = max(person_groups[person_key]['last_seen'], detection.timestamp)
+            person_groups[person_key]['total_detections'] += 1
+            person_groups[person_key]['confidence_avg'] += detection.confidence
+            if detection.is_identified:
+                person_groups[person_key]['is_identified'] = True
+        
+        # Calculate average confidence and sort by person_id
+        for person_key, group in person_groups.items():
+            group['confidence_avg'] /= group['total_detections']
+            group['duration'] = group['last_seen'] - group['first_seen']
+        
+        # Convert to sorted list
+        grouped_detections = sorted(person_groups.values(), 
+                                  key=lambda x: (isinstance(x['person_id'], int), x['person_id']))
+        
+        # Paginate the groups
+        from math import ceil
+        total_groups = len(grouped_detections)
+        total_pages = ceil(total_groups / per_page)
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        paginated_groups = grouped_detections[start_idx:end_idx]
+        
+        # Create a custom pagination object
+        class GroupPagination:
+            def __init__(self, groups, page, per_page, total):
+                self.items = groups
+                self.page = page
+                self.per_page = per_page
+                self.total = total
+                self.pages = ceil(total / per_page)
+                self.has_prev = page > 1
+                self.has_next = page < self.pages
+                self.prev_num = page - 1 if self.has_prev else None
+                self.next_num = page + 1 if self.has_next else None
+        
+        detections_pagination = GroupPagination(paginated_groups, page, per_page, total_groups)
+        detections = paginated_groups
+        
+    else:
+        # Original individual detection view
+        detections_pagination = DetectedPerson.query.filter_by(video_id=id).order_by(
+            DetectedPerson.timestamp.asc()
+        ).paginate(page=page, per_page=per_page, error_out=False)
+        
+        detections = detections_pagination.items
     
     # Get total count for stats
     total_detections = DetectedPerson.query.filter_by(video_id=id).count()
@@ -190,7 +263,8 @@ def detail(id):
                          pagination=detections_pagination,
                          total_detections=total_detections,
                          identified_count=identified_count,
-                         current_page=page)
+                         current_page=page,
+                         view_mode=view_mode)
 
 @videos_bp.route('/<int:id>/delete', methods=['POST'])
 @login_required

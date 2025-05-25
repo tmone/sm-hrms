@@ -110,79 +110,46 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = output_dir / f"{video_name}_annotated_{timestamp}.mp4"
         
-        # Initialize video writer with optimal compression
-        # Try to use FFmpeg for better compression if available
+        # Initialize video writer with Windows-compatible codec
         out = None
+        actual_output_path = output_path
         
         try:
-            # Import our optimized video writer
-            from .video_writer_ffmpeg import create_video_writer
-            
-            # Create video writer with optimal settings
-            out = create_video_writer(output_path, fps, width, height, use_ffmpeg=True)
-            
-            # For FFmpeg writer, we need to open it
-            if hasattr(out, 'open'):
-                if not out.open():
-                    raise Exception("Failed to open FFmpeg writer")
-            
+            # Use Windows-compatible video writer
+            from .windows_video_writer import create_windows_compatible_writer
+            out, actual_output_path = create_windows_compatible_writer(output_path, fps, width, height)
+            output_path = actual_output_path  # Update path in case extension changed
             print(f"✅ Video writer initialized successfully")
-            
         except Exception as e:
-            print(f"⚠️  Failed to use optimized writer: {e}")
-            print("🔄 Falling back to standard OpenCV writer...")
+            print(f"⚠️ Failed to use Windows-compatible writer: {e}")
             
-            # Fallback to standard OpenCV H.264
-            # Calculate target bitrate based on resolution and fps
-            target_bitrate = int(width * height * fps * 0.05)  # ~2-5 Mbps for HD
-            
-            # Try different H.264 codec options
-            h264_codecs = [
-                ('H264', 'H.264 (OpenCV)'),
-                ('h264', 'H.264 (lowercase)'),
-                ('avc1', 'H.264/AVC (Apple)'),
-                ('x264', 'x264 (libx264)'),
-                ('mp4v', 'MPEG-4 (fallback)')
-            ]
-            
-            # First try with .mp4 extension (best for H.264)
-            for codec, codec_name in h264_codecs:
-                try:
-                    fourcc = cv2.VideoWriter_fourcc(*codec)
-                    out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height), True)
-                    
-                    # Try to set compression parameters if available
-                    if out.isOpened():
-                        # Set video quality (0-100, higher is better quality but larger file)
-                        out.set(cv2.VIDEOWRITER_PROP_QUALITY, 80)
-                        # Set bitrate if supported
-                        if hasattr(cv2, 'VIDEOWRITER_PROP_BITRATE'):
-                            out.set(cv2.VIDEOWRITER_PROP_BITRATE, target_bitrate)
-                        
-                        print(f"✅ Using {codec_name} codec for web-compatible output")
-                        print(f"📹 Output settings: {width}x{height} @ {fps}fps, codec: {codec}")
-                        print(f"🎯 Target bitrate: {target_bitrate/1_000_000:.2f} Mbps")
-                        break
-                    else:
-                        out.release()
-                        out = None
-                except Exception as e:
-                    print(f"⚠️ Failed to use {codec_name} codec: {e}")
-                    continue
+            # Simple fallback - try mp4v directly
+            try:
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height), True)
+                
+                if out.isOpened():
+                    print(f"✅ Using MPEG-4 codec (fallback)")
+                else:
+                    out.release()
+                    out = None
+            except Exception as e:
+                print(f"⚠️ Failed to use mp4v codec: {e}")
         
-        # If H.264 codecs fail, try XVID in AVI container (better compression than MJPEG)
+        # If MP4 codecs fail, try XVID in AVI container
         if out is None:
             avi_output_path = str(output_path).replace('.mp4', '.avi')
             print(f"🔄 Trying AVI container with XVID codec: {avi_output_path}")
             
             try:
-                # Use XVID for better compression than MJPEG
+                # Use XVID for better compression
                 fourcc = cv2.VideoWriter_fourcc(*'XVID')
                 out = cv2.VideoWriter(avi_output_path, fourcc, fps, (width, height), True)
                 if out.isOpened():
                     output_path = Path(avi_output_path)
-                    print(f"✅ Using XVID codec in AVI container (compressed)")
+                    print(f"✅ Using XVID codec in AVI container")
                     print(f"📹 Output settings: {width}x{height} @ {fps}fps")
+                    print(f"⚠️  Note: AVI files may need conversion for web playback")
                 else:
                     out.release()
                     out = None
@@ -191,8 +158,10 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         
         if out is None:
             print("❌ ERROR: Could not initialize video writer with any codec!")
-            print("💡 Tip: Install ffmpeg and opencv-python-headless for better codec support")
-            return {'error': 'Failed to initialize video writer for web-compatible output'}
+            print("💡 Please install FFmpeg for better codec support:")
+            print("   Windows: winget install ffmpeg")
+            print("   Or download from: https://ffmpeg.org/download.html")
+            return {'error': 'Failed to initialize video writer. Please install FFmpeg.'}
         
         # Load YOLO model with GPU support
         try:
@@ -335,6 +304,23 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             print(f"⚠️  WARNING: Output video is very large ({output_size_mb:.1f} MB)")
             print(f"   Consider using better compression or reducing quality")
         
+        # Convert to web format if needed (AVI or problematic MP4)
+        final_output_path = output_path
+        if str(output_path).endswith('.avi') or output_size_mb > 500:
+            print(f"\n🔄 Converting to web-compatible format...")
+            try:
+                from .convert_to_web import convert_video_to_web_format
+                web_path = convert_video_to_web_format(output_path)
+                if web_path:
+                    # Remove original and use web version
+                    if output_path.exists():
+                        output_path.unlink()
+                    final_output_path = web_path
+                    print(f"✅ Converted to web format: {final_output_path}")
+            except Exception as e:
+                print(f"⚠️  Could not convert to web format: {e}")
+                print("   Video may not play in browser without FFmpeg")
+        
         # Update progress: Finalizing
         if video_id:
             update_video_progress(video_id, 95, f"Finalizing: {len(detections)} detections found", app)
@@ -351,7 +337,8 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         
         # Return just the filename, not the full path
         # The database expects just the filename, not the full path
-        annotated_filename = output_path.name if isinstance(output_path, Path) else Path(output_path).name
+        # Use final_output_path which might be the web-converted version
+        annotated_filename = final_output_path.name if isinstance(final_output_path, Path) else Path(final_output_path).name
         
         return {
             'detections': detections,
@@ -513,24 +500,60 @@ def draw_detections_gpu(frame, detections):
         # Color based on person ID
         color = get_color_for_person(person_id)
         
-        # Draw bounding box
-        cv2.rectangle(annotated, (x, y), (x + w, y + h), color, 2)
+        # Draw bounding box with thicker lines for visibility
+        cv2.rectangle(annotated, (x, y), (x + w, y + h), color, 3)
         
-        # Draw label with background
-        label = f"Person {person_id} ({confidence:.2f})"
-        label_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        # Create label in PERSON-XXXX format
+        label = f"PERSON-{person_id:04d}"
         
-        # Background rectangle for text
+        # Larger font size and thickness for better visibility
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.8  # Increased from 0.5
+        font_thickness = 2  # Increased from 1
+        
+        # Get text size
+        label_size, baseline = cv2.getTextSize(label, font, font_scale, font_thickness)
+        
+        # Add padding around text
+        padding = 5
+        
+        # Background rectangle for text (positioned above bounding box)
+        label_y_top = y - label_size[1] - padding * 2
+        if label_y_top < 0:  # If label would go off screen, put it inside box
+            label_y_top = y + padding
+            label_y_bottom = y + label_size[1] + padding * 2
+        else:
+            label_y_bottom = y
+            
         cv2.rectangle(annotated, 
-                     (x, y - label_size[1] - 4),
-                     (x + label_size[0], y),
+                     (x - padding, label_y_top),
+                     (x + label_size[0] + padding, label_y_bottom),
                      color, -1)
         
-        # Draw text
+        # Draw text in white for contrast
+        text_y = label_y_bottom - padding if label_y_top < y else y - padding
         cv2.putText(annotated, label,
-                   (x, y - 2),
-                   cv2.FONT_HERSHEY_SIMPLEX,
-                   0.5, (255, 255, 255), 1)
+                   (x, text_y),
+                   font,
+                   font_scale, 
+                   (255, 255, 255),  # White text
+                   font_thickness,
+                   cv2.LINE_AA)  # Anti-aliased for smoother text
+        
+        # Optional: Add confidence as smaller text below
+        if confidence < 0.9:  # Only show confidence if it's not very high
+            conf_text = f"{confidence:.0%}"
+            conf_scale = 0.5
+            conf_thickness = 1
+            conf_size, _ = cv2.getTextSize(conf_text, font, conf_scale, conf_thickness)
+            
+            cv2.putText(annotated, conf_text,
+                       (x + w - conf_size[0], y + h - 5),
+                       font,
+                       conf_scale,
+                       color,
+                       conf_thickness,
+                       cv2.LINE_AA)
     
     return annotated
 
@@ -539,15 +562,18 @@ def get_color_for_person(person_id):
     """
     Generate consistent color for each person ID
     """
+    # Bright, high-contrast colors that stand out well
     colors = [
-        (255, 0, 0),    # Red
-        (0, 255, 0),    # Green
-        (0, 0, 255),    # Blue
-        (255, 255, 0),  # Yellow
-        (255, 0, 255),  # Magenta
-        (0, 255, 255),  # Cyan
-        (128, 0, 128),  # Purple
-        (255, 165, 0),  # Orange
+        (255, 0, 0),      # Bright Red
+        (0, 255, 0),      # Bright Green
+        (0, 100, 255),    # Bright Blue
+        (255, 255, 0),    # Yellow
+        (255, 0, 255),    # Magenta
+        (0, 255, 255),    # Cyan
+        (255, 128, 0),    # Orange
+        (128, 0, 255),    # Purple
+        (255, 255, 255),  # White
+        (0, 255, 128),    # Spring Green
     ]
     return colors[person_id % len(colors)]
 

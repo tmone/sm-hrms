@@ -100,25 +100,92 @@ function togglePersonDetections(personId) {
         }
     }
 }
+
+// Navigation function for person detection
+function navigateToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHeight) {
+    console.log(`🎯 Navigating to detection ${detectionId} at ${timestamp}s`);
+    
+    const video = document.getElementById('videoPlayer');
+    if (!video) {
+        console.error('❌ Video player not found');
+        return;
+    }
+    
+    // Validate timestamp
+    if (isNaN(timestamp) || timestamp < 0) {
+        console.error('❌ Invalid timestamp:', timestamp);
+        return;
+    }
+    
+    // Wait for video metadata to be loaded
+    if (video.readyState < 1) {
+        console.log('⏳ Waiting for video metadata to load...');
+        video.addEventListener('loadedmetadata', function() {
+            performNavigation();
+        }, { once: true });
+    } else {
+        performNavigation();
+    }
+    
+    function performNavigation() {
+        console.log(`🎬 Video duration: ${video.duration}s, seeking to: ${timestamp}s`);
+        
+        // Validate timestamp against video duration
+        if (timestamp > video.duration) {
+            console.warn('⚠️ Timestamp exceeds video duration, adjusting...');
+            timestamp = Math.min(timestamp, video.duration - 0.1);
+        }
+        
+        // Seek to timestamp and PAUSE (don't auto-play)
+        video.currentTime = timestamp;
+        if (!video.paused) {
+            video.pause();
+        }
+        
+        // Highlight the detection row in the navigator panel
+        if (typeof highlightDetectionInNavigator === 'function') {
+            highlightDetectionInNavigator(detectionId);
+        }
+        
+        // Remove any existing bounding box (cleanup)
+        const existingBox = document.getElementById('boundingBox');
+        if (existingBox) {
+            existingBox.remove();
+        }
+        
+        // Update current time display
+        if (typeof updateTimeDisplay === 'function') {
+            updateTimeDisplay();
+        }
+        
+        // Scroll detection item into view if needed
+        const detectionItem = document.querySelector(`[data-detection-id="${detectionId}"]`);
+        if (detectionItem) {
+            detectionItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        
+        console.log('✅ Navigation to detection completed (no box drawn)');
+    }
+}
 </script>
 
 <div class="container mx-auto px-4">
     <div class="max-w-6xl mx-auto">
-        <!-- Header -->
+        <!-- Combined Header & Actions -->
         <div class="bg-white rounded-lg shadow-md p-6 mb-6" data-video-fps="{{ video.fps }}">
-            <div class="flex justify-between items-start">
-                <div>
+            <div class="flex justify-between items-start mb-4">
+                <div class="flex-1">
                     <h1 class="text-2xl font-bold text-gray-800">{{ video.title or video.filename }}</h1>
                     <p class="text-gray-600 mt-1">{{ video.description or 'No description provided' }}</p>
                     <div class="flex items-center space-x-4 mt-2 text-sm text-gray-500">
-                        <span>{{ (video.file_size / 1024 / 1024) | round(1) }} MB</span>
+                        <span>📁 {{ (video.file_size / 1024 / 1024) | round(1) }} MB</span>
                         {% if video.duration %}
-                            <span>{{ "%.1f"|format(video.duration) }} seconds</span>
+                            <span>⏱️ {{ "%.1f"|format(video.duration) }} seconds</span>
                         {% endif %}
-                        <span>Uploaded {{ video.created_at.strftime('%b %d, %Y at %H:%M') }}</span>
+                        <span>📅 Uploaded {{ video.created_at.strftime('%b %d, %Y at %H:%M') }}</span>
                     </div>
                 </div>
-                <div class="flex space-x-2">
+                <div class="flex items-center space-x-2">
                     <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full 
                           {% if video.status == 'completed' %}bg-green-100 text-green-800
                           {% elif video.status == 'processing' %}bg-yellow-100 text-yellow-800
@@ -126,13 +193,195 @@ function togglePersonDetections(personId) {
                           {% else %}bg-gray-100 text-gray-800{% endif %}">
                         {{ video.status.title() }}
                     </span>
-                    <a href="{{ url_for('videos.index') }}" 
-                       class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
-                        Back to Videos
-                    </a>
                 </div>
             </div>
+            
+            <!-- Action Buttons Row -->
+            <div class="border-t pt-4">
+                <div class="flex flex-wrap gap-2">
+                    <!-- Back Button -->
+                    <a href="{{ url_for('videos.index') }}" 
+                       class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm"
+                       title="Back to Videos">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                        </svg>
+                        Back
+                    </a>
+                    
+                    <!-- Download Original -->
+                    <a href="{{ url_for('videos.download_video', filename=video.file_path) }}" 
+                       class="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm"
+                       title="Download Original Video">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                        </svg>
+                        Download
+                    </a>
+                    
+                    {% if video.status == 'uploaded' or (video.status == 'completed' and video.processed_path) %}
+                        <!-- Process Video Button -->
+                        <button type="button" 
+                                onclick="toggleProcessOptions()"
+                                class="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                                title="Process Video">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            Process
+                        </button>
+                    {% elif video.status == 'processing' %}
+                        <!-- Cancel Processing -->
+                        <form action="{{ url_for('videos.cancel_processing', id=video.id) }}" method="POST" class="inline">
+                            <button type="submit" 
+                                    class="inline-flex items-center px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm"
+                                    onclick="return confirm('Cancel person extraction?')"
+                                    title="Cancel Processing">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                                Cancel
+                            </button>
+                        </form>
+                        
+                        <!-- Force Reset -->
+                        <form action="{{ url_for('videos.force_reset', id=video.id) }}" method="POST" class="inline">
+                            <button type="submit" 
+                                    class="inline-flex items-center px-3 py-2 border border-orange-300 text-orange-700 rounded-md hover:bg-orange-50 text-sm"
+                                    onclick="return confirm('Force reset this video?')"
+                                    title="Force Reset">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                Reset
+                            </button>
+                        </form>
+                    {% elif video.status == 'failed' %}
+                        <!-- Retry Processing -->
+                        <button type="button" 
+                                onclick="toggleProcessOptions()"
+                                class="inline-flex items-center px-3 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 text-sm"
+                                title="Retry Processing">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            Retry
+                        </button>
+                    {% elif video.status == 'completed' %}
+                        <!-- Face Recognition -->
+                        <button class="inline-flex items-center px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+                                title="Run Face Recognition">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            Face Recognition
+                        </button>
+                    {% endif %}
+                    
+                    <!-- Delete Button -->
+                    <form action="{{ url_for('videos.delete', id=video.id) }}" method="POST" class="inline ml-auto">
+                        <button type="submit" 
+                                class="inline-flex items-center px-3 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50 text-sm"
+                                onclick="return confirm('Delete this video permanently?')"
+                                title="Delete Video">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                            Delete
+                        </button>
+                    </form>
+                </div>
+                
+                <!-- Process Options (Hidden by default) -->
+                <div id="processOptions" class="hidden mt-4">
+                    <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST" class="bg-blue-50 border border-blue-200 rounded-md p-4">
+                        <h4 class="text-sm font-medium text-blue-800 mb-3">Process Video Options</h4>
+                        
+                        {% if video.detected_persons and video.detected_persons|length > 0 %}
+                        <div class="bg-amber-50 border border-amber-200 rounded p-2 mb-3">
+                            <p class="text-xs text-amber-700">
+                                ⚠️ <strong>Note:</strong> This video has {{ video.detected_persons|length }} existing detection(s). 
+                                Processing will <strong>clear all existing data</strong> and re-extract persons from scratch.
+                            </p>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="space-y-2 mb-3">
+                            <label class="flex items-center">
+                                <input type="checkbox" name="extract_persons" value="true" checked class="rounded border-gray-300 text-blue-600">
+                                <span class="ml-2 text-sm text-gray-700">Extract persons from video</span>
+                            </label>
+                            
+                            <label class="flex items-center">
+                                <input type="checkbox" name="face_recognition" value="true" class="rounded border-gray-300 text-blue-600">
+                                <span class="ml-2 text-sm text-gray-700">Run face recognition</span>
+                            </label>
+                            
+                            <label class="flex items-center">
+                                <input type="checkbox" name="extract_frames" value="true" class="rounded border-gray-300 text-blue-600">
+                                <span class="ml-2 text-sm text-gray-700">Extract key frames</span>
+                            </label>
+                        </div>
+                        
+                        <div class="flex gap-2">
+                            <button type="submit" 
+                                    class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                                    onclick="return confirm('Start person extraction?')">
+                                Start Processing
+                            </button>
+                            <button type="button" 
+                                    onclick="toggleProcessOptions()"
+                                    class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Status Messages -->
+            {% if video.status == 'converting' %}
+            <div class="mt-4 bg-blue-50 border border-blue-200 rounded-md p-4">
+                <h4 class="text-sm font-medium text-blue-800 mb-2">🔄 Auto-Converting Video</h4>
+                <div class="flex items-center mb-3">
+                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
+                    <span class="text-sm text-blue-700">Converting to web-compatible format...</span>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="flex justify-between text-xs text-blue-600 mb-1">
+                        <span>Progress</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
+                        <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            {% elif video.status == 'processing' %}
+            <div class="mt-4 bg-yellow-50 border border-yellow-200 rounded-md p-4">
+                <h4 class="text-sm font-medium text-yellow-800 mb-2">⏳ Person Extraction In Progress</h4>
+                <p class="text-sm text-yellow-700">
+                    Extracting persons from video...
+                    {% if video.processing_started_at %}
+                        Started: {{ video.processing_started_at.strftime('%b %d at %H:%M') }}
+                    {% endif %}
+                </p>
+            </div>
+            {% elif video.status == 'failed' and video.error_message %}
+            <div class="mt-4 bg-red-50 border border-red-200 rounded-md p-4">
+                <h4 class="text-sm font-medium text-red-800 mb-2">❌ Processing Failed</h4>
+                <p class="text-sm text-red-700">{{ video.error_message }}</p>
+            </div>
+            {% endif %}
         </div>
+
+<script>
+function toggleProcessOptions() {
+    const options = document.getElementById('processOptions');
+    options.classList.toggle('hidden');
+}
+</script>
 
         <!-- Main Content: Video Preview and Detection Navigator -->
         <div class="flex flex-col xl:flex-row gap-6">
@@ -140,23 +389,6 @@ function togglePersonDetections(personId) {
             <div class="xl:w-2/3">
                 <div class="bg-white rounded-lg shadow-md p-6 sticky top-6">
                     <h2 class="text-lg font-semibold text-gray-800 mb-4">Video Preview</h2>
-                    
-                    <!-- Debug info -->
-                    <div class="text-xs text-gray-500 mb-2">
-                        Debug: annotated_video_path = "{{ video.annotated_video_path }}"
-                        | processed_path = "{{ video.processed_path }}"
-                        | file_path = "{{ video.file_path }}"
-                        | status = "{{ video.status }}"
-                        
-                        {% if video.status == 'completed' and not video.annotated_video_path %}
-                        <div class="mt-2">
-                            <a href="{{ url_for('videos.fix_annotated_path', id=video.id) }}" 
-                               class="inline-block px-3 py-1 bg-yellow-500 text-white text-xs rounded hover:bg-yellow-600">
-                                🔧 Fix Missing Detected Video Path
-                            </a>
-                        </div>
-                        {% endif %}
-                    </div>
                     
                     {% if video.annotated_video_path %}
                         <!-- Show annotated video with detections -->
@@ -349,79 +581,17 @@ function togglePersonDetections(personId) {
                         </div>
                     {% endif %}
                 </div>
-
-                <!-- Processing Details -->
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Processing Details</h2>
-                    
-                    <div class="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-500">Processing Status</label>
-                            <p class="mt-1 text-sm text-gray-900">{{ video.status.title() }}</p>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-500">Priority</label>
-                            <p class="mt-1 text-sm text-gray-900">{{ video.priority.title() if video.priority else 'Normal' }}</p>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-500">Started</label>
-                            <p class="mt-1 text-sm text-gray-900">
-                                {% if video.processing_started_at %}
-                                    {{ video.processing_started_at.strftime('%b %d, %Y at %H:%M') }}
-                                {% else %}
-                                    Not started
-                                {% endif %}
-                            </p>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-500">Completed</label>
-                            <p class="mt-1 text-sm text-gray-900">
-                                {% if video.processing_completed_at %}
-                                    {{ video.processing_completed_at.strftime('%b %d, %Y at %H:%M') }}
-                                {% else %}
-                                    Not completed
-                                {% endif %}
-                            </p>
-                        </div>
-                    </div>
-                    
-                    {% if video.status == 'failed' and video.error_message %}
-                        <div class="bg-red-50 border border-red-200 rounded-md p-4">
-                            <h4 class="text-sm font-medium text-red-800">Error Details</h4>
-                            <p class="mt-1 text-sm text-red-700">{{ video.error_message }}</p>
-                        </div>
-                    {% endif %}
-                    
-                    <!-- Video Controls and Info -->
-                    <div class="mt-4 text-sm text-gray-600">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <span id="currentTimeDisplay">0:00</span> / <span id="durationDisplay">0:00</span>
-                            </div>
-                            <div id="detectionCounter" class="text-blue-600 font-medium">
-                                No detection at current frame
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
-            <!-- Detection Navigation Panel -->
+            <!-- Right Column -->
             <div class="xl:w-1/3">
+                <!-- Detection Navigation Panel -->
                 <div class="bg-white rounded-lg shadow-md">
                     <!-- Header with Stats -->
                     <div class="p-4 border-b border-gray-200">
                         <div class="flex justify-between items-center mb-2">
                             <h2 class="text-lg font-semibold text-gray-800">Detection Navigator</h2>
                             <div class="flex space-x-1">
-                                <button onclick="toggleDemoDebugMode()" 
-                                        class="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
-                                        title="Demo debug mode (Press D key)">
-                                    🎯 Demo
-                                </button>
                                 <button onclick="calibrateBoundingBoxes()" 
                                         class="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
                                         title="AI calibrate all detections (Press C key)">
@@ -462,7 +632,9 @@ function togglePersonDetections(personId) {
                             {% for group in detections %}
                             <div class="person-group p-3 border-b border-gray-200 bg-gray-50">
                                 <div class="flex justify-between items-start mb-2">
-                                    <div>
+                                    <div class="cursor-pointer hover:opacity-80" 
+                                         onclick="{% if group.detections and group.detections|length > 0 %}navigateToDetection({{ group.detections[0].timestamp }}, {{ group.detections[0].id }}, {{ group.detections[0].bbox_x }}, {{ group.detections[0].bbox_y }}, {{ group.detections[0].bbox_width }}, {{ group.detections[0].bbox_height }}){% endif %}"
+                                         title="Click to jump to first detection">
                                         <div class="font-semibold text-gray-900 text-lg">
                                             {% if group.person_id %}
                                                 {% if group.person_id|string == group.person_id %}
@@ -481,9 +653,12 @@ function togglePersonDetections(personId) {
                                             {% endif %}
                                         </div>
                                         <div class="text-sm text-gray-600">
-                                            {{ group.total_detections }} detections • 
-                                            {{ "%.1f"|format(group.first_seen) }}s - {{ "%.1f"|format(group.last_seen) }}s
-                                            ({{ "%.1f"|format(group.duration) }}s)
+                                            <span class="inline-flex items-center">
+                                                <span class="mr-1">🎬</span>
+                                                {{ group.total_detections }} detections • 
+                                                {{ "%.1f"|format(group.first_seen) }}s - {{ "%.1f"|format(group.last_seen) }}s
+                                                ({{ "%.1f"|format(group.duration) }}s)
+                                            </span>
                                         </div>
                                         <div class="text-xs text-gray-500">
                                             Avg confidence: {{ "%.1f"|format(group.confidence_avg * 100) }}%
@@ -657,599 +832,11 @@ function togglePersonDetections(personId) {
                 
                 <!-- Processing Controls -->
                 <div class="mt-6 space-y-4">
-                <!-- Enhanced Detection Results -->
-                {% if video.annotated_video_path %}
-                <div class="bg-blue-50 border border-blue-200 rounded-lg shadow-md p-6 mb-6">
-                    <h2 class="text-lg font-semibold text-blue-800 mb-4">🎯 Enhanced Detection Results</h2>
-                    
-                    <div class="space-y-3">
-                        <div class="flex justify-between">
-                            <span class="text-sm text-blue-600">Total Detections</span>
-                            <span class="text-sm font-medium text-blue-900">{{ detections|length }}</span>
-                        </div>
                         
-                        <div class="flex justify-between">
-                            <span class="text-sm text-blue-600">Unique Persons</span>
-                            <span class="text-sm font-medium text-blue-900">
-                                {% if view_mode == 'grouped' %}
-                                    {{ detections|length if detections else 0 }}
-                                {% else %}
-                                    {{ detections|groupby('person_id')|list|length if detections else 0 }}
-                                {% endif %}
-                            </span>
-                        </div>
-                        
-                        <div class="flex justify-between">
-                            <span class="text-sm text-blue-600">Tracking Accuracy</span>
-                            <span class="text-sm font-medium text-blue-900">
-                                {% if detections %}
-                                    {% if view_mode == 'grouped' %}
-                                        {# For grouped view, calculate average from all groups #}
-                                        {% set total_conf = 0 %}
-                                        {% set total_dets = 0 %}
-                                        {% for group in detections %}
-                                            {% set total_conf = total_conf + (group.confidence_avg * group.total_detections) %}
-                                            {% set total_dets = total_dets + group.total_detections %}
-                                        {% endfor %}
-                                        {% if total_dets > 0 %}
-                                            {{ "%.1f"|format((total_conf / total_dets) * 100) }}%
-                                        {% else %}
-                                            --
-                                        {% endif %}
-                                    {% else %}
-                                        {# For individual view, use the original calculation #}
-                                        {{ "%.1f"|format((detections|sum(attribute='confidence')/detections|length)*100) }}%
-                                    {% endif %}
-                                {% else %}
-                                    --
-                                {% endif %}
-                            </span>
-                        </div>
-                        
-                        {% if view_mode == 'grouped' %}
-                            {# For grouped view, we already have the groups #}
-                            {% if detections|length > 0 %}
-                            <div class="mt-4 pt-3 border-t border-blue-200">
-                                <span class="text-sm font-medium text-blue-800">Person Tracks:</span>
-                                <div class="mt-2 flex flex-wrap gap-2">
-                                    {% for group in detections %}
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                            {{ group.person_id }} ({{ group.detections|length }} frames)
-                                        </span>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            {% endif %}
-                        {% else %}
-                            {# For individual view, use groupby #}
-                            {% if detections|groupby('person_id')|list|length > 0 %}
-                            <div class="mt-4 pt-3 border-t border-blue-200">
-                                <span class="text-sm font-medium text-blue-800">Person Tracks:</span>
-                                <div class="mt-2 flex flex-wrap gap-2">
-                                    {% for person_id, person_detections in detections|groupby('person_id') %}
-                                        {% if person_id %}
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                            {{ person_id }} ({{ person_detections|list|length }} frames)
-                                        </span>
-                                        {% endif %}
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            {% endif %}
-                        {% endif %}
-                    </div>
-                </div>
-                {% endif %}
-                
-                <!-- Quick Stats -->
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Detection Results</h2>
-                    
-                    <div class="space-y-3">
-                        <div class="flex justify-between">
-                            <span class="text-sm text-gray-600">Persons Detected</span>
-                            <span class="text-sm font-medium text-gray-900">{{ detections|length }}</span>
-                        </div>
-                        
-                        <div class="flex justify-between">
-                            <span class="text-sm text-gray-600">Identified</span>
-                            <span class="text-sm font-medium text-gray-900">
-                                {{ detections|selectattr('is_identified')|list|length }}
-                            </span>
-                        </div>
-                        
-                        <div class="flex justify-between">
-                            <span class="text-sm text-gray-600">Confidence Score</span>
-                            <span class="text-sm font-medium text-gray-900">
-                                {% if detections %}
-                                    {% if view_mode == 'grouped' %}
-                                        {# For grouped view, calculate average from all groups #}
-                                        {% set total_conf = 0 %}
-                                        {% set total_dets = 0 %}
-                                        {% for group in detections %}
-                                            {% set total_conf = total_conf + (group.confidence_avg * group.total_detections) %}
-                                            {% set total_dets = total_dets + group.total_detections %}
-                                        {% endfor %}
-                                        {% if total_dets > 0 %}
-                                            {{ "%.1f"|format((total_conf / total_dets) * 100) }}%
-                                        {% else %}
-                                            --
-                                        {% endif %}
-                                    {% else %}
-                                        {# For individual view, use the original calculation #}
-                                        {{ "%.1f"|format((detections|sum(attribute='confidence')/detections|length)*100) }}%
-                                    {% endif %}
-                                {% else %}
-                                    --
-                                {% endif %}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Actions -->
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Actions</h2>
-                    
-                    <div class="space-y-3">
-                        {% if video.status == 'uploaded' or (video.status == 'completed' and video.processed_path) %}
-                            <!-- Status message for web-compatible videos -->
-                            <div class="bg-green-50 border border-green-200 rounded-md p-4 mb-3">
-                                {% if video.processed_path %}
-                                    <h4 class="text-sm font-medium text-green-800 mb-2">✅ Converted Video Ready</h4>
-                                    <p class="text-sm text-green-700 mb-3">This video has been automatically converted to web-compatible MP4 format and is ready for processing.</p>
-                                {% else %}
-                                    <h4 class="text-sm font-medium text-green-800 mb-2">✅ Web-Compatible Format</h4>
-                                    <p class="text-sm text-green-700 mb-3">This video is already in a web-compatible format and ready to play.</p>
-                                {% endif %}
-                            </div>
-                            
-                            <!-- Process Video Form -->
-                            <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST" class="space-y-3">
-                                <div class="bg-blue-50 border border-blue-200 rounded-md p-4">
-                                    <h4 class="text-sm font-medium text-blue-800 mb-3">Process Video Options</h4>
-                                    
-                                    {% if video.detected_persons and video.detected_persons|length > 0 %}
-                                    <div class="bg-amber-50 border border-amber-200 rounded p-2 mb-3">
-                                        <p class="text-xs text-amber-700">
-                                            ⚠️ <strong>Note:</strong> This video has {{ video.detected_persons|length }} existing detection(s). 
-                                            Processing will <strong>clear all existing data</strong> and re-extract persons from scratch.
-                                        </p>
-                                    </div>
-                                    {% endif %}
-                                    
-                                    <div class="space-y-2">
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="extract_persons" value="true" checked class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
-                                            <span class="ml-2 text-sm text-gray-700">Extract persons from video</span>
-                                        </label>
-                                        
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="face_recognition" value="true" class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
-                                            <span class="ml-2 text-sm text-gray-700">Run face recognition</span>
-                                        </label>
-                                        
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="extract_frames" value="true" class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
-                                            <span class="ml-2 text-sm text-gray-700">Extract key frames</span>
-                                        </label>
-                                    </div>
-                                </div>
-                                
-                                <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" onclick="return confirm('Start person extraction for this video?{% if video.detected_persons and video.detected_persons|length > 0 %} This will delete {{ video.detected_persons|length }} existing detection(s) and start fresh.{% endif %}')">
-                                    Process Video
-                                </button>
-                            </form>
-                        {% elif video.status == 'converting' %}
-                            <div class="bg-blue-50 border border-blue-200 rounded-md p-4">
-                                <h4 class="text-sm font-medium text-blue-800 mb-2">🔄 Auto-Converting Video</h4>
-                                <div class="flex items-center mb-3">
-                                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
-                                    <span class="text-sm text-blue-700">Automatically converting to web-compatible MP4 format...</span>
-                                </div>
-                                
-                                <!-- Progress Bar -->
-                                <div class="mb-3">
-                                    <div class="flex justify-between text-xs text-blue-600 mb-1">
-                                        <span>Progress</span>
-                                        <span id="progressPercent">0%</span>
-                                    </div>
-                                    <div class="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
-                                        <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300 progress-bar-animated" style="width: 0%"></div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Progress Message -->
-                                <div class="text-xs text-blue-600 mb-3">
-                                    <div id="progressMessage">This video was detected as non-web-compatible and is being converted automatically...</div>
-                                    <div class="mt-1">
-                                        Started: {{ video.processing_started_at.strftime('%H:%M:%S') if video.processing_started_at }}
-                                    </div>
-                                </div>
-                                
-                                <!-- Real-time Status -->
-                                <div id="conversionProgress" class="text-xs text-blue-600 bg-blue-100 p-2 rounded">
-                                    <div class="flex items-center">
-                                        <div class="h-2 w-2 bg-blue-600 rounded-full mr-2 live-indicator"></div>
-                                        <span id="liveStatus" class="conversion-status-live">Checking conversion status...</span>
-                                    </div>
-                                </div>
-                                
-                                <!-- Debug Panel (only visible in converting state) -->
-                                <div id="debugPanel" class="mt-4 p-3 bg-gray-100 rounded text-xs text-gray-600">
-                                    <div class="font-medium mb-2">🔧 Debug Information:</div>
-                                    <div id="debugInfo">
-                                        <div>• Status: <span id="debugStatus">Unknown</span></div>
-                                        <div>• Progress: <span id="debugProgress">0%</span></div>
-                                        <div>• Message: <span id="debugMessage">No message</span></div>
-                                        <div>• Last Update: <span id="debugLastUpdate">Never</span></div>
-                                        <div>• API Calls: <span id="debugApiCalls">0</span></div>
-                                        <div>• Task ID: <span id="debugTaskId">None</span></div>
-                                        <div>• WebSocket: <span id="debugWebSocket">Disconnected</span></div>
-                                        <div>• Connection: <span id="debugConnection">AJAX Polling</span></div>
-                                    </div>
-                                    <button onclick="toggleDebugPanel()" class="mt-2 text-xs bg-gray-300 px-2 py-1 rounded">Hide Debug</button>
-                                </div>
-                            </div>
-                        {% elif video.status == 'processing' %}
-                            <!-- Processing status with cancel option -->
-                            <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-3">
-                                <h4 class="text-sm font-medium text-yellow-800 mb-2">⏳ Person Extraction In Progress</h4>
-                                <p class="text-sm text-yellow-700 mb-3">
-                                    The system is currently extracting persons from this video. 
-                                    {% if video.processing_started_at %}
-                                        Started: {{ video.processing_started_at.strftime('%b %d at %H:%M') }}
-                                    {% endif %}
-                                </p>
-                                <p class="text-xs text-yellow-600">
-                                    If the process appears stuck, you can cancel and retry.
-                                </p>
-                            </div>
-                            
-                            <!-- Cancel Processing -->
-                            <form action="{{ url_for('videos.cancel_processing', id=video.id) }}" method="POST">
-                                <button type="submit" class="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700" onclick="return confirm('Cancel person extraction? This will stop the current process and reset the video so you can retry.')">
-                                    🛑 Cancel Processing
-                                </button>
-                            </form>
-                        {% elif video.status == 'completed' %}
-                            <button class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                                Run Face Recognition
-                            </button>
-                            
-                            <button class="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
-                                Export Results
-                            </button>
-                        {% elif video.status == 'failed' %}
-                            <!-- Error status message -->
-                            <div class="bg-red-50 border border-red-200 rounded-md p-4 mb-3">
-                                <h4 class="text-sm font-medium text-red-800 mb-2">❌ Person Extraction Failed</h4>
-                                <p class="text-sm text-red-700 mb-3">
-                                    {% if video.error_message %}
-                                        Error: {{ video.error_message }}
-                                    {% else %}
-                                        The person extraction process failed. You can retry with the same or different options.
-                                    {% endif %}
-                                </p>
-                                
-                                {% if video.processing_completed_at %}
-                                    <p class="text-xs text-red-600">
-                                        Failed at: {{ video.processing_completed_at.strftime('%b %d, %Y at %H:%M') }}
-                                    </p>
-                                {% endif %}
-                            </div>
-                            
-                            <!-- Retry Processing Form -->
-                            <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST" class="space-y-3">
-                                <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-                                    <h4 class="text-sm font-medium text-yellow-800 mb-3">🔄 Retry Person Extraction</h4>
-                                    
-                                    {% if video.detected_persons and video.detected_persons|length > 0 %}
-                                    <div class="bg-red-50 border border-red-200 rounded p-2 mb-3">
-                                        <p class="text-xs text-red-700">
-                                            ⚠️ <strong>Warning:</strong> This video has {{ video.detected_persons|length }} existing detection(s). 
-                                            Retry will <strong>delete all existing data</strong> and start fresh person extraction.
-                                        </p>
-                                    </div>
-                                    {% endif %}
-                                    
-                                    <div class="space-y-2">
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="extract_persons" value="true" checked class="rounded border-gray-300 text-yellow-600 shadow-sm focus:border-yellow-300 focus:ring focus:ring-yellow-200 focus:ring-opacity-50">
-                                            <span class="ml-2 text-sm text-gray-700">Extract persons from video</span>
-                                        </label>
-                                        
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="face_recognition" value="true" class="rounded border-gray-300 text-yellow-600 shadow-sm focus:border-yellow-300 focus:ring focus:ring-yellow-200 focus:ring-opacity-50">
-                                            <span class="ml-2 text-sm text-gray-700">Run face recognition</span>
-                                        </label>
-                                        
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="extract_frames" value="true" class="rounded border-gray-300 text-yellow-600 shadow-sm focus:border-yellow-300 focus:ring focus:ring-yellow-200 focus:ring-opacity-50">
-                                            <span class="ml-2 text-sm text-gray-700">Extract key frames</span>
-                                        </label>
-                                    </div>
-                                </div>
-                                
-                                <button type="submit" class="w-full px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700" onclick="return confirm('Retry person extraction for this video?{% if video.detected_persons and video.detected_persons|length > 0 %} This will permanently delete {{ video.detected_persons|length }} existing detection(s) and start fresh extraction.{% endif %}')">
-                                    🔄 Retry Person Extraction
-                                </button>
-                            </form>
-                        {% endif %}
-                        
-                        <a href="{{ url_for('videos.download_video', filename=video.file_path) }}" 
-                           class="block w-full px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-center">
-                            Download Original
-                        </a>
-                        
-                        <!-- Delete Button -->
-                        <form action="{{ url_for('videos.delete', id=video.id) }}" method="POST" 
-                              onsubmit="return confirm('Are you sure you want to delete this video? This action cannot be undone.')">
-                            <button type="submit" class="w-full px-4 py-2 border border-red-300 rounded-md text-red-700 hover:bg-red-50">
-                                Delete Video
-                            </button>
-                        </form>
-                        
-                        <!-- Force Reset Button for stuck videos -->
-                        {% if video.status == 'processing' %}
-                        <form action="{{ url_for('videos.force_reset', id=video.id) }}" method="POST" 
-                              onsubmit="return confirm('Force reset this video? This will mark it as failed and allow you to delete or retry it.')">
-                            <button type="submit" class="w-full px-4 py-2 border border-orange-300 rounded-md text-orange-700 hover:bg-orange-50">
-                                🔧 Force Reset (Stuck Video)
-                            </button>
-                        </form>
-                        {% endif %}
-                        
-                        <!-- Temporary testing button (remove in production) -->
-                        {% if video.status in ['uploaded', 'completed'] %}
-                        <form action="{{ url_for('videos.simulate_error', id=video.id) }}" method="POST" class="mt-2">
-                            <button type="submit" class="w-full px-4 py-2 border border-orange-300 rounded-md text-orange-700 hover:bg-orange-50 text-sm" onclick="return confirm('Simulate an error to test retry functionality?')">
-                                🧪 Simulate Error (Testing)
-                            </button>
-                        </form>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <!-- Processing Log -->
-                {% if video.processing_log %}
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Processing Log</h2>
-                    
-                    <div class="bg-gray-50 rounded-md p-3 max-h-32 overflow-y-auto">
-                        <pre class="text-xs text-gray-700 whitespace-pre-wrap">{{ video.processing_log }}</pre>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
-    <!-- Detailed Detected Persons Table (Bottom Section) -->
-    {% if detections and detections|length > 0 %}
-    <div class="container mx-auto px-4 mt-8">
-        <div class="max-w-6xl mx-auto">
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-                    <h2 class="text-xl font-semibold text-gray-800 mb-2 sm:mb-0">
-                        Detailed Detection Results
-                    </h2>
-                    <div class="text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-md">
-                        {{ detections|length }} person{{ 's' if detections|length != 1 }} detected • 
-                        {{ detections|selectattr('is_identified')|list|length }} identified
                     </div>
                 </div>
                 
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Person ID</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Identity</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            {% if view_mode == 'grouped' %}
-                                {# For grouped view, iterate through all detections in all groups #}
-                                {% for group in detections %}
-                                    {% for detection in group.detections %}
-                                    <tr class="hover:bg-gray-50 detection-table-row" data-detection-id="{{ detection.id }}">
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                            {% if detection.person_id %}
-                                                {% if detection.person_id|string == detection.person_id %}
-                                                    {# person_id is a string #}
-                                                    {% if detection.person_id|int(-1) != -1 %}
-                                                        {# It's a numeric string like "2" #}
-                                                        PERSON-{{ "%04d"|format(detection.person_id|int) }}
-                                                    {% elif detection.person_id.startswith('PERSON-') %}
-                                                        {# Already formatted as PERSON-XXXX #}
-                                                        {{ detection.person_id }}
-                                                    {% else %}
-                                                        {# Some other string format #}
-                                                        PERSON-{{ detection.person_id }}
-                                                    {% endif %}
-                                                {% else %}
-                                                    {# person_id is a number #}
-                                                    PERSON-{{ "%04d"|format(detection.person_id|int) }}
-                                                {% endif %}
-                                            {% elif detection.track_id %}
-                                                {% if detection.track_id|string == detection.track_id and detection.track_id.startswith('TRACK-') %}
-                                                    {# Convert TRACK-0002 to PERSON-0002 #}
-                                                    PERSON-{{ detection.track_id[6:] }}
-                                                {% else %}
-                                                    PERSON-{{ "%04d"|format(detection.track_id|int) }}
-                                                {% endif %}
-                                            {% else %}
-                                                PERSON-{{ "%04d"|format(loop.index) }}
-                                            {% endif %}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {{ "%.2f"|format(detection.timestamp) }}s
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            <div class="flex items-center">
-                                                <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                                                    <div class="bg-blue-600 h-2 rounded-full" style="width: {{ detection.confidence * 100 }}%"></div>
-                                                </div>
-                                                <span>{{ "%.1f"|format(detection.confidence * 100) }}%</span>
-                                            </div>
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {% if detection.is_identified and detection.employee %}
-                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                    ✅ {{ detection.employee.name }}
-                                                </span>
-                                            {% else %}
-                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                                    ❓ Unknown
-                                                </span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {% if detection.bbox_x is number and detection.bbox_y is number and detection.bbox_width is number and detection.bbox_height is number %}
-                                                <div class="text-xs">
-                                                    <div>X: {{ detection.bbox_x }}, Y: {{ detection.bbox_y }}</div>
-                                                    <div>{{ detection.bbox_width }}×{{ detection.bbox_height }}px</div>
-                                                </div>
-                                            {% else %}
-                                                <span class="text-red-500 text-xs">❌ Invalid bbox data</span>
-                                            {% endif %}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <div class="flex space-x-2">
-                                                {% if detection.bbox_x is number and detection.bbox_y is number and detection.bbox_width is number and detection.bbox_height is number and detection.timestamp is number %}
-                                                    <button onclick="navigateToDetection({{ detection.timestamp }}, {{ detection.id }}, {{ detection.bbox_x }}, {{ detection.bbox_y }}, {{ detection.bbox_width }}, {{ detection.bbox_height }})" 
-                                                    class="inline-flex items-center px-3 py-1 border border-blue-300 text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                                                    data-detection-id="{{ detection.id }}"
-                                                    data-timestamp="{{ detection.timestamp }}"
-                                                    data-frame-number="{{ detection.frame_number }}"
-                                                    data-bbox-x="{{ detection.bbox_x }}"
-                                                    data-bbox-y="{{ detection.bbox_y }}" 
-                                                    data-bbox-width="{{ detection.bbox_width }}"
-                                                    data-bbox-height="{{ detection.bbox_height }}">
-                                                🎯 Go to Frame
-                                                    </button>
-                                                {% else %}
-                                                    <span class="text-red-500 text-xs">❌ Invalid data</span>
-                                                {% endif %}
-                                        
-                                                {% if not detection.is_identified %}
-                                                    <button onclick="identifyPerson({{ detection.id }})" 
-                                                            class="inline-flex items-center px-3 py-1 border border-green-300 text-sm leading-4 font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                                                        👤 Identify
-                                                    </button>
-                                                {% endif %}
-                                            </div>
-                                        </td>
-                            </tr>
-                                    {% endfor %}
-                                {% endfor %}
-                            {% else %}
-                                {# For individual view, iterate through detections directly #}
-                                {% for detection in detections %}
-                                <tr class="hover:bg-gray-50 detection-table-row" data-detection-id="{{ detection.id }}">
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {% if detection.person_id %}
-                                        {% if detection.person_id|string == detection.person_id %}
-                                            {# person_id is a string #}
-                                            {% if detection.person_id|int(-1) != -1 %}
-                                                {# It's a numeric string like "2" #}
-                                                PERSON-{{ "%04d"|format(detection.person_id|int) }}
-                                            {% elif detection.person_id.startswith('PERSON-') %}
-                                                {# Already formatted as PERSON-XXXX #}
-                                                {{ detection.person_id }}
-                                            {% else %}
-                                                {# Some other string format #}
-                                                PERSON-{{ detection.person_id }}
-                                            {% endif %}
-                                        {% else %}
-                                            {# person_id is a number #}
-                                            PERSON-{{ "%04d"|format(detection.person_id|int) }}
-                                        {% endif %}
-                                    {% elif detection.track_id %}
-                                        {% if detection.track_id|string == detection.track_id and detection.track_id.startswith('TRACK-') %}
-                                            {# Convert TRACK-0002 to PERSON-0002 #}
-                                            PERSON-{{ detection.track_id[6:] }}
-                                        {% else %}
-                                            PERSON-{{ "%04d"|format(detection.track_id|int) }}
-                                        {% endif %}
-                                    {% else %}
-                                        PERSON-{{ "%04d"|format(loop.index) }}
-                                    {% endif %}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {{ "%.2f"|format(detection.timestamp) }}s
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    <div class="flex items-center">
-                                        <div class="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                                            <div class="bg-blue-600 h-2 rounded-full" style="width: {{ detection.confidence * 100 }}%"></div>
-                                        </div>
-                                        <span>{{ "%.1f"|format(detection.confidence * 100) }}%</span>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {% if detection.is_identified and detection.employee %}
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                            ✅ {{ detection.employee.name }}
-                                        </span>
-                                    {% else %}
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                            ❓ Unknown
-                                        </span>
-                                    {% endif %}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {% if detection.bbox_x is number and detection.bbox_y is number and detection.bbox_width is number and detection.bbox_height is number %}
-                                        <div class="text-xs">
-                                            <div>X: {{ detection.bbox_x }}, Y: {{ detection.bbox_y }}</div>
-                                            <div>{{ detection.bbox_width }}×{{ detection.bbox_height }}px</div>
-                                        </div>
-                                    {% else %}
-                                        <span class="text-red-500 text-xs">❌ Invalid bbox data</span>
-                                    {% endif %}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    <div class="flex space-x-2">
-                                        {% if detection.bbox_x is number and detection.bbox_y is number and detection.bbox_width is number and detection.bbox_height is number and detection.timestamp is number %}
-                                            <button onclick="navigateToDetection({{ detection.timestamp }}, {{ detection.id }}, {{ detection.bbox_x }}, {{ detection.bbox_y }}, {{ detection.bbox_width }}, {{ detection.bbox_height }})" 
-                                                    class="inline-flex items-center px-3 py-1 border border-blue-300 text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                                                    data-detection-id="{{ detection.id }}"
-                                                    data-timestamp="{{ detection.timestamp }}"
-                                                    data-frame-number="{{ detection.frame_number }}"
-                                                    data-bbox-x="{{ detection.bbox_x }}"
-                                                    data-bbox-y="{{ detection.bbox_y }}" 
-                                                    data-bbox-width="{{ detection.bbox_width }}"
-                                                    data-bbox-height="{{ detection.bbox_height }}">
-                                                🎯 Go to Frame
-                                                    </button>
-                                                {% else %}
-                                            <span class="text-red-500 text-xs">❌ Invalid data</span>
-                                        {% endif %}
-                                        
-                                        {% if not detection.is_identified %}
-                                            <button onclick="identifyPerson({{ detection.id }})" 
-                                                    class="inline-flex items-center px-3 py-1 border border-green-300 text-sm leading-4 font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                                                👤 Identify
-                                            </button>
-                                        {% endif %}
-                                    </div>
-                                </td>
-                            </tr>
-                                {% endfor %}
-                            {% endif %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-</div>
+
 
 <script>
 // Video handler functions are now defined at the top of the page
@@ -1942,17 +1529,6 @@ function updateDebugInfo(data) {
     });
 }
 
-function toggleDebugPanel() {
-    const debugPanel = document.getElementById('debugPanel');
-    if (debugPanel) {
-        const isVisible = !debugPanel.classList.contains('hidden');
-        if (isVisible) {
-            debugPanel.classList.add('hidden');
-        } else {
-            debugPanel.classList.remove('hidden');
-        }
-        
-        // Update button text
         const button = debugPanel.querySelector('button[onclick="toggleDebugPanel()"]');
         if (button) {
             button.textContent = isVisible ? 'Show Debug' : 'Hide Debug';
@@ -1962,67 +1538,6 @@ function toggleDebugPanel() {
     }
 }
 
-// Enhanced navigation for person detection
-function navigateToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHeight) {
-    console.log(`🎯 Navigating to detection ${detectionId} at ${timestamp}s`);
-    
-    const video = document.getElementById('videoPlayer');
-    if (!video) {
-        console.error('❌ Video player not found');
-        return;
-    }
-    
-    // Validate timestamp
-    if (isNaN(timestamp) || timestamp < 0) {
-        console.error('❌ Invalid timestamp:', timestamp);
-        return;
-    }
-    
-    // Wait for video metadata to be loaded
-    if (video.readyState < 1) {
-        console.log('⏳ Waiting for video metadata to load...');
-        video.addEventListener('loadedmetadata', function() {
-            performNavigation();
-        }, { once: true });
-    } else {
-        performNavigation();
-    }
-    
-    function performNavigation() {
-        console.log(`🎬 Video duration: ${video.duration}s, seeking to: ${timestamp}s`);
-        
-        // Validate timestamp against video duration
-        if (timestamp > video.duration) {
-            console.warn('⚠️ Timestamp exceeds video duration, adjusting...');
-            timestamp = Math.min(timestamp, video.duration - 0.1);
-        }
-        
-        // Seek to timestamp and PAUSE (don't auto-play)
-        video.currentTime = timestamp;
-        if (!video.paused) {
-            video.pause();
-        }
-        
-        // Highlight the detection row in the navigator panel
-        highlightDetectionInNavigator(detectionId);
-        
-        // Remove any existing bounding box (cleanup)
-        const existingBox = document.getElementById('boundingBox');
-        if (existingBox) {
-            existingBox.remove();
-        }
-        
-        // Update current time display
-        updateTimeDisplay();
-        
-        // Scroll detection item into view if needed
-        const detectionItem = document.querySelector(`[data-detection-id="${detectionId}"]`);
-        if (detectionItem) {
-            detectionItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        
-        console.log('✅ Navigation to detection completed (no box drawn)');
-    }
 }
 
 // Legacy function for compatibility
@@ -2078,8 +1593,7 @@ function jumpToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHe
         // Highlight the detection in the table
         highlightDetectionRow(detectionId);
         
-        // Show bounding box overlay (if video container supports it)
-        showBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp);
+        // Bounding box drawing removed as requested
         
         // Scroll video into view
         video.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2322,37 +1836,11 @@ function getDemoCalibrationOffsets() {
     return { x: offsetX, y: offsetY, scaleX, scaleY };
 }
 
-function toggleDemoDebugMode() {
-    window.demoDebugMode = !window.demoDebugMode;
-    
-    if (window.demoDebugMode) {
-        console.log('🎯 DEMO DEBUG MODE ACTIVATED for your boss demo!');
-        
-        // Initialize manual offsets if not exist
-        if (!window.demoManualOffsets) {
-            window.demoManualOffsets = { x: 0, y: 0, scaleX: 1.0, scaleY: 1.0 };
-        }
-        
-        // Show debug overlay
-        showDemoDebugOverlay();
-        
-        // Show current detection with debug info
-        refreshCurrentDetectionWithDebug();
-        
-    } else {
-        console.log('🎯 DEMO DEBUG MODE DEACTIVATED');
-        hideDemoDebugOverlay();
-    }
-}
-
-function showDemoDebugOverlay() {
     // Remove existing overlay
-    const existing = document.getElementById('demoDebugOverlay');
     if (existing) existing.remove();
     
     // Create debug overlay
     const overlay = document.createElement('div');
-    overlay.id = 'demoDebugOverlay';
     overlay.className = 'fixed top-20 right-4 z-50 bg-black bg-opacity-90 text-white p-4 rounded-lg shadow-lg max-w-sm';
     overlay.innerHTML = `
         <div class="text-lg font-bold text-yellow-300 mb-2">🎯 DEMO DEBUG MODE</div>
@@ -2379,7 +1867,6 @@ function showDemoDebugOverlay() {
 }
 
 function hideDemoDebugOverlay() {
-    const overlay = document.getElementById('demoDebugOverlay');
     if (overlay) overlay.remove();
 }
 
@@ -3266,39 +2753,33 @@ document.addEventListener('keydown', function(event) {
             break;
         case 'ArrowUp':
             // Arrow keys for manual fine-tuning in demo mode
-            if (window.demoDebugMode) {
                 adjustDemoOffsets(0, -1);
                 event.preventDefault();
             }
             break;
         case 'ArrowDown':
-            if (window.demoDebugMode) {
                 adjustDemoOffsets(0, 1);
                 event.preventDefault();
             }
             break;
         case 'ArrowLeft':
-            if (window.demoDebugMode && event.ctrlKey) {
                 adjustDemoOffsets(-1, 0);
                 event.preventDefault();
             }
             break;
         case 'ArrowRight':
-            if (window.demoDebugMode && event.ctrlKey) {
                 adjustDemoOffsets(1, 0);
                 event.preventDefault();
             }
             break;
         case 'r':
             // 'R' key to reset demo offsets
-            if (window.demoDebugMode) {
                 resetDemoOffsets();
                 event.preventDefault();
             }
             break;
         case 's':
             // 'S' key to save demo offsets
-            if (window.demoDebugMode) {
                 saveDemoOffsets();
                 event.preventDefault();
             }

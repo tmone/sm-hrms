@@ -42,10 +42,70 @@
     animation: liveDot 1.5s infinite;
 }
 </style>
+
+<script>
+// Define video handler functions early so they're available for inline event handlers
+function handleVideoLoad() {
+    console.log('Video loading started...');
+    const loading = document.getElementById('videoLoading');
+    const error = document.getElementById('videoError');
+    if (loading) loading.classList.add('hidden');
+    if (error) error.classList.add('hidden');
+}
+
+function handleVideoError() {
+    console.log('❌ Video error occurred');
+    const video = document.getElementById('videoPlayer');
+    const error = document.getElementById('videoError');
+    
+    if (video && video.error) {
+        console.error('Video error details:', {
+            code: video.error.code,
+            message: video.error.message,
+            MEDIA_ERR_ABORTED: video.error.code === 1,
+            MEDIA_ERR_NETWORK: video.error.code === 2,
+            MEDIA_ERR_DECODE: video.error.code === 3,
+            MEDIA_ERR_SRC_NOT_SUPPORTED: video.error.code === 4
+        });
+        
+        // Try to get more info about the video
+        const sources = video.querySelectorAll('source');
+        sources.forEach((source, index) => {
+            console.log(`Source ${index + 1}: ${source.src}`);
+            console.log(`Type: ${source.type}`);
+        });
+    }
+    
+    if (error) {
+        error.classList.remove('hidden');
+    }
+    if (video) {
+        // Don't hide the video, might still be useful for debugging
+        // video.style.display = 'none';
+    }
+}
+
+// Toggle person detections in grouped view
+function togglePersonDetections(personId) {
+    const detectionsDiv = document.getElementById(`detections-${personId}`);
+    const toggleSpan = document.getElementById(`toggle-${personId}`);
+    
+    if (detectionsDiv) {
+        if (detectionsDiv.classList.contains('hidden')) {
+            detectionsDiv.classList.remove('hidden');
+            if (toggleSpan) toggleSpan.textContent = '▲';
+        } else {
+            detectionsDiv.classList.add('hidden');
+            if (toggleSpan) toggleSpan.textContent = '▼';
+        }
+    }
+}
+</script>
+
 <div class="container mx-auto px-4">
     <div class="max-w-6xl mx-auto">
         <!-- Header -->
-        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6" data-video-fps="{{ video.fps }}">
             <div class="flex justify-between items-start">
                 <div>
                     <h1 class="text-2xl font-bold text-gray-800">{{ video.title or video.filename }}</h1>
@@ -74,16 +134,260 @@
             </div>
         </div>
 
-        <!-- Main Content: Side-by-Side Layout -->
-        <div class="flex flex-col lg:flex-row gap-6">
-            <!-- Left Side: Video Player (Always Visible) -->
-            <div class="lg:w-2/3">
+        <!-- Actions Section (Full Width) -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">Actions</h2>
+            
+            <div class="space-y-3">
+                {% if video.status == 'uploaded' or (video.status == 'completed' and video.processed_path) %}
+                    <!-- Status message for web-compatible videos -->
+                    <div class="bg-green-50 border border-green-200 rounded-md p-4 mb-3">
+                        {% if video.processed_path %}
+                            <h4 class="text-sm font-medium text-green-800 mb-2">✅ Converted Video Ready</h4>
+                            <p class="text-sm text-green-700 mb-3">This video has been automatically converted to web-compatible MP4 format and is ready for processing.</p>
+                        {% else %}
+                            <h4 class="text-sm font-medium text-green-800 mb-2">✅ Web-Compatible Format</h4>
+                            <p class="text-sm text-green-700 mb-3">This video is already in a web-compatible format and ready to play.</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Process Video Form -->
+                    <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST" class="space-y-3">
+                        <div class="bg-blue-50 border border-blue-200 rounded-md p-4">
+                            <h4 class="text-sm font-medium text-blue-800 mb-3">Process Video Options</h4>
+                            
+                            {% if video.detected_persons and video.detected_persons|length > 0 %}
+                            <div class="bg-amber-50 border border-amber-200 rounded p-2 mb-3">
+                                <p class="text-xs text-amber-700">
+                                    ⚠️ <strong>Note:</strong> This video has {{ video.detected_persons|length }} existing detection(s). 
+                                    Processing will <strong>clear all existing data</strong> and re-extract persons from scratch.
+                                </p>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="space-y-2">
+                                <label class="flex items-center">
+                                    <input type="checkbox" name="extract_persons" value="true" checked class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                                    <span class="ml-2 text-sm text-gray-700">Extract persons from video</span>
+                                </label>
+                                
+                                <label class="flex items-center">
+                                    <input type="checkbox" name="face_recognition" value="true" class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                                    <span class="ml-2 text-sm text-gray-700">Run face recognition</span>
+                                </label>
+                                
+                                <label class="flex items-center">
+                                    <input type="checkbox" name="extract_frames" value="true" class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                                    <span class="ml-2 text-sm text-gray-700">Extract key frames</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" onclick="return confirm('Start person extraction for this video?{% if video.detected_persons and video.detected_persons|length > 0 %} This will delete {{ video.detected_persons|length }} existing detection(s) and start fresh.{% endif %}')">
+                            Process Video
+                        </button>
+                    </form>
+                {% elif video.status == 'converting' %}
+                    <div class="bg-blue-50 border border-blue-200 rounded-md p-4">
+                        <h4 class="text-sm font-medium text-blue-800 mb-2">🔄 Auto-Converting Video</h4>
+                        <div class="flex items-center mb-3">
+                            <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
+                            <span class="text-sm text-blue-700">Automatically converting to web-compatible MP4 format...</span>
+                        </div>
+                        
+                        <!-- Progress Bar -->
+                        <div class="mb-3">
+                            <div class="flex justify-between text-xs text-blue-600 mb-1">
+                                <span>Progress</span>
+                                <span id="progressPercent">0%</span>
+                            </div>
+                            <div class="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
+                                <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300 progress-bar-animated" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Progress Message -->
+                        <div class="text-xs text-blue-600 mb-3">
+                            <div id="progressMessage">This video was detected as non-web-compatible and is being converted automatically...</div>
+                            <div class="mt-1">
+                                Started: {{ video.processing_started_at.strftime('%H:%M:%S') if video.processing_started_at }}
+                            </div>
+                        </div>
+                        
+                        <!-- Real-time Status -->
+                        <div id="conversionProgress" class="text-xs text-blue-600 bg-blue-100 p-2 rounded">
+                            <div class="flex items-center">
+                                <div class="h-2 w-2 bg-blue-600 rounded-full mr-2 live-indicator"></div>
+                                <span id="liveStatus" class="conversion-status-live">Checking conversion status...</span>
+                            </div>
+                        </div>
+                        
+                    </div>
+                {% elif video.status == 'processing' %}
+                    <!-- Processing status with cancel option -->
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-3">
+                        <h4 class="text-sm font-medium text-yellow-800 mb-2">⏳ Person Extraction In Progress</h4>
+                        <p class="text-sm text-yellow-700 mb-3">
+                            The system is currently extracting persons from this video. 
+                            {% if video.processing_started_at %}
+                                Started: {{ video.processing_started_at.strftime('%b %d at %H:%M') }}
+                            {% endif %}
+                        </p>
+                        <p class="text-xs text-yellow-600">
+                            If the process appears stuck, you can cancel and retry.
+                        </p>
+                    </div>
+                    
+                    <!-- Cancel Processing -->
+                    <form action="{{ url_for('videos.cancel_processing', id=video.id) }}" method="POST">
+                        <button type="submit" class="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700" onclick="return confirm('Cancel person extraction? This will stop the current process and reset the video so you can retry.')">
+                            🛑 Cancel Processing
+                        </button>
+                    </form>
+                {% elif video.status == 'completed' %}
+                    <button class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                        Run Face Recognition
+                    </button>
+                    
+                    <button class="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                        Export Results
+                    </button>
+                {% elif video.status == 'failed' %}
+                    <!-- Error status message -->
+                    <div class="bg-red-50 border border-red-200 rounded-md p-4 mb-3">
+                        <h4 class="text-sm font-medium text-red-800 mb-2">❌ Person Extraction Failed</h4>
+                        <p class="text-sm text-red-700 mb-3">
+                            {% if video.error_message %}
+                                Error: {{ video.error_message }}
+                            {% else %}
+                                The person extraction process failed. You can retry with the same or different options.
+                            {% endif %}
+                        </p>
+                        
+                        {% if video.processing_completed_at %}
+                            <p class="text-xs text-red-600">
+                                Failed at: {{ video.processing_completed_at.strftime('%b %d, %Y at %H:%M') }}
+                            </p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Retry Processing Form -->
+                    <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST" class="space-y-3">
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4">
+                            <h4 class="text-sm font-medium text-yellow-800 mb-3">🔄 Retry Person Extraction</h4>
+                            
+                            {% if video.detected_persons and video.detected_persons|length > 0 %}
+                            <div class="bg-red-50 border border-red-200 rounded p-2 mb-3">
+                                <p class="text-xs text-red-700">
+                                    ⚠️ <strong>Warning:</strong> This video has {{ video.detected_persons|length }} existing detection(s). 
+                                    Retry will <strong>delete all existing data</strong> and start fresh person extraction.
+                                </p>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="space-y-2">
+                                <label class="flex items-center">
+                                    <input type="checkbox" name="extract_persons" value="true" checked class="rounded border-gray-300 text-yellow-600 shadow-sm focus:border-yellow-300 focus:ring focus:ring-yellow-200 focus:ring-opacity-50">
+                                    <span class="ml-2 text-sm text-gray-700">Extract persons from video</span>
+                                </label>
+                                
+                                <label class="flex items-center">
+                                    <input type="checkbox" name="face_recognition" value="true" class="rounded border-gray-300 text-yellow-600 shadow-sm focus:border-yellow-300 focus:ring focus:ring-yellow-200 focus:ring-opacity-50">
+                                    <span class="ml-2 text-sm text-gray-700">Run face recognition</span>
+                                </label>
+                                
+                                <label class="flex items-center">
+                                    <input type="checkbox" name="extract_frames" value="true" class="rounded border-gray-300 text-yellow-600 shadow-sm focus:border-yellow-300 focus:ring focus:ring-yellow-200 focus:ring-opacity-50">
+                                    <span class="ml-2 text-sm text-gray-700">Extract key frames</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="w-full px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700" onclick="return confirm('Retry person extraction for this video?{% if video.detected_persons and video.detected_persons|length > 0 %} This will permanently delete {{ video.detected_persons|length }} existing detection(s) and start fresh extraction.{% endif %}')">
+                            🔄 Retry Person Extraction
+                        </button>
+                    </form>
+                {% endif %}
+                
+                <a href="{{ url_for('videos.download_video', filename=video.file_path) }}" 
+                   class="block w-full px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-center">
+                    Download Original
+                </a>
+                
+                <!-- Delete Button -->
+                <form action="{{ url_for('videos.delete', id=video.id) }}" method="POST" 
+                      onsubmit="return confirm('Are you sure you want to delete this video? This action cannot be undone.')">
+                    <button type="submit" class="w-full px-4 py-2 border border-red-300 rounded-md text-red-700 hover:bg-red-50">
+                        Delete Video
+                    </button>
+                </form>
+                
+                <!-- Force Reset Button for stuck videos -->
+                {% if video.status == 'processing' %}
+                <form action="{{ url_for('videos.force_reset', id=video.id) }}" method="POST" 
+                      onsubmit="return confirm('Force reset this video? This will mark it as failed and allow you to delete or retry it.')">
+                    <button type="submit" class="w-full px-4 py-2 border border-orange-300 rounded-md text-orange-700 hover:bg-orange-50">
+                        🔧 Force Reset (Stuck Video)
+                    </button>
+                </form>
+                {% endif %}
+                
+                <!-- Temporary testing button (remove in production) -->
+                {% if video.status == 'uploaded' %}
+                <form action="{{ url_for('videos.simulate_error', id=video.id) }}" method="POST" class="mt-3">
+                    <button type="submit" class="w-full px-4 py-2 border border-orange-300 rounded-md text-orange-700 hover:bg-orange-50 text-sm" onclick="return confirm('Simulate an error to test retry functionality?')">
+                        🧪 Simulate Error (Testing)
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Main Content: Video Preview and Detection Navigator -->
+        <div class="flex flex-col xl:flex-row gap-6">
+            <!-- Video Player (Always Visible) -->
+            <div class="xl:w-2/3">
                 <div class="bg-white rounded-lg shadow-md p-6 sticky top-6">
                     <h2 class="text-lg font-semibold text-gray-800 mb-4">Video Preview</h2>
                     
-                    {% if video.processed_path %}
+                    {% if video.annotated_video_path %}
+                        <!-- Show annotated video with detections -->
+                        <div class="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                            <div class="flex items-center">
+                                <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                <span class="text-green-700 font-medium">✅ Person Detection Complete</span>
+                                <span class="text-green-600 text-sm ml-2">(showing detected video with bounding boxes)</span>
+                            </div>
+                        </div>
+                        <video id="videoPlayer" controls class="w-full rounded-lg" preload="metadata" 
+                               data-original-width="{{ video.resolution.split('x')[0] if video.resolution else '' }}"
+                               data-original-height="{{ video.resolution.split('x')[1] if video.resolution else '' }}"
+                               data-video-type="detected"
+                               data-video-path="{{ video.annotated_video_path }}">
+                            <!-- Primary: Use the stream-detected endpoint -->
+                            <source src="{{ url_for('videos.stream_detected_video', filename=video.annotated_video_path) }}" type="{{ 'video/x-msvideo' if video.annotated_video_path.endswith('.avi') else 'video/mp4' }}">
+                            <!-- Fallback 1: Direct path -->
+                            <source src="/processing/outputs/{{ video.annotated_video_path }}" type="{{ 'video/x-msvideo' if video.annotated_video_path.endswith('.avi') else 'video/mp4' }}">
+                            <!-- Fallback 2: Try with .avi extension if .mp4 fails -->
+                            {% if video.annotated_video_path.endswith('.mp4') %}
+                            <source src="/processing/outputs/{{ video.annotated_video_path.replace('.mp4', '.avi') }}" type="video/x-msvideo">
+                            {% endif %}
+                            <!-- Fallback 3: Other endpoints -->
+                            <source src="{{ url_for('videos.serve_detected_video', filename=video.annotated_video_path) }}" type="{{ 'video/x-msvideo' if video.annotated_video_path.endswith('.avi') else 'video/mp4' }}">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="mt-2 text-sm text-green-600 bg-green-50 p-2 rounded">
+                            🎯 <strong>Detection Results:</strong> {{ total_detections }} person detections found
+                            <br>📁 Person tracking data saved for face recognition processing
+                            <br>🎬 Playing detected video: {{ video.annotated_video_path }}
+                        </div>
+                    {% elif video.processed_path %}
                         <!-- Show converted video if available -->
                         <video id="videoPlayer" controls class="w-full rounded-lg" preload="metadata" 
+                               data-original-width="{{ video.resolution.split('x')[0] if video.resolution else '' }}"
+                               data-original-height="{{ video.resolution.split('x')[1] if video.resolution else '' }}" 
                                onloadstart="console.log('🎬 Loading converted video:', '{{ video.processed_path }}')"
                                oncanplay="console.log('✅ Converted video can play')" 
                                onerror="console.error('❌ Converted video error:', event.target.error)"
@@ -95,9 +399,12 @@
                         <div class="mt-2 text-sm text-green-600 bg-green-50 p-2 rounded">
                             ✅ <strong>Converted Video:</strong> This video has been automatically converted to web-compatible MP4 format.
                         </div>
-                    {% elif video.status == 'uploaded' and video.file_path %}
+                    {% elif video.file_path and video.status in ['uploaded', 'completed', 'failed'] and not video.annotated_video_path %}
                         <div id="videoContainer">
-                            <video id="videoPlayer" controls class="w-full rounded-lg" onloadstart="handleVideoLoad()" onerror="handleVideoError()">
+                            <video id="videoPlayer" controls class="w-full rounded-lg" 
+                                   data-original-width="{{ video.resolution.split('x')[0] if video.resolution else '' }}"
+                                   data-original-height="{{ video.resolution.split('x')[1] if video.resolution else '' }}"
+                                   onloadstart="handleVideoLoad()" onerror="handleVideoError()">
                                 <source src="{{ url_for('videos.stream_video', filename=video.file_path) }}" type="video/mp4">
                                 <source src="{{ url_for('videos.serve_video_static', filename=video.file_path) }}" type="video/mp4">
                                 Your browser does not support the video tag.
@@ -192,22 +499,6 @@
                                         <div class="text-sm text-blue-600 mt-2">
                                             <div id="processingMessage">Initializing person extraction...</div>
                                         </div>
-                                        
-                                        <!-- Cancel Button -->
-                                        <div class="mt-4">
-                                            <form action="{{ url_for('videos.cancel_processing', id=video.id) }}" method="POST" class="inline">
-                                                <button type="submit" class="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700" onclick="return confirm('Cancel person extraction? This will stop the current process and allow you to retry.')">
-                                                    🛑 Cancel Processing
-                                                </button>
-                                            </form>
-                                            
-                                            <!-- Debug Progress Test Button (Development Only) -->
-                                            {% if config.DEBUG or video.status == 'processing' %}
-                                            <button onclick="testProgressUI()" class="ml-2 px-3 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600">
-                                                🧪 Test Progress UI
-                                            </button>
-                                            {% endif %}
-                                        </div>
                                     </div>
                                 </div>
                             {% elif video.status == 'failed' %}
@@ -218,96 +509,154 @@
                                     <p class="text-gray-600">Processing failed</p>
                                     <p class="text-sm text-red-600 mt-1">{{ video.error_message or 'Unknown error' }}</p>
                                 </div>
+                            {% elif video.file_path %}
+                                <!-- Fallback: Show original video if no other conditions match -->
+                                <div id="videoContainer">
+                                    <video id="videoPlayer" controls class="w-full rounded-lg" 
+                                           data-original-width="{{ video.resolution.split('x')[0] if video.resolution else '' }}"
+                                           data-original-height="{{ video.resolution.split('x')[1] if video.resolution else '' }}"
+                                           onloadstart="handleVideoLoad()" onerror="handleVideoError()">
+                                        <source src="{{ url_for('videos.stream_video', filename=video.file_path) }}" type="video/mp4">
+                                        <source src="{{ url_for('videos.serve_video_static', filename=video.file_path) }}" type="video/mp4">
+                                        Your browser does not support the video tag.
+                                    </video>
+                                    <div class="mt-2 text-sm text-yellow-600 bg-yellow-50 p-2 rounded">
+                                        ⚠️ <strong>Original Video:</strong> Showing original upload (Status: {{ video.status }})
+                                    </div>
+                                </div>
                             {% else %}
                                 <div class="text-center">
                                     <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 002 2v8a2 2 0 002 2z"></path>
                                     </svg>
                                     <p class="text-gray-600">Video preview not available</p>
+                                    <p class="text-sm text-gray-500 mt-2">
+                                        Status: {{ video.status }}<br>
+                                        File path: {{ video.file_path if video.file_path else 'No file path' }}<br>
+                                        Processed path: {{ video.processed_path if video.processed_path else 'No processed path' }}<br>
+                                        Annotated path: {{ video.annotated_video_path if video.annotated_video_path else 'No annotated path' }}
+                                    </p>
                                 </div>
                             {% endif %}
                         </div>
                     {% endif %}
                 </div>
-
-                <!-- Processing Details -->
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Processing Details</h2>
-                    
-                    <div class="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-500">Processing Status</label>
-                            <p class="mt-1 text-sm text-gray-900">{{ video.status.title() }}</p>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-500">Priority</label>
-                            <p class="mt-1 text-sm text-gray-900">{{ video.priority.title() if video.priority else 'Normal' }}</p>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-500">Started</label>
-                            <p class="mt-1 text-sm text-gray-900">
-                                {% if video.processing_started_at %}
-                                    {{ video.processing_started_at.strftime('%b %d, %Y at %H:%M') }}
-                                {% else %}
-                                    Not started
-                                {% endif %}
-                            </p>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-500">Completed</label>
-                            <p class="mt-1 text-sm text-gray-900">
-                                {% if video.processing_completed_at %}
-                                    {{ video.processing_completed_at.strftime('%b %d, %Y at %H:%M') }}
-                                {% else %}
-                                    Not completed
-                                {% endif %}
-                            </p>
-                        </div>
-                    </div>
-                    
-                    {% if video.status == 'failed' and video.error_message %}
-                        <div class="bg-red-50 border border-red-200 rounded-md p-4">
-                            <h4 class="text-sm font-medium text-red-800">Error Details</h4>
-                            <p class="mt-1 text-sm text-red-700">{{ video.error_message }}</p>
-                        </div>
-                    {% endif %}
-                    
-                    <!-- Video Controls and Info -->
-                    <div class="mt-4 text-sm text-gray-600">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <span id="currentTimeDisplay">0:00</span> / <span id="durationDisplay">0:00</span>
-                            </div>
-                            <div id="detectionCounter" class="text-blue-600 font-medium">
-                                No detection at current frame
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
-            <!-- Right Side: Detection Navigation Panel -->
-            <div class="lg:w-1/3">
+            <!-- Right Column -->
+            <div class="xl:w-1/3">
+                <!-- Detection Navigation Panel -->
                 <div class="bg-white rounded-lg shadow-md">
                     <!-- Header with Stats -->
                     <div class="p-4 border-b border-gray-200">
-                        <h2 class="text-lg font-semibold text-gray-800 mb-2">Detection Navigator</h2>
+                        <div class="flex justify-between items-center mb-2">
+                            <h2 class="text-lg font-semibold text-gray-800">Detection Navigator</h2>
+                            <div class="flex space-x-1">
+                                <button onclick="calibrateBoundingBoxes()" 
+                                        class="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                                        title="AI calibrate all detections (Press C key)">
+                                    🤖 AI
+                                </button>
+                            </div>
+                        </div>
                         <div class="flex justify-between text-sm text-gray-600">
-                            <span>{{ detections|length }} persons detected</span>
-                            <span>{{ detections|selectattr('is_identified')|list|length }} identified</span>
+                            <span>{{ total_detections }} persons detected</span>
+                            <span>{{ identified_count }} identified</span>
+                        </div>
+                        
+                        <!-- View Mode Toggle -->
+                        <div class="mt-2 flex justify-between items-center">
+                            <div class="flex space-x-2">
+                                <a href="{{ url_for('videos.detail', id=video.id, view='grouped') }}" 
+                                   class="text-xs px-2 py-1 rounded {{ 'bg-blue-500 text-white' if view_mode == 'grouped' else 'bg-gray-200 text-gray-700 hover:bg-gray-300' }}">
+                                    👥 Grouped
+                                </a>
+                                <a href="{{ url_for('videos.detail', id=video.id, view='individual') }}" 
+                                   class="text-xs px-2 py-1 rounded {{ 'bg-blue-500 text-white' if view_mode == 'individual' else 'bg-gray-200 text-gray-700 hover:bg-gray-300' }}">
+                                    📍 Individual
+                                </a>
+                            </div>
+                            {% if pagination and pagination.pages > 1 %}
+                            <div class="text-xs text-gray-500">
+                                Page {{ current_page }} of {{ pagination.pages }}
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                     
                     <!-- Detection List (Scrollable) -->
                     {% if detections %}
                     <div class="max-h-96 overflow-y-auto">
-                        {% for detection in detections %}
+                        {% if view_mode == 'grouped' %}
+                            <!-- Grouped View -->
+                            {% for group in detections %}
+                            <div class="person-group p-3 border-b border-gray-200 bg-gray-50">
+                                <div class="flex justify-between items-start mb-2">
+                                    <div class="cursor-pointer hover:opacity-80" 
+                                         onclick="{% if group.detections and group.detections|length > 0 %}navigateToDetection({{ group.detections[0].timestamp }}, {{ group.detections[0].id }}, {{ group.detections[0].bbox_x }}, {{ group.detections[0].bbox_y }}, {{ group.detections[0].bbox_width }}, {{ group.detections[0].bbox_height }}){% endif %}"
+                                         title="Click to jump to first detection">
+                                        <div class="font-semibold text-gray-900 text-lg">
+                                            {% if group.person_id %}
+                                                {% if group.person_id|string == group.person_id %}
+                                                    {% if group.person_id|int(-1) != -1 %}
+                                                        PERSON-{{ "%04d"|format(group.person_id|int) }}
+                                                    {% elif group.person_id.startswith('PERSON-') %}
+                                                        {{ group.person_id }}
+                                                    {% else %}
+                                                        PERSON-{{ group.person_id }}
+                                                    {% endif %}
+                                                {% else %}
+                                                    PERSON-{{ "%04d"|format(group.person_id|int) }}
+                                                {% endif %}
+                                            {% else %}
+                                                UNKNOWN
+                                            {% endif %}
+                                        </div>
+                                        <div class="text-sm text-gray-600">
+                                            <span class="inline-flex items-center">
+                                                <span class="mr-1">🎬</span>
+                                                {{ group.total_detections }} detections • 
+                                                {{ "%.1f"|format(group.first_seen) }}s - {{ "%.1f"|format(group.last_seen) }}s
+                                                ({{ "%.1f"|format(group.duration) }}s)
+                                            </span>
+                                        </div>
+                                        <div class="text-xs text-gray-500">
+                                            Avg confidence: {{ "%.1f"|format(group.confidence_avg * 100) }}%
+                                        </div>
+                                        {% if group.is_identified %}
+                                        <div class="text-xs text-green-600 font-medium mt-1">✅ Identified</div>
+                                        {% endif %}
+                                    </div>
+                                    <button class="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                            onclick="togglePersonDetections('{{ group.person_id }}')">
+                                        <span id="toggle-{{ group.person_id }}">▼</span> Show
+                                    </button>
+                                </div>
+                                
+                                <!-- Individual detections for this person (initially hidden) -->
+                                <div id="detections-{{ group.person_id }}" class="hidden mt-2 space-y-1">
+                                    {% for detection in group.detections[:10] %}
+                                    <div class="detection-item pl-4 py-1 hover:bg-white rounded cursor-pointer text-sm"
+                                         onclick="navigateToDetection({{ detection.timestamp }}, {{ detection.id }}, {{ detection.bbox_x }}, {{ detection.bbox_y }}, {{ detection.bbox_width }}, {{ detection.bbox_height }})">
+                                        <span class="text-gray-700">{{ "%.2f"|format(detection.timestamp) }}s</span>
+                                        <span class="text-gray-500 text-xs">• {{ "%.0f"|format(detection.confidence * 100) }}%</span>
+                                    </div>
+                                    {% endfor %}
+                                    {% if group.detections|length > 10 %}
+                                    <div class="pl-4 text-xs text-gray-500 italic">
+                                        ... and {{ group.detections|length - 10 }} more detections
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <!-- Individual View (Original) -->
+                            {% for detection in detections %}
                         <div class="detection-item p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
                              data-detection-id="{{ detection.id }}"
                              data-timestamp="{{ detection.timestamp }}"
+                             data-frame-number="{{ detection.frame_number }}"
                              data-bbox-x="{{ detection.bbox_x }}"
                              data-bbox-y="{{ detection.bbox_y }}"
                              data-bbox-width="{{ detection.bbox_width }}"
@@ -316,24 +665,61 @@
                             
                             <div class="flex justify-between items-start">
                                 <div class="flex-1">
-                                    <div class="font-medium text-gray-900">PERSON-{{ "%04d"|format(loop.index) }}</div>
+                                    <div class="font-medium text-gray-900">
+                                        {% if detection.person_id %}
+                                            {% if detection.person_id|string == detection.person_id %}
+                                                {# person_id is a string #}
+                                                {% if detection.person_id|int(-1) != -1 %}
+                                                    {# It's a numeric string like "2" #}
+                                                    PERSON-{{ "%04d"|format(detection.person_id|int) }}
+                                                {% elif detection.person_id.startswith('PERSON-') %}
+                                                    {# Already formatted as PERSON-XXXX #}
+                                                    {{ detection.person_id }}
+                                                {% else %}
+                                                    {# Some other string format #}
+                                                    PERSON-{{ detection.person_id }}
+                                                {% endif %}
+                                            {% else %}
+                                                {# person_id is a number #}
+                                                PERSON-{{ "%04d"|format(detection.person_id|int) }}
+                                            {% endif %}
+                                        {% elif detection.track_id %}
+                                            {% if detection.track_id|string == detection.track_id and detection.track_id.startswith('TRACK-') %}
+                                                {# Convert TRACK-0002 to PERSON-0002 #}
+                                                PERSON-{{ detection.track_id[6:] }}
+                                            {% else %}
+                                                PERSON-{{ "%04d"|format(detection.track_id|int) }}
+                                            {% endif %}
+                                        {% else %}
+                                            PERSON-{{ "%04d"|format(loop.index) }}
+                                        {% endif %}
+                                    </div>
                                     <div class="text-sm text-gray-600">{{ "%.2f"|format(detection.timestamp) }}s</div>
                                     <div class="text-xs text-gray-500">
                                         Confidence: {{ "%.1f"|format(detection.confidence * 100) }}%
+                                    </div>
+                                    <div class="text-xs text-gray-400">
+                                        Box: {{ detection.bbox_x }},{{ detection.bbox_y }} {{ detection.bbox_width }}×{{ detection.bbox_height }}
                                     </div>
                                     {% if detection.is_identified %}
                                     <div class="text-xs text-green-600 font-medium">✅ Identified</div>
                                     {% endif %}
                                 </div>
-                                <div class="ml-2">
+                                <div class="ml-2 flex flex-col space-y-1">
                                     <button class="text-blue-600 hover:text-blue-800 text-sm font-medium"
                                             onclick="event.stopPropagation(); navigateToDetection({{ detection.timestamp }}, {{ detection.id }}, {{ detection.bbox_x }}, {{ detection.bbox_y }}, {{ detection.bbox_width }}, {{ detection.bbox_height }})">
                                         🎯 Go
+                                    </button>
+                                    <button class="text-purple-600 hover:text-purple-800 text-xs font-medium"
+                                            onclick="event.stopPropagation(); calibrateBoundingBoxes({{ detection.id }})"
+                                            title="AI calibrate this detection">
+                                        🤖 Cal
                                     </button>
                                 </div>
                             </div>
                         </div>
                         {% endfor %}
+                        {% endif %}
                     </div>
                     {% else %}
                     <div class="p-6 text-center text-gray-500">
@@ -343,341 +729,77 @@
                         {% endif %}
                     </div>
                     {% endif %}
+                    
+                    <!-- Pagination Controls -->
+                    {% if pagination and pagination.pages > 1 %}
+                    <div class="p-4 border-t border-gray-200 bg-gray-50">
+                        <div class="flex justify-between items-center">
+                            <!-- Previous Button -->
+                            {% if pagination.has_prev %}
+                            <a href="{{ url_for('videos.detail', id=video.id, page=pagination.prev_num) }}" 
+                               class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                </svg>
+                                Previous
+                            </a>
+                            {% else %}
+                            <span class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-400 bg-gray-100 border border-gray-200 rounded-md cursor-not-allowed">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                </svg>
+                                Previous
+                            </span>
+                            {% endif %}
+                            
+                            <!-- Page Info -->
+                            <span class="text-sm text-gray-700">
+                                Page <span class="font-medium">{{ current_page }}</span> of <span class="font-medium">{{ pagination.pages }}</span>
+                            </span>
+                            
+                            <!-- Next Button -->
+                            {% if pagination.has_next %}
+                            <a href="{{ url_for('videos.detail', id=video.id, page=pagination.next_num) }}" 
+                               class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                                Next
+                                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </a>
+                            {% else %}
+                            <span class="inline-flex items-center px-3 py-1 text-sm font-medium text-gray-400 bg-gray-100 border border-gray-200 rounded-md cursor-not-allowed">
+                                Next
+                                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Load More Button (Alternative) -->
+                        <div class="mt-3 text-center">
+                            <button onclick="loadMoreDetections()" 
+                                    class="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                    id="loadMoreBtn"
+                                    data-page="{{ current_page }}"
+                                    data-total-pages="{{ pagination.pages }}">
+                                Load all detections (AJAX)
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
                 
                 <!-- Processing Controls -->
                 <div class="mt-6 space-y-4">
-                <!-- Quick Stats -->
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Detection Results</h2>
-                    
-                    <div class="space-y-3">
-                        <div class="flex justify-between">
-                            <span class="text-sm text-gray-600">Persons Detected</span>
-                            <span class="text-sm font-medium text-gray-900">{{ detections|length }}</span>
-                        </div>
                         
-                        <div class="flex justify-between">
-                            <span class="text-sm text-gray-600">Identified</span>
-                            <span class="text-sm font-medium text-gray-900">
-                                {{ detections|selectattr('is_identified')|list|length }}
-                            </span>
-                        </div>
-                        
-                        <div class="flex justify-between">
-                            <span class="text-sm text-gray-600">Confidence Score</span>
-                            <span class="text-sm font-medium text-gray-900">
-                                {% if detections %}
-                                    {{ "%.1f"|format((detections|sum(attribute='confidence')/detections|length)*100) }}%
-                                {% else %}
-                                    --
-                                {% endif %}
-                            </span>
-                        </div>
                     </div>
                 </div>
+                
 
-                <!-- Actions -->
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Actions</h2>
-                    
-                    <div class="space-y-3">
-                        {% if video.status == 'uploaded' or (video.status == 'completed' and video.processed_path) %}
-                            <!-- Status message for web-compatible videos -->
-                            <div class="bg-green-50 border border-green-200 rounded-md p-4 mb-3">
-                                {% if video.processed_path %}
-                                    <h4 class="text-sm font-medium text-green-800 mb-2">✅ Converted Video Ready</h4>
-                                    <p class="text-sm text-green-700 mb-3">This video has been automatically converted to web-compatible MP4 format and is ready for processing.</p>
-                                {% else %}
-                                    <h4 class="text-sm font-medium text-green-800 mb-2">✅ Web-Compatible Format</h4>
-                                    <p class="text-sm text-green-700 mb-3">This video is already in a web-compatible format and ready to play.</p>
-                                {% endif %}
-                            </div>
-                            
-                            <!-- Process Video Form -->
-                            <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST" class="space-y-3">
-                                <div class="bg-blue-50 border border-blue-200 rounded-md p-4">
-                                    <h4 class="text-sm font-medium text-blue-800 mb-3">Process Video Options</h4>
-                                    
-                                    {% if video.detected_persons and video.detected_persons|length > 0 %}
-                                    <div class="bg-amber-50 border border-amber-200 rounded p-2 mb-3">
-                                        <p class="text-xs text-amber-700">
-                                            ⚠️ <strong>Note:</strong> This video has {{ video.detected_persons|length }} existing detection(s). 
-                                            Processing will <strong>clear all existing data</strong> and re-extract persons from scratch.
-                                        </p>
-                                    </div>
-                                    {% endif %}
-                                    
-                                    <div class="space-y-2">
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="extract_persons" value="true" checked class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
-                                            <span class="ml-2 text-sm text-gray-700">Extract persons from video</span>
-                                        </label>
-                                        
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="face_recognition" value="true" class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
-                                            <span class="ml-2 text-sm text-gray-700">Run face recognition</span>
-                                        </label>
-                                        
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="extract_frames" value="true" class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
-                                            <span class="ml-2 text-sm text-gray-700">Extract key frames</span>
-                                        </label>
-                                    </div>
-                                </div>
-                                
-                                <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" onclick="return confirm('Start person extraction for this video?{% if video.detected_persons and video.detected_persons|length > 0 %} This will delete {{ video.detected_persons|length }} existing detection(s) and start fresh.{% endif %}')">
-                                    Process Video
-                                </button>
-                            </form>
-                        {% elif video.status == 'converting' %}
-                            <div class="bg-blue-50 border border-blue-200 rounded-md p-4">
-                                <h4 class="text-sm font-medium text-blue-800 mb-2">🔄 Auto-Converting Video</h4>
-                                <div class="flex items-center mb-3">
-                                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
-                                    <span class="text-sm text-blue-700">Automatically converting to web-compatible MP4 format...</span>
-                                </div>
-                                
-                                <!-- Progress Bar -->
-                                <div class="mb-3">
-                                    <div class="flex justify-between text-xs text-blue-600 mb-1">
-                                        <span>Progress</span>
-                                        <span id="progressPercent">0%</span>
-                                    </div>
-                                    <div class="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
-                                        <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300 progress-bar-animated" style="width: 0%"></div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Progress Message -->
-                                <div class="text-xs text-blue-600 mb-3">
-                                    <div id="progressMessage">This video was detected as non-web-compatible and is being converted automatically...</div>
-                                    <div class="mt-1">
-                                        Started: {{ video.processing_started_at.strftime('%H:%M:%S') if video.processing_started_at }}
-                                    </div>
-                                </div>
-                                
-                                <!-- Real-time Status -->
-                                <div id="conversionProgress" class="text-xs text-blue-600 bg-blue-100 p-2 rounded">
-                                    <div class="flex items-center">
-                                        <div class="h-2 w-2 bg-blue-600 rounded-full mr-2 live-indicator"></div>
-                                        <span id="liveStatus" class="conversion-status-live">Checking conversion status...</span>
-                                    </div>
-                                </div>
-                                
-                                <!-- Debug Panel (only visible in converting state) -->
-                                <div id="debugPanel" class="mt-4 p-3 bg-gray-100 rounded text-xs text-gray-600">
-                                    <div class="font-medium mb-2">🔧 Debug Information:</div>
-                                    <div id="debugInfo">
-                                        <div>• Status: <span id="debugStatus">Unknown</span></div>
-                                        <div>• Progress: <span id="debugProgress">0%</span></div>
-                                        <div>• Message: <span id="debugMessage">No message</span></div>
-                                        <div>• Last Update: <span id="debugLastUpdate">Never</span></div>
-                                        <div>• API Calls: <span id="debugApiCalls">0</span></div>
-                                        <div>• Task ID: <span id="debugTaskId">None</span></div>
-                                        <div>• WebSocket: <span id="debugWebSocket">Disconnected</span></div>
-                                        <div>• Connection: <span id="debugConnection">AJAX Polling</span></div>
-                                    </div>
-                                    <button onclick="toggleDebugPanel()" class="mt-2 text-xs bg-gray-300 px-2 py-1 rounded">Hide Debug</button>
-                                </div>
-                            </div>
-                        {% elif video.status == 'processing' %}
-                            <!-- Processing status with cancel option -->
-                            <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-3">
-                                <h4 class="text-sm font-medium text-yellow-800 mb-2">⏳ Person Extraction In Progress</h4>
-                                <p class="text-sm text-yellow-700 mb-3">
-                                    The system is currently extracting persons from this video. 
-                                    {% if video.processing_started_at %}
-                                        Started: {{ video.processing_started_at.strftime('%b %d at %H:%M') }}
-                                    {% endif %}
-                                </p>
-                                <p class="text-xs text-yellow-600">
-                                    If the process appears stuck, you can cancel and retry.
-                                </p>
-                            </div>
-                            
-                            <!-- Cancel Processing -->
-                            <form action="{{ url_for('videos.cancel_processing', id=video.id) }}" method="POST">
-                                <button type="submit" class="w-full px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700" onclick="return confirm('Cancel person extraction? This will stop the current process and reset the video so you can retry.')">
-                                    🛑 Cancel Processing
-                                </button>
-                            </form>
-                        {% elif video.status == 'completed' %}
-                            <button class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                                Run Face Recognition
-                            </button>
-                            
-                            <button class="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
-                                Export Results
-                            </button>
-                        {% elif video.status == 'failed' %}
-                            <!-- Error status message -->
-                            <div class="bg-red-50 border border-red-200 rounded-md p-4 mb-3">
-                                <h4 class="text-sm font-medium text-red-800 mb-2">❌ Person Extraction Failed</h4>
-                                <p class="text-sm text-red-700 mb-3">
-                                    {% if video.error_message %}
-                                        Error: {{ video.error_message }}
-                                    {% else %}
-                                        The person extraction process failed. You can retry with the same or different options.
-                                    {% endif %}
-                                </p>
-                                
-                                {% if video.processing_completed_at %}
-                                    <p class="text-xs text-red-600">
-                                        Failed at: {{ video.processing_completed_at.strftime('%b %d, %Y at %H:%M') }}
-                                    </p>
-                                {% endif %}
-                            </div>
-                            
-                            <!-- Retry Processing Form -->
-                            <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST" class="space-y-3">
-                                <div class="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-                                    <h4 class="text-sm font-medium text-yellow-800 mb-3">🔄 Retry Person Extraction</h4>
-                                    
-                                    {% if video.detected_persons and video.detected_persons|length > 0 %}
-                                    <div class="bg-red-50 border border-red-200 rounded p-2 mb-3">
-                                        <p class="text-xs text-red-700">
-                                            ⚠️ <strong>Warning:</strong> This video has {{ video.detected_persons|length }} existing detection(s). 
-                                            Retry will <strong>delete all existing data</strong> and start fresh person extraction.
-                                        </p>
-                                    </div>
-                                    {% endif %}
-                                    
-                                    <div class="space-y-2">
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="extract_persons" value="true" checked class="rounded border-gray-300 text-yellow-600 shadow-sm focus:border-yellow-300 focus:ring focus:ring-yellow-200 focus:ring-opacity-50">
-                                            <span class="ml-2 text-sm text-gray-700">Extract persons from video</span>
-                                        </label>
-                                        
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="face_recognition" value="true" class="rounded border-gray-300 text-yellow-600 shadow-sm focus:border-yellow-300 focus:ring focus:ring-yellow-200 focus:ring-opacity-50">
-                                            <span class="ml-2 text-sm text-gray-700">Run face recognition</span>
-                                        </label>
-                                        
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="extract_frames" value="true" class="rounded border-gray-300 text-yellow-600 shadow-sm focus:border-yellow-300 focus:ring focus:ring-yellow-200 focus:ring-opacity-50">
-                                            <span class="ml-2 text-sm text-gray-700">Extract key frames</span>
-                                        </label>
-                                    </div>
-                                </div>
-                                
-                                <button type="submit" class="w-full px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700" onclick="return confirm('Retry person extraction for this video?{% if video.detected_persons and video.detected_persons|length > 0 %} This will permanently delete {{ video.detected_persons|length }} existing detection(s) and start fresh extraction.{% endif %}')">
-                                    🔄 Retry Person Extraction
-                                </button>
-                            </form>
-                        {% endif %}
-                        
-                        <button class="w-full px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
-                            Download Original
-                        </button>
-                        
-                        <button class="w-full px-4 py-2 border border-red-300 rounded-md text-red-700 hover:bg-red-50">
-                            Delete Video
-                        </button>
-                        
-                        <!-- Temporary testing button (remove in production) -->
-                        {% if video.status in ['uploaded', 'completed'] %}
-                        <form action="{{ url_for('videos.simulate_error', id=video.id) }}" method="POST" class="mt-2">
-                            <button type="submit" class="w-full px-4 py-2 border border-orange-300 rounded-md text-orange-700 hover:bg-orange-50 text-sm" onclick="return confirm('Simulate an error to test retry functionality?')">
-                                🧪 Simulate Error (Testing)
-                            </button>
-                        </form>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <!-- Processing Log -->
-                {% if video.processing_log %}
-                <div class="bg-white rounded-lg shadow-md p-6">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Processing Log</h2>
-                    
-                    <div class="bg-gray-50 rounded-md p-3 max-h-32 overflow-y-auto">
-                        <pre class="text-xs text-gray-700 whitespace-pre-wrap">{{ video.processing_log }}</pre>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-
-            
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        {% for detection in detections %}
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {{ "%.2f"|format(detection.timestamp) }}s
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {{ "%.1f"|format(detection.confidence * 100) }}%
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {% if detection.is_identified and detection.employee %}
-                                    <span class="text-blue-600">{{ detection.employee.name }}</span>
-                                {% else %}
-                                    <span class="text-gray-400">Unknown</span>
-                                {% endif %}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                {% if detection.bbox_x is number and detection.bbox_y is number and detection.bbox_width is number and detection.bbox_height is number %}
-                                    {{ detection.bbox_x }}, {{ detection.bbox_y }}, 
-                                    {{ detection.bbox_width }}x{{ detection.bbox_height }}
-                                {% else %}
-                                    <span class="text-red-500">Invalid bbox data</span>
-                                {% endif %}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                {% if not detection.is_identified %}
-                                    {% if detection.bbox_x is number and detection.bbox_y is number and detection.bbox_width is number and detection.bbox_height is number and detection.timestamp is number %}
-                                        <button onclick="jumpToDetection({{ detection.timestamp }}, {{ detection.id }}, {{ detection.bbox_x }}, {{ detection.bbox_y }}, {{ detection.bbox_width }}, {{ detection.bbox_height }})" 
-                                                class="text-blue-600 hover:text-blue-900 mr-2"
-                                                data-detection-id="{{ detection.id }}"
-                                                data-timestamp="{{ detection.timestamp }}"
-                                                data-bbox-x="{{ detection.bbox_x }}"
-                                                data-bbox-y="{{ detection.bbox_y }}" 
-                                                data-bbox-width="{{ detection.bbox_width }}"
-                                                data-bbox-height="{{ detection.bbox_height }}">
-                                            🎯 Go to Frame
-                                        </button>
-                                    {% else %}
-                                        <span class="text-red-500">❌ Invalid data</span>
-                                    {% endif %}
-                                    <button onclick="identifyPerson({{ detection.id }})" 
-                                            class="text-green-600 hover:text-green-900">
-                                        👤 Identify
-                                    </button>
-                                {% else %}
-                                    <span class="text-gray-400">✅ Identified</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-</div>
 
 <script>
-function handleVideoLoad() {
-    console.log('Video loading started...');
-    const loading = document.getElementById('videoLoading');
-    const error = document.getElementById('videoError');
-    if (loading) loading.classList.add('hidden');
-    if (error) error.classList.add('hidden');
-}
-
-function handleVideoError() {
-    console.log('Video error occurred');
-    const video = document.getElementById('videoPlayer');
-    const error = document.getElementById('videoError');
-    if (error) {
-        error.classList.remove('hidden');
-    }
-    if (video) {
-        video.style.display = 'none';
-    }
-}
+// Video handler functions are now defined at the top of the page
 
 function tryAlternativePlayback() {
     const video = document.getElementById('videoPlayer');
@@ -1279,12 +1401,27 @@ document.addEventListener('DOMContentLoaded', function() {
             if (loading) loading.classList.add('hidden');
         });
         
+        video.addEventListener('loadedmetadata', function() {
+            console.log('Video metadata loaded');
+            updateTimeDisplay();
+        });
+        
+        video.addEventListener('timeupdate', function() {
+            updateTimeDisplay();
+            updateDetectionCounter();
+        });
+        
         video.addEventListener('error', function(e) {
             console.log('Video error:', e);
             handleVideoError();
             const loading = document.getElementById('videoLoading');
             if (loading) loading.classList.add('hidden');
         });
+        
+        // Initialize time display
+        setTimeout(() => {
+            updateTimeDisplay();
+        }, 100);
         
         video.addEventListener('stalled', function() {
             console.log('Video stalled');
@@ -1352,17 +1489,6 @@ function updateDebugInfo(data) {
     });
 }
 
-function toggleDebugPanel() {
-    const debugPanel = document.getElementById('debugPanel');
-    if (debugPanel) {
-        const isVisible = !debugPanel.classList.contains('hidden');
-        if (isVisible) {
-            debugPanel.classList.add('hidden');
-        } else {
-            debugPanel.classList.remove('hidden');
-        }
-        
-        // Update button text
         const button = debugPanel.querySelector('button[onclick="toggleDebugPanel()"]');
         if (button) {
             button.textContent = isVisible ? 'Show Debug' : 'Hide Debug';
@@ -1372,7 +1498,70 @@ function toggleDebugPanel() {
     }
 }
 
-// Person detection and identification functionality
+// Enhanced navigation for person detection
+function navigateToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHeight) {
+    console.log(`🎯 Navigating to detection ${detectionId} at ${timestamp}s`);
+    
+    const video = document.getElementById('videoPlayer');
+    if (!video) {
+        console.error('❌ Video player not found');
+        return;
+    }
+    
+    // Validate timestamp
+    if (isNaN(timestamp) || timestamp < 0) {
+        console.error('❌ Invalid timestamp:', timestamp);
+        return;
+    }
+    
+    // Wait for video metadata to be loaded
+    if (video.readyState < 1) {
+        console.log('⏳ Waiting for video metadata to load...');
+        video.addEventListener('loadedmetadata', function() {
+            performNavigation();
+        }, { once: true });
+    } else {
+        performNavigation();
+    }
+    
+    function performNavigation() {
+        console.log(`🎬 Video duration: ${video.duration}s, seeking to: ${timestamp}s`);
+        
+        // Validate timestamp against video duration
+        if (timestamp > video.duration) {
+            console.warn('⚠️ Timestamp exceeds video duration, adjusting...');
+            timestamp = Math.min(timestamp, video.duration - 0.1);
+        }
+        
+        // Seek to timestamp and PAUSE (don't auto-play)
+        video.currentTime = timestamp;
+        if (!video.paused) {
+            video.pause();
+        }
+        
+        // Highlight the detection row in the navigator panel
+        highlightDetectionInNavigator(detectionId);
+        
+        // Remove any existing bounding box (cleanup)
+        const existingBox = document.getElementById('boundingBox');
+        if (existingBox) {
+            existingBox.remove();
+        }
+        
+        // Update current time display
+        updateTimeDisplay();
+        
+        // Scroll detection item into view if needed
+        const detectionItem = document.querySelector(`[data-detection-id="${detectionId}"]`);
+        if (detectionItem) {
+            detectionItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        
+        console.log('✅ Navigation to detection completed (no box drawn)');
+    }
+}
+
+// Legacy function for compatibility
 function jumpToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHeight) {
     console.log(`🎯 Jumping to detection ${detectionId} at ${timestamp}s`);
     console.log(`📊 Parameters: timestamp=${timestamp}, detectionId=${detectionId}, bbox=[${bboxX}, ${bboxY}, ${bboxWidth}x${bboxHeight}]`);
@@ -1416,19 +1605,16 @@ function jumpToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHe
             timestamp = Math.min(timestamp, video.duration - 0.1);
         }
         
-        // Jump to the timestamp
+        // Jump to the timestamp and PAUSE (as requested - no auto-play)
         video.currentTime = timestamp;
-        
-        // Play video if paused
-        if (video.paused) {
-            video.play().catch(e => console.log('Could not auto-play video:', e));
+        if (!video.paused) {
+            video.pause();
         }
         
         // Highlight the detection in the table
         highlightDetectionRow(detectionId);
         
-        // Show bounding box overlay (if video container supports it)
-        showBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp);
+        // Bounding box drawing removed as requested
         
         // Scroll video into view
         video.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1437,6 +1623,866 @@ function jumpToDetection(timestamp, detectionId, bboxX, bboxY, bboxWidth, bboxHe
     }
 }
 
+// This function was a duplicate - removed to avoid conflicts
+// The main navigateToDetection function is defined above
+
+function improveFPSCorrection(timestamp, detectionId, video) {
+    try {
+        // Get video duration and frame rate estimation
+        const duration = video.duration || 0;
+        
+        // Check if we have frame number data from the detection row
+        const detectionRow = document.querySelector(`[data-detection-id="${detectionId}"]`);
+        if (detectionRow && detectionRow.dataset.frameNumber) {
+            const frameNumber = parseInt(detectionRow.dataset.frameNumber);
+            if (!isNaN(frameNumber) && frameNumber > 0) {
+                const estimatedFPS = getVideoFrameRate(video);
+                const frameBasedTimestamp = frameNumber / estimatedFPS;
+                
+                console.log(`🔧 Frame-based correction: Frame ${frameNumber} / ${estimatedFPS}fps = ${frameBasedTimestamp}s (was ${timestamp}s)`);
+                return frameBasedTimestamp;
+            }
+        }
+        
+        // Apply heuristic corrections for common FPS mismatches
+        const correctionFactors = [1.0, 29.97/30, 25/30, 24/30, 30/25, 30/29.97];
+        let bestTimestamp = timestamp;
+        let minError = Infinity;
+        
+        // Try different FPS correction factors
+        for (const factor of correctionFactors) {
+            const candidateTimestamp = timestamp * factor;
+            if (candidateTimestamp <= duration) {
+                const error = Math.abs(candidateTimestamp - timestamp);
+                if (error < minError && candidateTimestamp >= 0) {
+                    minError = error;
+                    bestTimestamp = candidateTimestamp;
+                }
+            }
+        }
+        
+        // Apply small timing offset to account for encoding/processing differences
+        const finalTimestamp = Math.max(0, bestTimestamp - 0.05); // 50ms offset
+        
+        console.log(`🔧 FPS correction applied: ${timestamp}s -> ${finalTimestamp}s (factor used)`);
+        return finalTimestamp;
+        
+    } catch (e) {
+        console.warn('⚠️ FPS correction failed, using original timestamp:', e);
+        return timestamp;
+    }
+}
+
+function getVideoFrameRate(video) {
+    try {
+        // Try to get FPS from backend data if available
+        const videoDataElement = document.querySelector('[data-video-fps]');
+        if (videoDataElement && videoDataElement.dataset.videoFps) {
+            const backendFPS = parseFloat(videoDataElement.dataset.videoFps);
+            if (!isNaN(backendFPS) && backendFPS > 0) {
+                console.log(`📊 Using backend-provided FPS: ${backendFPS}`);
+                return backendFPS;
+            }
+        }
+        
+        // Try browser-specific frame rate detection
+        if (video.mozFrameRate) {
+            console.log(`📊 Using Firefox frame rate: ${video.mozFrameRate}`);
+            return video.mozFrameRate;
+        }
+        if (video.webkitFrameRate) {
+            console.log(`📊 Using WebKit frame rate: ${video.webkitFrameRate}`);
+            return video.webkitFrameRate;
+        }
+        
+        // Analyze video metadata for frame rate hints
+        const duration = video.duration;
+        if (duration > 0) {
+            // Common frame rates based on duration patterns
+            const commonFPS = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+            
+            // For now, use intelligent defaults based on video duration
+            if (duration < 60) {
+                // Short videos often use higher frame rates
+                console.log('📊 Short video detected, assuming 30fps');
+                return 30;
+            } else {
+                // Longer videos might use standard frame rates
+                console.log('📊 Standard video detected, assuming 30fps');
+                return 30;
+            }
+        }
+        
+        // Final fallback
+        console.log('⚠️ Could not determine frame rate, using 30fps default');
+        return 30;
+    } catch (e) {
+        console.log('⚠️ Frame rate detection failed, using 30fps default');
+        return 30;
+    }
+}
+
+function updateTimeDisplay(currentTime) {
+    const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+    if (currentTimeDisplay) {
+        currentTimeDisplay.textContent = formatTimestamp(currentTime);
+    }
+}
+
+function updateDetectionCounter(detectionId, timestamp) {
+    const counter = document.getElementById('detectionCounter');
+    if (counter) {
+        counter.textContent = `PERSON-${String(detectionId).padStart(4, '0')} at ${timestamp.toFixed(1)}s`;
+        counter.className = 'text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded';
+    }
+}
+
+function convertBoundingBoxCoordinates(bboxX, bboxY, bboxWidth, bboxHeight, video, displayWidth, displayHeight) {
+    console.log(`🎯 CRITICAL BBOX CONVERSION for DEMO`);
+    console.log(`📏 Input: bbox=(${bboxX}, ${bboxY}, ${bboxWidth}x${bboxHeight}), display=(${displayWidth}x${displayHeight})`);
+    
+    // Get EXACT video element dimensions
+    const videoRect = video.getBoundingClientRect();
+    const actualVideoWidth = video.videoWidth || 1920;
+    const actualVideoHeight = video.videoHeight || 1080;
+    
+    console.log(`📐 Video element rect: ${videoRect.width}x${videoRect.height}`);
+    console.log(`📐 Video natural size: ${actualVideoWidth}x${actualVideoHeight}`);
+    
+    // DEMO-CRITICAL: Force coordinate detection based on data patterns
+    let scaledX, scaledY, scaledWidth, scaledHeight;
+    
+    // Smart detection: if all values are <= 100, treat as percentage
+    const isPercentage = bboxX <= 100 && bboxY <= 100 && bboxWidth <= 100 && bboxHeight <= 100;
+    
+    if (isPercentage) {
+        console.log(`✅ DEMO: Using PERCENTAGE mode - direct conversion`);
+        // Direct percentage to pixel conversion
+        scaledX = (bboxX / 100) * displayWidth;
+        scaledY = (bboxY / 100) * displayHeight;
+        scaledWidth = (bboxWidth / 100) * displayWidth;
+        scaledHeight = (bboxHeight / 100) * displayHeight;
+    } else {
+        console.log(`✅ DEMO: Using PIXEL mode - scaling from original resolution`);
+        // Scale from original video resolution to display size
+        const scaleFactorX = displayWidth / actualVideoWidth;
+        const scaleFactorY = displayHeight / actualVideoHeight;
+        
+        scaledX = bboxX * scaleFactorX;
+        scaledY = bboxY * scaleFactorY;
+        scaledWidth = bboxWidth * scaleFactorX;
+        scaledHeight = bboxHeight * scaleFactorY;
+        
+        console.log(`🔧 DEMO: Scale factors X=${scaleFactorX.toFixed(4)}, Y=${scaleFactorY.toFixed(4)}`);
+    }
+    
+    // DEMO CRITICAL: Apply manual correction offsets for perfect positioning
+    const demoOffsets = getDemoCalibrationOffsets();
+    scaledX += demoOffsets.x;
+    scaledY += demoOffsets.y;
+    scaledWidth *= demoOffsets.scaleX;
+    scaledHeight *= demoOffsets.scaleY;
+    
+    console.log(`🎯 DEMO: Applied demo offsets: +${demoOffsets.x}, +${demoOffsets.y}, ×${demoOffsets.scaleX}, ×${demoOffsets.scaleY}`);
+    
+    // Apply any runtime calibration offsets
+    if (window.calibrationOffsets) {
+        const offsets = window.calibrationOffsets;
+        scaledX += offsets.offsetX || 0;
+        scaledY += offsets.offsetY || 0;
+        scaledWidth *= offsets.scaleX || 1;
+        scaledHeight *= offsets.scaleY || 1;
+        console.log(`🔧 Applied runtime calibration: X+${offsets.offsetX}, Y+${offsets.offsetY}`);
+    }
+    
+    // Ensure coordinates are within bounds
+    scaledX = Math.max(0, Math.min(scaledX, displayWidth - scaledWidth));
+    scaledY = Math.max(0, Math.min(scaledY, displayHeight - scaledHeight));
+    scaledWidth = Math.max(10, Math.min(scaledWidth, displayWidth - scaledX));
+    scaledHeight = Math.max(10, Math.min(scaledHeight, displayHeight - scaledY));
+    
+    console.log(`🎯 DEMO FINAL: (${scaledX.toFixed(1)}, ${scaledY.toFixed(1)}, ${scaledWidth.toFixed(1)}x${scaledHeight.toFixed(1)})`);
+    
+    return { scaledX, scaledY, scaledWidth, scaledHeight };
+}
+
+function getDemoCalibrationOffsets() {
+    // DEMO CRITICAL: Fine-tune these values for perfect positioning
+    const video = document.getElementById('videoPlayer');
+    const rect = video.getBoundingClientRect();
+    
+    // Determine offset based on current video size and browser
+    let offsetX = 0;
+    let offsetY = 0;
+    let scaleX = 1.0;
+    let scaleY = 1.0;
+    
+    // Browser-specific adjustments
+    const userAgent = navigator.userAgent.toLowerCase();
+    if (userAgent.includes('chrome')) {
+        offsetY = -3; // Chrome tends to be slightly off vertically
+    } else if (userAgent.includes('firefox')) {
+        offsetY = -2;
+        offsetX = 1;
+    } else if (userAgent.includes('safari')) {
+        offsetY = -4;
+    }
+    
+    // Screen size adjustments
+    if (rect.width < 600) {
+        // Mobile
+        offsetX += 2;
+        offsetY += 1;
+        scaleX = 0.98;
+        scaleY = 0.97;
+    } else if (rect.width > 1000) {
+        // Large screen
+        offsetX -= 1;
+        offsetY -= 2;
+        scaleX = 1.01;
+        scaleY = 1.02;
+    }
+    
+    // Apply manual demo offsets if available (for live adjustment during demo)
+    if (window.demoManualOffsets) {
+        offsetX += window.demoManualOffsets.x;
+        offsetY += window.demoManualOffsets.y;
+        scaleX *= window.demoManualOffsets.scaleX;
+        scaleY *= window.demoManualOffsets.scaleY;
+        console.log(`🎯 DEMO: Applied manual offsets: +${window.demoManualOffsets.x}, +${window.demoManualOffsets.y}`);
+    }
+    
+    console.log(`🎯 DEMO FINAL offsets: X=${offsetX}, Y=${offsetY}, scaleX=${scaleX}, scaleY=${scaleY}`);
+    
+    return { x: offsetX, y: offsetY, scaleX, scaleY };
+}
+
+    // Remove existing overlay
+    if (existing) existing.remove();
+    
+    // Create debug overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed top-20 right-4 z-50 bg-black bg-opacity-90 text-white p-4 rounded-lg shadow-lg max-w-sm';
+    overlay.innerHTML = `
+        <div class="text-lg font-bold text-yellow-300 mb-2">🎯 DEMO DEBUG MODE</div>
+        <div class="text-sm space-y-1">
+            <div><strong>Controls for perfect positioning:</strong></div>
+            <div>• Press 'D' to toggle this mode</div>
+            <div>• Arrow Up/Down: Move Y position</div>
+            <div>• Ctrl+Arrow Left/Right: Move X position</div>
+            <div>• Press 'R' to reset offsets</div>
+            <div>• Press 'S' to save current offsets</div>
+        </div>
+        <div class="mt-3 text-xs border-t border-gray-600 pt-2">
+            <div id="debugOffsetDisplay">Manual Offsets: X=0, Y=0</div>
+            <div id="debugVideoInfo">Video: Loading...</div>
+        </div>
+        <div class="mt-2">
+            <button onclick="resetDemoOffsets()" class="bg-red-600 hover:bg-red-700 px-2 py-1 rounded text-xs mr-2">Reset</button>
+            <button onclick="saveDemoOffsets()" class="bg-green-600 hover:bg-green-700 px-2 py-1 rounded text-xs">Save</button>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    updateDebugDisplay();
+}
+
+function hideDemoDebugOverlay() {
+    if (overlay) overlay.remove();
+}
+
+function adjustDemoOffsets(deltaX, deltaY) {
+    if (!window.demoManualOffsets) {
+        window.demoManualOffsets = { x: 0, y: 0, scaleX: 1.0, scaleY: 1.0 };
+    }
+    
+    window.demoManualOffsets.x += deltaX;
+    window.demoManualOffsets.y += deltaY;
+    
+    console.log(`🎯 DEMO: Adjusted manual offsets to X=${window.demoManualOffsets.x}, Y=${window.demoManualOffsets.y}`);
+    
+    updateDebugDisplay();
+    refreshCurrentDetectionWithDebug();
+}
+
+function resetDemoOffsets() {
+    window.demoManualOffsets = { x: 0, y: 0, scaleX: 1.0, scaleY: 1.0 };
+    console.log('🎯 DEMO: Reset manual offsets to zero');
+    updateDebugDisplay();
+    refreshCurrentDetectionWithDebug();
+}
+
+function saveDemoOffsets() {
+    if (window.demoManualOffsets) {
+        localStorage.setItem('demoManualOffsets', JSON.stringify(window.demoManualOffsets));
+        console.log('🎯 DEMO: Saved manual offsets to localStorage');
+        
+        // Show save confirmation
+        const notification = document.createElement('div');
+        notification.className = 'fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-green-100 border border-green-400 text-green-700 px-4 py-2 rounded';
+        notification.textContent = '✅ Demo offsets saved!';
+        document.body.appendChild(notification);
+        
+        setTimeout(() => notification.remove(), 2000);
+    }
+}
+
+function loadDemoOffsets() {
+    try {
+        const saved = localStorage.getItem('demoManualOffsets');
+        if (saved) {
+            window.demoManualOffsets = JSON.parse(saved);
+            console.log('🎯 DEMO: Loaded saved manual offsets:', window.demoManualOffsets);
+        }
+    } catch (e) {
+        console.log('🎯 DEMO: No saved offsets found');
+    }
+}
+
+function updateDebugDisplay() {
+    const offsetDisplay = document.getElementById('debugOffsetDisplay');
+    const videoInfo = document.getElementById('debugVideoInfo');
+    
+    if (offsetDisplay && window.demoManualOffsets) {
+        offsetDisplay.textContent = `Manual Offsets: X=${window.demoManualOffsets.x}, Y=${window.demoManualOffsets.y}`;
+    }
+    
+    if (videoInfo) {
+        const video = document.getElementById('videoPlayer');
+        if (video) {
+            const rect = video.getBoundingClientRect();
+            videoInfo.textContent = `Video: ${rect.width.toFixed(0)}×${rect.height.toFixed(0)}px`;
+        }
+    }
+}
+
+function refreshCurrentDetectionWithDebug() {
+    // Find currently highlighted detection and refresh its bounding box
+    const highlighted = document.querySelector('.detection-item.bg-blue-100');
+    if (highlighted) {
+        const detectionId = highlighted.dataset.detectionId;
+        const timestamp = parseFloat(highlighted.dataset.timestamp);
+        const bboxX = parseInt(highlighted.dataset.bboxX);
+        const bboxY = parseInt(highlighted.dataset.bboxY);
+        const bboxWidth = parseInt(highlighted.dataset.bboxWidth);
+        const bboxHeight = parseInt(highlighted.dataset.bboxHeight);
+        
+        console.log('🎯 DEMO: Refreshing detection with debug offsets');
+        
+        // Remove existing box and redraw with new offsets
+        const existingBox = document.getElementById('boundingBox');
+        if (existingBox) existingBox.remove();
+        
+        showEnhancedBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp, detectionId);
+    }
+}
+
+function isPercentageCoordinates(x, y, width, height) {
+    // Heuristic to detect if coordinates are percentages vs pixels
+    // Percentage coordinates should be between 0-100
+    // Pixel coordinates will typically be larger for modern videos
+    
+    const maxCoordinate = Math.max(x, y, width, height);
+    const allSmall = x <= 100 && y <= 100 && width <= 100 && height <= 100;
+    const typicalPercentageRange = maxCoordinate <= 100 && maxCoordinate > 0;
+    
+    console.log(`🔍 Coordinate analysis: max=${maxCoordinate}, allSmall=${allSmall}, typicalRange=${typicalPercentageRange}`);
+    
+    // If all coordinates are <= 100, likely percentages
+    // If any coordinate > 100, likely pixels
+    return allSmall && typicalPercentageRange;
+}
+
+function testBoundingBoxScaling() {
+    console.log('🧪 Testing bounding box scaling...');
+    
+    const video = document.getElementById('videoPlayer');
+    if (!video) {
+        console.error('❌ Video player not found for testing');
+        return;
+    }
+    
+    // Wait for video to load
+    if (video.readyState < 1) {
+        console.log('⏳ Waiting for video metadata for testing...');
+        video.addEventListener('loadedmetadata', testBoundingBoxScaling, { once: true });
+        return;
+    }
+    
+    console.log('📊 Video Test Info:');
+    console.log(`  Browser video size: ${video.videoWidth}x${video.videoHeight}`);
+    console.log(`  Backend resolution: ${video.dataset.originalWidth}x${video.dataset.originalHeight}`);
+    console.log(`  Display size: ${video.offsetWidth}x${video.offsetHeight}`);
+    
+    // Test both percentage and pixel coordinates
+    const testCases = [
+        { name: 'Percentage (center)', x: 50, y: 50, w: 10, h: 20 },
+        { name: 'Percentage (top-left)', x: 10, y: 15, w: 25, h: 30 },
+        { name: 'Pixel (if 1920x1080)', x: 960, y: 540, w: 192, h: 216 },
+        { name: 'Pixel (if 1920x1080)', x: 384, y: 270, w: 480, h: 324 }
+    ];
+    
+    const videoRect = video.getBoundingClientRect();
+    const displayWidth = videoRect.width;
+    const displayHeight = videoRect.height;
+    
+    testCases.forEach(test => {
+        console.log(`\n🧪 Testing ${test.name}:`);
+        const result = convertBoundingBoxCoordinates(
+            test.x, test.y, test.w, test.h,
+            video, displayWidth, displayHeight
+        );
+        console.log(`  Result: (${result.scaledX.toFixed(1)}, ${result.scaledY.toFixed(1)}, ${result.scaledWidth.toFixed(1)}x${result.scaledHeight.toFixed(1)})`);
+    });
+    
+    console.log('✅ Bounding box scaling test completed');
+}
+
+async function calibrateBoundingBoxes(detectionId = null) {
+    console.log('🎯 Starting AI-powered bounding box calibration...');
+    
+    const video = document.getElementById('videoPlayer');
+    if (!video || video.readyState < 1) {
+        console.error('❌ Video not ready for calibration');
+        return;
+    }
+    
+    try {
+        // Step 1: Capture current video frame
+        const frameCapture = await captureVideoFrame(video);
+        console.log('📸 Video frame captured for calibration');
+        
+        // Step 2: Get detection coordinates for calibration
+        const calibrationData = await prepareCalibrationData(detectionId);
+        console.log('📊 Calibration data prepared:', calibrationData);
+        
+        // Step 3: Send to backend for AI re-detection and calibration
+        const calibrationResult = await performAICalibration(frameCapture, calibrationData);
+        console.log('🤖 AI calibration completed:', calibrationResult);
+        
+        // Step 4: Apply calibration offsets globally
+        if (calibrationResult.success) {
+            applyCalibrationOffsets(calibrationResult.offsets);
+            console.log('✅ Calibration offsets applied to all detections');
+            
+            // Show success notification
+            showCalibrationNotification('✅ Bounding box calibration completed! Boxes should now be more accurate.');
+        } else {
+            console.error('❌ Calibration failed:', calibrationResult.error);
+            showCalibrationNotification('❌ Calibration failed. Please try again.', 'error');
+        }
+        
+    } catch (error) {
+        console.error('❌ Calibration error:', error);
+        showCalibrationNotification('❌ Calibration error: ' + error.message, 'error');
+    }
+}
+
+async function captureVideoFrame(video) {
+    console.log('📸 Capturing current video frame...');
+    
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Get actual video display dimensions
+    const videoRect = video.getBoundingClientRect();
+    const videoAspectRatio = video.videoWidth / video.videoHeight;
+    const containerAspectRatio = videoRect.width / videoRect.height;
+    
+    let displayWidth, displayHeight, offsetX, offsetY;
+    
+    if (containerAspectRatio > videoAspectRatio) {
+        // Video is pillarboxed
+        displayHeight = videoRect.height;
+        displayWidth = displayHeight * videoAspectRatio;
+        offsetX = (videoRect.width - displayWidth) / 2;
+        offsetY = 0;
+    } else {
+        // Video is letterboxed
+        displayWidth = videoRect.width;
+        displayHeight = displayWidth / videoAspectRatio;
+        offsetX = 0;
+        offsetY = (videoRect.height - displayHeight) / 2;
+    }
+    
+    // Set canvas to actual displayed video size
+    canvas.width = displayWidth;
+    canvas.height = displayHeight;
+    
+    // Draw the video frame to canvas
+    ctx.drawImage(video, 0, 0, displayWidth, displayHeight);
+    
+    // Convert to base64 for transmission
+    const frameData = canvas.toDataURL('image/jpeg', 0.9);
+    
+    console.log(`📊 Frame captured: ${displayWidth}x${displayHeight} (offset: ${offsetX}, ${offsetY})`);
+    
+    return {
+        frameData,
+        displayWidth,
+        displayHeight,
+        offsetX,
+        offsetY,
+        timestamp: video.currentTime,
+        originalVideoWidth: video.videoWidth,
+        originalVideoHeight: video.videoHeight
+    };
+}
+
+async function prepareCalibrationData(detectionId) {
+    console.log('📊 Preparing calibration data...');
+    
+    const detections = [];
+    const detectionItems = document.querySelectorAll('.detection-item[data-detection-id]');
+    
+    detectionItems.forEach(item => {
+        const data = {
+            id: parseInt(item.dataset.detectionId),
+            timestamp: parseFloat(item.dataset.timestamp),
+            frameNumber: parseInt(item.dataset.frameNumber) || null,
+            bbox: {
+                x: parseInt(item.dataset.bboxX),
+                y: parseInt(item.dataset.bboxY),
+                width: parseInt(item.dataset.bboxWidth),
+                height: parseInt(item.dataset.bboxHeight)
+            }
+        };
+        
+        // If specific detection requested, include only that one
+        if (detectionId === null || data.id === detectionId) {
+            detections.push(data);
+        }
+    });
+    
+    console.log(`📊 Prepared ${detections.length} detections for calibration`);
+    return {
+        videoId: {{ video.id }},
+        detections,
+        targetDetectionId: detectionId
+    };
+}
+
+async function performAICalibration(frameCapture, calibrationData) {
+    console.log('🤖 Sending calibration request to AI backend...');
+    
+    const requestData = {
+        frameData: frameCapture.frameData,
+        frameInfo: {
+            displayWidth: frameCapture.displayWidth,
+            displayHeight: frameCapture.displayHeight,
+            offsetX: frameCapture.offsetX,
+            offsetY: frameCapture.offsetY,
+            timestamp: frameCapture.timestamp,
+            originalVideoWidth: frameCapture.originalVideoWidth,
+            originalVideoHeight: frameCapture.originalVideoHeight
+        },
+        calibrationData
+    };
+    
+    try {
+        const response = await fetch(`/videos/api/${calibrationData.videoId}/calibrate-coordinates`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Calibration API error: ${response.status} ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        console.log('🤖 AI calibration response:', result);
+        
+        return result;
+        
+    } catch (error) {
+        console.error('❌ AI calibration request failed:', error);
+        throw error;
+    }
+}
+
+function applyCalibrationOffsets(offsets) {
+    console.log('🔧 Applying calibration offsets:', offsets);
+    
+    // Store calibration offsets globally for this session
+    window.calibrationOffsets = offsets;
+    
+    // Update all existing bounding boxes
+    const existingBox = document.getElementById('boundingBox');
+    if (existingBox) {
+        existingBox.remove();
+    }
+    
+    // Refresh any visible detection highlights
+    const highlightedDetection = document.querySelector('.detection-item.bg-blue-100');
+    if (highlightedDetection) {
+        const detectionId = highlightedDetection.dataset.detectionId;
+        const timestamp = parseFloat(highlightedDetection.dataset.timestamp);
+        const bboxX = parseInt(highlightedDetection.dataset.bboxX);
+        const bboxY = parseInt(highlightedDetection.dataset.bboxY);
+        const bboxWidth = parseInt(highlightedDetection.dataset.bboxWidth);
+        const bboxHeight = parseInt(highlightedDetection.dataset.bboxHeight);
+        
+        console.log('🔄 Refreshing highlighted detection with calibrated coordinates');
+        showEnhancedBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp, detectionId);
+    }
+    
+    console.log('✅ Calibration offsets applied successfully');
+}
+
+function showCalibrationNotification(message, type = 'success') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm ${
+        type === 'error' ? 'bg-red-100 border border-red-400 text-red-700' : 'bg-green-100 border border-green-400 text-green-700'
+    }`;
+    notification.innerHTML = `
+        <div class="flex items-center">
+            <div class="flex-1">${message}</div>
+            <button onclick="this.parentElement.parentElement.remove()" class="ml-2 text-lg font-semibold">&times;</button>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+function highlightDetectionInNavigator(detectionId) {
+    console.log(`🎯 Highlighting detection ${detectionId} in navigator`);
+    
+    // Remove existing highlights
+    const allItems = document.querySelectorAll('.detection-item');
+    allItems.forEach(item => {
+        item.classList.remove('bg-blue-100', 'border-blue-300');
+    });
+    
+    // Find and highlight the detection item
+    const targetItem = document.querySelector(`.detection-item[data-detection-id="${detectionId}"]`);
+    if (targetItem) {
+        targetItem.classList.add('bg-blue-100', 'border-blue-300');
+        
+        // Scroll into view smoothly
+        targetItem.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+        });
+        
+        console.log(`✅ Highlighted detection ${detectionId} in navigator`);
+    } else {
+        console.warn(`⚠️ Detection item ${detectionId} not found in navigator`);
+    }
+}
+
+function showEnhancedBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp, detectionId) {
+    console.log(`📦 Showing enhanced bounding box for PERSON-${String(detectionId).padStart(4, '0')}`);
+    
+    const video = document.getElementById('videoPlayer');
+    if (!video) {
+        console.error('❌ Video element not found for bounding box');
+        return;
+    }
+    
+    // Wait for video to be ready
+    if (video.readyState < 1 || video.videoWidth === 0) {
+        console.log('⏳ Waiting for video to load before showing bounding box...');
+        video.addEventListener('loadedmetadata', function() {
+            showEnhancedBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp, detectionId);
+        }, { once: true });
+        return;
+    }
+    
+    // Remove existing bounding box
+    const existingBox = document.getElementById('boundingBox');
+    if (existingBox) {
+        existingBox.remove();
+    }
+    
+    // Get video container
+    const videoContainer = video.parentElement;
+    if (!videoContainer) {
+        console.error('❌ Video container not found');
+        return;
+    }
+    
+    // Position the container relatively
+    videoContainer.style.position = 'relative';
+    
+    // Create enhanced bounding box overlay
+    const boundingBox = document.createElement('div');
+    boundingBox.id = 'boundingBox';
+    boundingBox.style.position = 'absolute';
+    boundingBox.style.border = '3px solid #ef4444';
+    boundingBox.style.background = 'rgba(239, 68, 68, 0.15)';
+    boundingBox.style.pointerEvents = 'none';
+    boundingBox.style.zIndex = '10';
+    boundingBox.style.borderRadius = '4px';
+    boundingBox.style.transition = 'all 0.3s ease';
+    
+    // Add enhanced label with person ID
+    const label = document.createElement('div');
+    label.style.position = 'absolute';
+    label.style.top = '-30px';
+    label.style.left = '0';
+    label.style.background = '#ef4444';
+    label.style.color = 'white';
+    label.style.padding = '4px 8px';
+    label.style.fontSize = '14px';
+    label.style.fontWeight = 'bold';
+    label.style.borderRadius = '4px';
+    label.style.whiteSpace = 'nowrap';
+    label.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+    label.textContent = `PERSON-${String(detectionId).padStart(4, '0')}`;
+    boundingBox.appendChild(label);
+    
+    // Function to update bounding box position and size
+    function updateBoundingBox() {
+        const videoRect = video.getBoundingClientRect();
+        const containerRect = videoContainer.getBoundingClientRect();
+        
+        // Calculate actual video display dimensions (accounting for aspect ratio)
+        const videoAspectRatio = video.videoWidth / video.videoHeight;
+        const containerAspectRatio = videoRect.width / videoRect.height;
+        
+        let displayWidth, displayHeight, offsetX, offsetY;
+        
+        if (containerAspectRatio > videoAspectRatio) {
+            // Video is pillarboxed (black bars on sides)
+            displayHeight = videoRect.height;
+            displayWidth = displayHeight * videoAspectRatio;
+            offsetX = (videoRect.width - displayWidth) / 2;
+            offsetY = 0;
+        } else {
+            // Video is letterboxed (black bars on top/bottom)
+            displayWidth = videoRect.width;
+            displayHeight = displayWidth / videoAspectRatio;
+            offsetX = 0;
+            offsetY = (videoRect.height - displayHeight) / 2;
+        }
+        
+        // Smart coordinate conversion (handles both percentage and pixel coordinates)
+        const { scaledX, scaledY, scaledWidth, scaledHeight } = convertBoundingBoxCoordinates(
+            bboxX, bboxY, bboxWidth, bboxHeight, 
+            video, displayWidth, displayHeight
+        );
+        
+        const boxLeft = offsetX + scaledX;
+        const boxTop = offsetY + scaledY;
+        const boxWidth = scaledWidth;
+        const boxHeight = scaledHeight;
+        
+        boundingBox.style.left = `${boxLeft}px`;
+        boundingBox.style.top = `${boxTop}px`;
+        boundingBox.style.width = `${boxWidth}px`;
+        boundingBox.style.height = `${boxHeight}px`;
+        
+        console.log(`📏 Enhanced bbox positioned: ${boxLeft.toFixed(1)}, ${boxTop.toFixed(1)}, ${boxWidth.toFixed(1)}x${boxHeight.toFixed(1)}`);
+    }
+    
+    videoContainer.appendChild(boundingBox);
+    
+    // Update position when video metadata loads
+    if (video.readyState >= 1) {
+        updateBoundingBox();
+    } else {
+        video.addEventListener('loadedmetadata', updateBoundingBox, { once: true });
+    }
+    
+    // Update position on window resize
+    const resizeHandler = () => updateBoundingBox();
+    window.addEventListener('resize', resizeHandler);
+    
+    // Blink effect - flash the box for 1 second
+    let blinkCount = 0;
+    const blinkInterval = setInterval(() => {
+        boundingBox.style.opacity = boundingBox.style.opacity === '0' ? '1' : '0';
+        blinkCount++;
+        if (blinkCount >= 4) { // 2 full blinks (4 opacity changes)
+            clearInterval(blinkInterval);
+            boundingBox.style.opacity = '1';
+        }
+    }, 250);
+    
+    // Auto-hide bounding box after 8 seconds
+    setTimeout(() => {
+        if (boundingBox && boundingBox.parentElement) {
+            boundingBox.style.opacity = '0';
+            setTimeout(() => {
+                if (boundingBox && boundingBox.parentElement) {
+                    boundingBox.remove();
+                    window.removeEventListener('resize', resizeHandler);
+                }
+            }, 300);
+        }
+    }, 8000);
+    
+    console.log(`✅ Enhanced bounding box displayed for PERSON-${String(detectionId).padStart(4, '0')}`);
+}
+
+function updateTimeDisplay() {
+    const video = document.getElementById('videoPlayer');
+    const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+    const durationDisplay = document.getElementById('durationDisplay');
+    
+    if (video && currentTimeDisplay) {
+        currentTimeDisplay.textContent = formatTimestamp(video.currentTime);
+    }
+    
+    if (video && durationDisplay && video.duration) {
+        durationDisplay.textContent = formatTimestamp(video.duration);
+    }
+}
+
+function updateDetectionCounter() {
+    const video = document.getElementById('videoPlayer');
+    const detectionCounter = document.getElementById('detectionCounter');
+    
+    if (!video || !detectionCounter) return;
+    
+    const currentTime = video.currentTime;
+    const tolerance = 1.0; // 1 second tolerance
+    
+    // Find detections near current time
+    const detectionItems = document.querySelectorAll('.detection-item');
+    let activeDetection = null;
+    
+    detectionItems.forEach(item => {
+        const timestamp = parseFloat(item.dataset.timestamp);
+        if (Math.abs(currentTime - timestamp) <= tolerance) {
+            if (!activeDetection || Math.abs(currentTime - timestamp) < Math.abs(currentTime - parseFloat(activeDetection.dataset.timestamp))) {
+                activeDetection = item;
+            }
+        }
+    });
+    
+    if (activeDetection) {
+        const detectionId = activeDetection.dataset.detectionId;
+        const timestamp = parseFloat(activeDetection.dataset.timestamp);
+        detectionCounter.textContent = `PERSON-${String(detectionId).padStart(4, '0')} at ${timestamp.toFixed(1)}s`;
+        detectionCounter.className = 'text-green-600 font-medium';
+        
+        // Highlight the row
+        highlightDetectionInNavigator(detectionId);
+    } else {
+        detectionCounter.textContent = 'No detection at current frame';
+        detectionCounter.className = 'text-gray-500';
+        
+        // Remove highlights
+        const allItems = document.querySelectorAll('.detection-item');
+        allItems.forEach(item => {
+            item.classList.remove('bg-blue-100', 'border-blue-300');
+        });
+    }
+}
+
+// Legacy function for compatibility
 function highlightDetectionRow(detectionId) {
     // Remove existing highlights
     const allRows = document.querySelectorAll('tbody tr');
@@ -1542,11 +2588,16 @@ function showBoundingBox(bboxX, bboxY, bboxWidth, bboxHeight, timestamp) {
             offsetY = (videoRect.height - displayHeight) / 2;
         }
         
-        // Convert percentage-based bounding box to pixels
-        const boxLeft = offsetX + (bboxX / 100) * displayWidth;
-        const boxTop = offsetY + (bboxY / 100) * displayHeight;
-        const boxWidth = (bboxWidth / 100) * displayWidth;
-        const boxHeight = (bboxHeight / 100) * displayHeight;
+        // Smart coordinate conversion (handles both percentage and pixel coordinates)
+        const { scaledX, scaledY, scaledWidth, scaledHeight } = convertBoundingBoxCoordinates(
+            bboxX, bboxY, bboxWidth, bboxHeight, 
+            video, displayWidth, displayHeight
+        );
+        
+        const boxLeft = offsetX + scaledX;
+        const boxTop = offsetY + scaledY;
+        const boxWidth = scaledWidth;
+        const boxHeight = scaledHeight;
         
         // Position relative to video container
         boundingBox.style.left = `${boxLeft}px`;
@@ -1706,8 +2757,120 @@ document.addEventListener('keydown', function(event) {
             }
             event.preventDefault();
             break;
+        case 't':
+            // 'T' key to test bounding box scaling
+            testBoundingBoxScaling();
+            event.preventDefault();
+            break;
+        case 'c':
+            // 'C' key to calibrate all bounding boxes
+            calibrateBoundingBoxes();
+            event.preventDefault();
+            break;
+        case 'd':
+            // 'D' key to toggle demo debug mode
+            toggleDemoDebugMode();
+            event.preventDefault();
+            break;
+        case 'ArrowUp':
+            // Arrow keys for manual fine-tuning in demo mode
+                adjustDemoOffsets(0, -1);
+                event.preventDefault();
+            }
+            break;
+        case 'ArrowDown':
+                adjustDemoOffsets(0, 1);
+                event.preventDefault();
+            }
+            break;
+        case 'ArrowLeft':
+                adjustDemoOffsets(-1, 0);
+                event.preventDefault();
+            }
+            break;
+        case 'ArrowRight':
+                adjustDemoOffsets(1, 0);
+                event.preventDefault();
+            }
+            break;
+        case 'r':
+            // 'R' key to reset demo offsets
+                resetDemoOffsets();
+                event.preventDefault();
+            }
+            break;
+        case 's':
+            // 'S' key to save demo offsets
+                saveDemoOffsets();
+                event.preventDefault();
+            }
+            break;
     }
 });
+
+// Enhanced video time tracking for detection highlighting
+function setupVideoTimeTracking() {
+    const video = document.getElementById('videoPlayer');
+    if (!video) return;
+    
+    let lastHighlightedDetection = null;
+    
+    video.addEventListener('timeupdate', function() {
+        const currentTime = video.currentTime;
+        updateTimeDisplay(currentTime);
+        
+        // Find detection closest to current time (within 2 seconds)
+        const detectionItems = document.querySelectorAll('.detection-item[data-timestamp]');
+        let closestDetection = null;
+        let closestTimeDiff = Infinity;
+        
+        detectionItems.forEach(item => {
+            const timestamp = parseFloat(item.dataset.timestamp);
+            const timeDiff = Math.abs(currentTime - timestamp);
+            
+            // Within 2 seconds and closer than previous
+            if (timeDiff <= 2 && timeDiff < closestTimeDiff) {
+                closestDetection = item;
+                closestTimeDiff = timeDiff;
+            }
+        });
+        
+        // Highlight the closest detection if found and different from last highlighted
+        if (closestDetection && closestDetection !== lastHighlightedDetection) {
+            const detectionId = closestDetection.dataset.detectionId;
+            
+            // Remove previous highlights
+            detectionItems.forEach(item => {
+                item.classList.remove('bg-blue-100', 'border-blue-300', 'ring-2', 'ring-blue-200');
+            });
+            
+            // Highlight current detection
+            closestDetection.classList.add('bg-blue-100', 'border-blue-300', 'ring-2', 'ring-blue-200');
+            
+            // Update detection counter
+            updateDetectionCounter(parseInt(detectionId), currentTime);
+            
+            lastHighlightedDetection = closestDetection;
+            
+            console.log(`🎯 Auto-highlighted PERSON-${String(detectionId).padStart(4, '0')} at ${currentTime.toFixed(1)}s`);
+        } else if (!closestDetection && lastHighlightedDetection) {
+            // Clear highlight when no detection is close
+            detectionItems.forEach(item => {
+                item.classList.remove('bg-blue-100', 'border-blue-300', 'ring-2', 'ring-blue-200');
+            });
+            
+            const counter = document.getElementById('detectionCounter');
+            if (counter) {
+                counter.textContent = 'No detection at current frame';
+                counter.className = 'text-gray-600 font-medium';
+            }
+            
+            lastHighlightedDetection = null;
+        }
+    });
+    
+    console.log('🎬 Enhanced video time tracking initialized');
+}
 
 // Initialize debug panel visibility
 document.addEventListener('DOMContentLoaded', function() {
@@ -1719,6 +2882,13 @@ document.addEventListener('DOMContentLoaded', function() {
         debugPanel.classList.remove('hidden');
         console.log('🔧 Debug panel initialized and visible');
     }
+    
+    // Initialize enhanced video time tracking
+    setupVideoTimeTracking();
+    
+    // Load saved demo offsets for perfect positioning
+    loadDemoOffsets();
+    console.log('🎯 DEMO: System ready for boss demo - press D for debug mode');
     
     // Log available detections for debugging
     const detectionRows = document.querySelectorAll('tbody tr');
@@ -1742,6 +2912,208 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// Debug function to test video endpoints
+async function debugVideoEndpoints() {
+    const video = document.getElementById('videoPlayer');
+    if (!video) {
+        console.error('No video element found');
+        return;
+    }
+    
+    const sources = video.querySelectorAll('source');
+    console.log(`🔍 Testing ${sources.length} video sources...`);
+    
+    for (let i = 0; i < sources.length; i++) {
+        const source = sources[i];
+        const url = source.src;
+        console.log(`\n📹 Testing source ${i + 1}: ${url}`);
+        
+        try {
+            // Try HEAD request first
+            const headResponse = await fetch(url, { method: 'HEAD' });
+            console.log(`   HEAD status: ${headResponse.status} ${headResponse.statusText}`);
+            console.log(`   Content-Type: ${headResponse.headers.get('Content-Type')}`);
+            console.log(`   Content-Length: ${headResponse.headers.get('Content-Length')}`);
+            console.log(`   Accept-Ranges: ${headResponse.headers.get('Accept-Ranges')}`);
+            
+            // Try range request
+            const rangeResponse = await fetch(url, {
+                headers: { 'Range': 'bytes=0-1023' }
+            });
+            console.log(`   Range request status: ${rangeResponse.status}`);
+            
+            // Test the test endpoint if available
+            const filename = url.split('/').pop();
+            const testUrl = `/videos/test/${filename}`;
+            console.log(`   Testing diagnostic endpoint: ${testUrl}`);
+            try {
+                const testResponse = await fetch(testUrl);
+                if (testResponse.ok) {
+                    const testData = await testResponse.text();
+                    console.log(`   Diagnostic info:`, testData);
+                }
+            } catch (e) {
+                console.log(`   Diagnostic endpoint error: ${e.message}`);
+            }
+            
+        } catch (error) {
+            console.error(`   ❌ Error testing source: ${error.message}`);
+        }
+    }
+}
+
+// Run debug on page load if video exists
+document.addEventListener('DOMContentLoaded', function() {
+    const video = document.getElementById('videoPlayer');
+    if (video && !video.src) {
+        console.log('🔧 Video element found but not playing. Run debugVideoEndpoints() to diagnose.');
+        
+        // Check if this is a detected video
+        if (video.dataset.videoType === 'detected') {
+            console.log('🎯 This is a detected video with path:', video.dataset.videoPath);
+            console.log('💡 Try running: testDetectedVideo()');
+        }
+    }
+});
+
+// Test function specifically for detected videos
+function testDetectedVideo() {
+    const video = document.getElementById('videoPlayer');
+    if (!video || video.dataset.videoType !== 'detected') {
+        console.error('No detected video found');
+        return;
+    }
+    
+    const videoPath = video.dataset.videoPath;
+    console.log('🎬 Testing detected video:', videoPath);
+    
+    // Try different approaches
+    const testUrls = [
+        `/videos/detected/${videoPath}`,
+        `/videos/serve-annotated/${videoPath}`,
+        `/processing/outputs/${videoPath}`,
+        `/static/uploads/${videoPath}`
+    ];
+    
+    console.log('🔍 Testing multiple endpoints...');
+    testUrls.forEach(async (url, index) => {
+        try {
+            const response = await fetch(url, { method: 'HEAD' });
+            console.log(`${index + 1}. ${url} - Status: ${response.status} ${response.statusText}`);
+            if (response.ok) {
+                console.log(`   ✅ This endpoint works! Content-Type: ${response.headers.get('Content-Type')}`);
+                
+                // Try to play from this source
+                video.src = url;
+                video.load();
+                console.log(`   🎬 Attempting to play from: ${url}`);
+            }
+        } catch (e) {
+            console.log(`${index + 1}. ${url} - Error: ${e.message}`);
+        }
+    });
+}
+
+// AJAX function to load more detections
+async function loadMoreDetections() {
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
+    const currentPage = parseInt(loadMoreBtn.dataset.page);
+    const totalPages = parseInt(loadMoreBtn.dataset.totalPages);
+    
+    if (currentPage >= totalPages) {
+        loadMoreBtn.textContent = 'All detections loaded';
+        loadMoreBtn.disabled = true;
+        return;
+    }
+    
+    loadMoreBtn.textContent = 'Loading...';
+    loadMoreBtn.disabled = true;
+    
+    try {
+        // Load all remaining pages
+        const promises = [];
+        for (let page = currentPage + 1; page <= totalPages; page++) {
+            promises.push(
+                fetch(`/videos/api/{{ video.id }}/detections?page=${page}&per_page=50`)
+                    .then(response => response.json())
+            );
+        }
+        
+        const results = await Promise.all(promises);
+        
+        // Find the detection list container
+        const detectionList = document.querySelector('.max-h-96.overflow-y-auto');
+        if (!detectionList) {
+            console.error('Detection list container not found');
+            return;
+        }
+        
+        // Append new detections
+        let totalAdded = 0;
+        results.forEach(result => {
+            if (result.detections && Array.isArray(result.detections)) {
+                result.detections.forEach((detection, index) => {
+                    totalAdded++;
+                    const detectionHtml = createDetectionItemHtml(detection, totalAdded + {{ detections|length }});
+                    detectionList.insertAdjacentHTML('beforeend', detectionHtml);
+                });
+            }
+        });
+        
+        loadMoreBtn.textContent = `Loaded ${totalAdded} more detections`;
+        loadMoreBtn.style.display = 'none';
+        
+        console.log(`✅ Loaded ${totalAdded} additional detections via AJAX`);
+        
+    } catch (error) {
+        console.error('❌ Error loading more detections:', error);
+        loadMoreBtn.textContent = 'Error loading detections';
+        loadMoreBtn.disabled = false;
+    }
+}
+
+// Helper function to create detection item HTML
+function createDetectionItemHtml(detection, index) {
+    const html = `
+        <div class="detection-item p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+             data-detection-id="${detection.id}"
+             data-timestamp="${detection.timestamp}"
+             data-frame-number="${detection.frame_number || ''}"
+             data-bbox-x="${detection.bbox_x}"
+             data-bbox-y="${detection.bbox_y}"
+             data-bbox-width="${detection.bbox_width}"
+             data-bbox-height="${detection.bbox_height}"
+             onclick="navigateToDetection(${detection.timestamp}, ${detection.id}, ${detection.bbox_x}, ${detection.bbox_y}, ${detection.bbox_width}, ${detection.bbox_height})">
+            
+            <div class="flex justify-between items-start">
+                <div class="flex-1">
+                    <div class="font-medium text-gray-900">PERSON-${String(index).padStart(4, '0')}</div>
+                    <div class="text-sm text-gray-600">${detection.timestamp.toFixed(2)}s</div>
+                    <div class="text-xs text-gray-500">
+                        Confidence: ${(detection.confidence * 100).toFixed(1)}%
+                    </div>
+                    <div class="text-xs text-gray-400">
+                        Box: ${detection.bbox_x},${detection.bbox_y} ${detection.bbox_width}×${detection.bbox_height}
+                    </div>
+                    ${detection.is_identified ? '<div class="text-xs text-green-600 font-medium">✅ Identified</div>' : ''}
+                </div>
+                <div class="ml-2 flex flex-col space-y-1">
+                    <button class="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            onclick="event.stopPropagation(); navigateToDetection(${detection.timestamp}, ${detection.id}, ${detection.bbox_x}, ${detection.bbox_y}, ${detection.bbox_width}, ${detection.bbox_height})">
+                        🎯 Go
+                    </button>
+                    <button class="text-purple-600 hover:text-purple-800 text-xs font-medium"
+                            onclick="event.stopPropagation(); calibrateBoundingBoxes(${detection.id})"
+                            title="AI calibrate this detection">
+                        🤖 Cal
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    return html;
+}
 
 </script>
 {% endblock %}

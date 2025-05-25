@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime
 import os
 from pathlib import Path
+import json
 
 # Try to import torch and check CUDA availability
 try:
@@ -341,6 +342,28 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 print(f"⚠️  Could not convert to web format: {e}")
                 print("   Video may not play in browser without FFmpeg")
         
+        # Extract person images before finalizing
+        print(f"\n📸 Extracting person images...")
+        persons_dir = output_dir / "persons"
+        persons_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Group detections by person_id for extraction
+        person_tracks = {}
+        for det in detections:
+            pid = det.get('person_id', 0)
+            if pid not in person_tracks:
+                person_tracks[pid] = []
+            person_tracks[pid].append({
+                'frame_number': det['frame_number'],
+                'timestamp': det['timestamp'],
+                'bbox': [det['x'], det['y'], det['width'], det['height']],
+                'confidence': det['confidence'],
+                'person_id': f"PERSON-{pid:04d}"
+            })
+        
+        # Extract person images
+        extracted_count = extract_persons_data_gpu(video_path, person_tracks, persons_dir)
+        
         # Update progress: Finalizing
         if video_id:
             update_video_progress(video_id, 95, f"Finalizing: {len(detections)} detections found", app)
@@ -363,6 +386,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         return {
             'detections': detections,
             'annotated_video_path': annotated_filename,
+            'persons_dir': str(persons_dir.relative_to(Path.cwd())) if persons_dir.exists() else None,
             'processing_summary': {
                 'total_frames': total_frames,
                 'processed_frames': processed_frames,
@@ -374,7 +398,8 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 'person_summary': person_summary,
                 'gpu_used': gpu_config['use_gpu'],
                 'batch_size': batch_size,
-                'skip_frames': skip_frames
+                'skip_frames': skip_frames,
+                'persons_extracted': extracted_count if 'extracted_count' in locals() else 0
             }
         }
         
@@ -677,3 +702,91 @@ def detect_with_opencv_dnn(model, frame, frame_num):
     # If we have a DNN model, use it
     # This is a placeholder for actual DNN inference
     return []
+
+
+def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
+    """
+    Extract person images and metadata to PERSON-XXXX folders
+    Optimized version for GPU processing pipeline
+    """
+    print(f"📸 Extracting person data to {persons_dir}")
+    
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"❌ Failed to open video for person extraction: {video_path}")
+        return
+    
+    extracted_count = 0
+    
+    for person_id, detections in person_tracks.items():
+        person_dir = persons_dir / person_id
+        person_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Extract representative images (every 10th detection or max 10 images)
+        sample_detections = detections[::max(1, len(detections) // 10)][:10]
+        
+        person_metadata = {
+            "person_id": person_id,
+            "total_detections": len(detections),
+            "first_appearance": detections[0]["timestamp"],
+            "last_appearance": detections[-1]["timestamp"],
+            "avg_confidence": sum(d["confidence"] for d in detections) / len(detections),
+            "images": [],
+            "created_at": datetime.now().isoformat()
+        }
+        
+        for i, detection in enumerate(sample_detections):
+            frame_number = detection["frame_number"]
+            
+            # Seek to specific frame
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            ret, frame = cap.read()
+            
+            if ret:
+                x, y, w, h = detection["bbox"]
+                
+                # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+                # Small bounding boxes typically contain low-quality person images
+                # that are not suitable for face recognition training
+                MIN_BBOX_WIDTH = 128
+                
+                if w < MIN_BBOX_WIDTH:
+                    print(f"⚠️ Skipping {person_id} frame {frame_number}: bbox width {w}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                    continue
+                
+                # Extract person region with some padding
+                padding = 10
+                x1 = max(0, int(x - padding))
+                y1 = max(0, int(y - padding))
+                x2 = min(frame.shape[1], int(x + w + padding))
+                y2 = min(frame.shape[0], int(y + h + padding))
+                
+                person_img = frame[y1:y2, x1:x2]
+                
+                if person_img.size > 0:
+                    img_filename = f"{person_id}_frame_{frame_number:06d}.jpg"
+                    img_path = person_dir / img_filename
+                    cv2.imwrite(str(img_path), person_img)
+                    
+                    person_metadata["images"].append({
+                        "filename": img_filename,
+                        "frame_number": frame_number,
+                        "timestamp": detection["timestamp"],
+                        "confidence": detection["confidence"],
+                        "bbox": detection["bbox"]
+                    })
+        
+        # Save metadata
+        metadata_path = person_dir / "metadata.json"
+        with open(metadata_path, "w") as f:
+            json.dump(person_metadata, f, indent=2)
+        
+        if len(person_metadata["images"]) > 0:
+            extracted_count += 1
+            print(f"✅ Created {person_id} folder with {len(person_metadata['images'])} images")
+        else:
+            print(f"⚠️ No valid images for {person_id} (all too small)")
+    
+    cap.release()
+    print(f"📸 Extracted {extracted_count} persons with valid images")
+    return extracted_count

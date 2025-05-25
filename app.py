@@ -470,6 +470,7 @@ def create_app(config_name=None):
         from hr_management.blueprints.face_recognition import face_recognition_bp
         from hr_management.blueprints.auth import auth_bp
         from hr_management.blueprints.api import api_bp
+        from hr_management.blueprints.persons import persons_bp
         
         app.register_blueprint(dashboard_bp, url_prefix='/')
         app.register_blueprint(employees_bp, url_prefix='/employees')
@@ -477,6 +478,7 @@ def create_app(config_name=None):
         app.register_blueprint(face_recognition_bp, url_prefix='/face-recognition')
         app.register_blueprint(auth_bp, url_prefix='/auth')
         app.register_blueprint(api_bp, url_prefix='/api')
+        app.register_blueprint(persons_bp, url_prefix='/persons')
         
         # GPU management blueprint
         from hr_management.blueprints import gpu_management_bp

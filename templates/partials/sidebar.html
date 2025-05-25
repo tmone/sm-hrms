@@ -49,6 +49,15 @@
             </li>
             
             <li>
+                <a href="{{ url_for('persons.index') }}" 
+                   class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors
+                          {% if request.endpoint and request.endpoint.startswith('persons') %}bg-blue-700{% endif %}">
+                    <i class="fas fa-user-friends mr-3"></i>
+                    Detected Persons
+                </a>
+            </li>
+            
+            <li>
                 <a href="{{ url_for('face_recognition.datasets') }}" 
                    class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors
                           {% if request.endpoint == 'face_recognition.datasets' %}bg-blue-700{% endif %}">

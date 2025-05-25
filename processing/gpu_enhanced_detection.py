@@ -95,7 +95,10 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         duration = total_frames / fps if fps > 0 else 0
         
+        # Get input file size
+        input_size_mb = Path(video_path).stat().st_size / (1024 * 1024)
         print(f"📹 Video: {width}x{height} @ {fps:.1f}fps, {total_frames} frames, {duration:.1f}s")
+        print(f"📁 Input size: {input_size_mb:.1f} MB")
         
         # Update progress: Video loaded
         if video_id:
@@ -110,14 +113,21 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = output_dir / f"{video_name}_annotated_{timestamp}.mp4"
         
+        # Process every nth frame for speed (adjust based on video length)
+        # Only skip frames for very long videos to maintain quality
+        skip_frames = 2 if total_frames > 3600 else 1  # Skip frames for videos > 120s @ 30fps
+        
         # Initialize video writer with Windows-compatible codec
         out = None
         actual_output_path = output_path
         
+        # Adjust output FPS based on skip_frames to avoid timing issues
+        output_fps = fps / skip_frames if skip_frames > 1 else fps
+        
         try:
             # Use Windows-compatible video writer
             from .windows_video_writer import create_windows_compatible_writer
-            out, actual_output_path = create_windows_compatible_writer(output_path, fps, width, height)
+            out, actual_output_path = create_windows_compatible_writer(output_path, output_fps, width, height)
             output_path = actual_output_path  # Update path in case extension changed
             print(f"✅ Video writer initialized successfully")
         except Exception as e:
@@ -126,7 +136,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             # Simple fallback - try mp4v directly
             try:
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height), True)
+                out = cv2.VideoWriter(str(output_path), fourcc, output_fps, (width, height), True)
                 
                 if out.isOpened():
                     print(f"✅ Using MPEG-4 codec (fallback)")
@@ -144,11 +154,11 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             try:
                 # Use XVID for better compression
                 fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                out = cv2.VideoWriter(avi_output_path, fourcc, fps, (width, height), True)
+                out = cv2.VideoWriter(avi_output_path, fourcc, output_fps, (width, height), True)
                 if out.isOpened():
                     output_path = Path(avi_output_path)
                     print(f"✅ Using XVID codec in AVI container")
-                    print(f"📹 Output settings: {width}x{height} @ {fps}fps")
+                    print(f"📹 Output settings: {width}x{height} @ {output_fps}fps")
                     print(f"⚠️  Note: AVI files may need conversion for web playback")
                 else:
                     out.release()
@@ -207,25 +217,20 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         processed_frames = 0
         written_frames = 0  # Track actual frames written to output
         
-        # Process every nth frame for speed (adjust based on video length)
-        skip_frames = 2 if total_frames > 1800 else 1  # Skip frames for videos > 60s @ 30fps
-        last_annotated_frame = None  # Store last annotated frame for interpolation
-        
         print(f"📊 Video info: {total_frames} frames @ {fps}fps = {duration:.1f}s")
         print(f"⚡ Skip frames: {skip_frames} (processing every {skip_frames} frame{'s' if skip_frames > 1 else ''})")
+        if skip_frames > 1:
+            print(f"📹 Output video will be @ {output_fps}fps to maintain correct timing")
         
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
             
-            # Skip frames for speed
+            # Skip frames for speed - don't write skipped frames to avoid duplication
             if frame_count % skip_frames != 0:
                 frame_count += 1
-                # Still write the frame to output (without new annotations)
-                if out is not None and last_annotated_frame is not None:
-                    out.write(last_annotated_frame)
-                    written_frames += 1
+                # Don't write skipped frames - this was causing frame duplication
                 continue
             
             # Add frame to batch
@@ -299,6 +304,13 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         print(f"   - Written frames: {written_frames}")
         print(f"   - Output size: {output_size_mb:.1f} MB")
         
+        # Verify no frame duplication
+        expected_written = processed_frames  # Should match exactly
+        if written_frames != expected_written:
+            print(f"⚠️  WARNING: Frame count mismatch! Written: {written_frames}, Expected: {expected_written}")
+        else:
+            print(f"✅ Frame count verified: {written_frames} frames written correctly")
+        
         # Warn if output is too large
         if output_size_mb > 1000:  # More than 1GB
             print(f"⚠️  WARNING: Output video is very large ({output_size_mb:.1f} MB)")
@@ -306,7 +318,9 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         
         # Convert to web format if needed (AVI or problematic MP4)
         final_output_path = output_path
-        if str(output_path).endswith('.avi') or output_size_mb > 500:
+        # Always convert to ensure compression and web compatibility
+        # Convert if: AVI format, large size, or always for consistent compression
+        if str(output_path).endswith('.avi') or output_size_mb > 100:
             print(f"\n🔄 Converting to web-compatible format...")
             try:
                 from .convert_to_web import convert_video_to_web_format
@@ -316,7 +330,13 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                     if output_path.exists():
                         output_path.unlink()
                     final_output_path = web_path
+                    final_size_mb = final_output_path.stat().st_size / (1024 * 1024) if final_output_path.exists() else 0
                     print(f"✅ Converted to web format: {final_output_path}")
+                    print(f"📊 Final size: {final_size_mb:.1f} MB (compression ratio: {input_size_mb/final_size_mb:.1f}x)")
+                    
+                    # Verify output is smaller than input
+                    if final_size_mb >= input_size_mb:
+                        print(f"⚠️  WARNING: Output ({final_size_mb:.1f} MB) is not smaller than input ({input_size_mb:.1f} MB)!")
             except Exception as e:
                 print(f"⚠️  Could not convert to web format: {e}")
                 print("   Video may not play in browser without FFmpeg")

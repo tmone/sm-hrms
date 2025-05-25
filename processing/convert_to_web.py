@@ -36,18 +36,23 @@ def convert_video_to_web_format(input_path, output_path=None):
         print("   Or use: winget install ffmpeg")
         return None
     
-    # FFmpeg command for web-compatible video
-    # Using libx264 with specific settings for browser compatibility
+    # Get input file size to calculate target bitrate
+    input_size_mb = input_path.stat().st_size / (1024 * 1024)
+    
+    # FFmpeg command for web-compatible video with size optimization
+    # Using libx264 with specific settings for browser compatibility and smaller size
     cmd = [
         'ffmpeg',
         '-i', str(input_path),      # Input file
         '-c:v', 'libx264',          # Use H.264 codec
         '-preset', 'medium',        # Encoding speed/quality tradeoff
-        '-crf', '23',              # Quality (lower = better, 23 is good)
+        '-crf', '25',              # Quality (increased to 25 for smaller size)
+        '-maxrate', '1500k',       # Maximum bitrate constraint
+        '-bufsize', '3000k',       # Buffer size for rate control
         '-pix_fmt', 'yuv420p',     # Pixel format for compatibility
         '-movflags', '+faststart',  # Enable streaming
         '-c:a', 'aac',            # Audio codec
-        '-b:a', '128k',           # Audio bitrate
+        '-b:a', '96k',            # Audio bitrate (reduced for smaller size)
         '-y',                      # Overwrite output
         str(output_path)
     ]

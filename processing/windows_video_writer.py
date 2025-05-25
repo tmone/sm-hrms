@@ -44,9 +44,9 @@ def get_working_codec(output_path, fps, width, height):
                 print(f"✅ Using {description} codec ({fourcc_str})")
                 print(f"📁 Output file: {output_file}")
                 
-                # Set quality if possible
+                # Set quality if possible (lower value = smaller file size)
                 try:
-                    writer.set(cv2.VIDEOWRITER_PROP_QUALITY, 90)
+                    writer.set(cv2.VIDEOWRITER_PROP_QUALITY, 70)  # Reduced from 90 for smaller files
                 except:
                     pass
                 

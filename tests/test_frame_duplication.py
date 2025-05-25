@@ -1,172 +1,158 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
-Test script to check for frame duplication in processed videos
+Test script to verify that video processing doesn't duplicate frames
 """
 import cv2
 import numpy as np
 import sys
 from pathlib import Path
 
-def analyze_video_for_duplicates(video_path, sample_rate=30):
+def check_frame_duplication(video_path, max_check_frames=300):
     """
-    Analyze video for duplicate frames
+    Check if a video has duplicated frames
     
     Args:
         video_path: Path to video file
-        sample_rate: Check every Nth frame (default 30 = once per second at 30fps)
+        max_check_frames: Maximum number of frames to check
+        
+    Returns:
+        dict with duplication analysis
     """
-    print(f"Analyzing video: {video_path}")
-    print(f"Checking every {sample_rate} frames for duplicates...")
-    print("-" * 60)
-    
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
-        print(f"Error: Cannot open video {video_path}")
-        return
+        return {"error": "Could not open video"}
     
-    fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
     
-    print(f"Video info: {total_frames} frames @ {fps:.1f} fps")
-    print(f"Duration: {total_frames/fps:.1f} seconds")
-    print()
+    print(f"🎬 Analyzing video: {video_path}")
+    print(f"📊 Total frames: {total_frames}, FPS: {fps}")
     
-    # Store frame hashes to detect duplicates
-    frame_hashes = []
-    duplicate_count = 0
+    previous_frame = None
+    duplicates = []
     frame_count = 0
-    last_frame = None
-    consecutive_duplicates = 0
-    max_consecutive = 0
-    duplicate_positions = []
+    frames_to_check = min(total_frames, max_check_frames)
     
-    while True:
+    while frame_count < frames_to_check:
         ret, frame = cap.read()
         if not ret:
             break
+            
+        # Convert to grayscale for comparison
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
-        # Only check every Nth frame for performance
-        if frame_count % sample_rate == 0:
-            # Convert to grayscale for faster comparison
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if previous_frame is not None:
+            # Calculate frame difference
+            diff = cv2.absdiff(previous_frame, gray_frame)
+            mean_diff = np.mean(diff)
             
-            # Compute frame hash
-            frame_hash = hash(gray.tobytes())
-            
-            # Check if this is a duplicate of the last checked frame
-            if last_frame is not None:
-                # Calculate difference between frames
-                diff = cv2.absdiff(gray, last_frame)
-                mean_diff = np.mean(diff)
-                
-                # If frames are nearly identical (very small difference)
-                if mean_diff < 1.0:  # Threshold for considering frames identical
-                    duplicate_count += 1
-                    consecutive_duplicates += 1
-                    duplicate_positions.append(frame_count)
-                    
-                    time_sec = frame_count / fps
-                    print(f"⚠️  Duplicate frame detected at {time_sec:.1f}s (frame {frame_count})")
-                else:
-                    if consecutive_duplicates > max_consecutive:
-                        max_consecutive = consecutive_duplicates
-                    consecutive_duplicates = 0
-            
-            last_frame = gray.copy()
+            # If difference is very small, frames are likely duplicated
+            if mean_diff < 0.5:  # Threshold for duplicate detection
+                duplicates.append({
+                    "frame": frame_count,
+                    "diff": mean_diff,
+                    "time": frame_count / fps
+                })
         
+        previous_frame = gray_frame.copy()
         frame_count += 1
         
         # Progress indicator
-        if frame_count % 300 == 0:
-            progress = (frame_count / total_frames) * 100
-            print(f"Progress: {progress:.1f}%", end='\r')
+        if frame_count % 50 == 0:
+            print(f"  Checked {frame_count}/{frames_to_check} frames...")
     
     cap.release()
     
-    print("\n" + "=" * 60)
-    print("Analysis Complete:")
-    print("=" * 60)
-    print(f"Total frames analyzed: {frame_count // sample_rate}")
-    print(f"Duplicate frames found: {duplicate_count}")
-    print(f"Duplicate rate: {(duplicate_count / (frame_count // sample_rate)) * 100:.1f}%")
-    print(f"Max consecutive duplicates: {max_consecutive}")
+    # Analyze duplication pattern
+    duplicate_count = len(duplicates)
+    duplicate_rate = (duplicate_count / frame_count) * 100 if frame_count > 0 else 0
     
-    if duplicate_count > 0:
-        print("\n⚠️  WARNING: Video has duplicate frames!")
-        print("This can cause stuttering during playback.")
-        if len(duplicate_positions) <= 10:
-            print(f"Duplicate positions (frames): {duplicate_positions}")
-        else:
-            print(f"First 10 duplicate positions: {duplicate_positions[:10]}")
+    # Check for periodic duplication (e.g., every second)
+    periodic_pattern = False
+    if duplicate_count > 5:
+        # Check if duplicates occur at regular intervals
+        intervals = []
+        for i in range(1, len(duplicates)):
+            interval = duplicates[i]["frame"] - duplicates[i-1]["frame"]
+            intervals.append(interval)
+        
+        if intervals:
+            # Check if most intervals are similar (±2 frames)
+            most_common_interval = max(set(intervals), key=intervals.count)
+            similar_intervals = sum(1 for i in intervals if abs(i - most_common_interval) <= 2)
+            if similar_intervals > len(intervals) * 0.7:
+                periodic_pattern = True
+                period_seconds = most_common_interval / fps
+    
+    result = {
+        "total_frames": total_frames,
+        "frames_checked": frame_count,
+        "fps": fps,
+        "duplicates_found": duplicate_count,
+        "duplication_rate": duplicate_rate,
+        "periodic_pattern": periodic_pattern,
+        "duplicate_frames": duplicates[:10]  # First 10 duplicates
+    }
+    
+    # Summary
+    print(f"\n📊 Analysis Results:")
+    print(f"  - Frames checked: {frame_count}")
+    print(f"  - Duplicates found: {duplicate_count} ({duplicate_rate:.1f}%)")
+    
+    if periodic_pattern:
+        print(f"  - ⚠️  Periodic duplication detected! Period: ~{period_seconds:.2f}s")
+    elif duplicate_count > 0:
+        print(f"  - ℹ️  Some duplicates found, but no periodic pattern")
     else:
-        print("\n✅ No duplicate frames detected! Video should play smoothly.")
+        print(f"  - ✅ No significant frame duplication detected")
     
-    # Estimate file size impact
-    if duplicate_count > 0:
-        print(f"\n💾 Estimated size impact: ~{duplicate_count * 100 / frame_count:.1f}% larger than necessary")
+    return result
 
 def compare_videos(original_path, processed_path):
     """Compare original and processed videos"""
-    print("\n" + "=" * 70)
-    print("Comparing Original vs Processed Video")
-    print("=" * 70)
-    
-    # Get video info
-    cap1 = cv2.VideoCapture(str(original_path))
-    cap2 = cv2.VideoCapture(str(processed_path))
-    
-    if not cap1.isOpened() or not cap2.isOpened():
-        print("Error: Cannot open one or both videos")
-        return
-    
-    # Compare properties
-    props = [
-        ('Frame Count', cv2.CAP_PROP_FRAME_COUNT),
-        ('FPS', cv2.CAP_PROP_FPS),
-        ('Width', cv2.CAP_PROP_FRAME_WIDTH),
-        ('Height', cv2.CAP_PROP_FRAME_HEIGHT)
-    ]
-    
-    print(f"{'Property':<15} {'Original':<15} {'Processed':<15} {'Match':<10}")
-    print("-" * 55)
-    
-    for prop_name, prop_id in props:
-        val1 = cap1.get(prop_id)
-        val2 = cap2.get(prop_id)
-        match = "✅" if abs(val1 - val2) < 0.1 else "❌"
-        print(f"{prop_name:<15} {val1:<15.1f} {val2:<15.1f} {match:<10}")
-    
-    cap1.release()
-    cap2.release()
+    print("\n" + "="*60)
+    print("COMPARING ORIGINAL AND PROCESSED VIDEOS")
+    print("="*60)
     
     # Get file sizes
-    size1 = Path(original_path).stat().st_size / (1024 * 1024)
-    size2 = Path(processed_path).stat().st_size / (1024 * 1024)
-    size_ratio = size2 / size1
+    original_size = Path(original_path).stat().st_size / (1024 * 1024)
+    processed_size = Path(processed_path).stat().st_size / (1024 * 1024)
     
-    print(f"\nFile Sizes:")
-    print(f"  Original:  {size1:.1f} MB")
-    print(f"  Processed: {size2:.1f} MB")
-    print(f"  Ratio:     {size_ratio:.2f}x")
+    print(f"\n📁 File sizes:")
+    print(f"  - Original:  {original_size:.1f} MB")
+    print(f"  - Processed: {processed_size:.1f} MB")
+    print(f"  - Reduction: {((original_size - processed_size) / original_size * 100):.1f}%")
     
-    if size_ratio > 3:
-        print("  ⚠️  WARNING: Processed video is much larger than original!")
-        print("  This suggests codec/compression issues.")
+    # Check original
+    print(f"\n🔍 Checking ORIGINAL video:")
+    original_result = check_frame_duplication(original_path)
+    
+    # Check processed
+    print(f"\n🔍 Checking PROCESSED video:")
+    processed_result = check_frame_duplication(processed_path)
+    
+    return {
+        "original": original_result,
+        "processed": processed_result,
+        "size_comparison": {
+            "original_mb": original_size,
+            "processed_mb": processed_size,
+            "reduction_percent": ((original_size - processed_size) / original_size * 100)
+        }
+    }
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python test_frame_duplication.py <video_path> [original_video_path]")
-        print("\nExamples:")
-        print("  python test_frame_duplication.py processing/outputs/video_annotated_*.mp4")
-        print("  python test_frame_duplication.py processed.mp4 original.mp4")
+    if len(sys.argv) == 2:
+        # Single video check
+        video_path = sys.argv[1]
+        result = check_frame_duplication(video_path)
+    elif len(sys.argv) == 3:
+        # Compare two videos
+        original = sys.argv[1]
+        processed = sys.argv[2]
+        result = compare_videos(original, processed)
+    else:
+        print("Usage:")
+        print("  Check single video:    python test_frame_duplication.py <video_path>")
+        print("  Compare two videos:    python test_frame_duplication.py <original> <processed>")
         sys.exit(1)
-    
-    video_path = sys.argv[1]
-    
-    # Analyze for duplicates
-    analyze_video_for_duplicates(video_path)
-    
-    # If original video provided, compare them
-    if len(sys.argv) > 2:
-        original_path = sys.argv[2]
-        compare_videos(original_path, video_path)

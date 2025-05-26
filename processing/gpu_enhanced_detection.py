@@ -20,6 +20,18 @@ except ImportError:
     TORCH_AVAILABLE = False
     CUDA_AVAILABLE = False
 
+# Try to import GPU appearance tracker
+GPU_TRACKER_AVAILABLE = False
+try:
+    if TORCH_AVAILABLE and CUDA_AVAILABLE:
+        import sys
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from hr_management.processing.gpu_appearance_tracker import GPUPersonTracker
+        GPU_TRACKER_AVAILABLE = True
+        print("✅ GPU Appearance Tracker available")
+except ImportError as e:
+    print(f"⚠️ GPU Appearance Tracker not available: {e}")
+
 def update_video_progress(video_id, progress, message="Processing...", app=None):
     """Update video processing progress in database"""
     try:
@@ -204,6 +216,20 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             model = load_opencv_dnn_model()
             gpu_config['use_gpu'] = False
         
+        # Initialize GPU appearance tracker if available
+        gpu_tracker = None
+        if GPU_TRACKER_AVAILABLE and gpu_config['use_gpu']:
+            try:
+                gpu_tracker = GPUPersonTracker(
+                    appearance_weight=0.7,
+                    position_weight=0.3,
+                    device=gpu_config['device']
+                )
+                print("✅ Using GPU Appearance Tracker for enhanced person tracking")
+            except Exception as e:
+                print(f"⚠️ Failed to initialize GPU tracker: {e}")
+                gpu_tracker = None
+        
         # Process video in batches for GPU efficiency
         batch_size = gpu_config['batch_size']
         detections = []
@@ -241,10 +267,18 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             # Process batch when full or at end of video
             if len(frame_batch) >= batch_size or frame_count == total_frames - 1:
                 # Run batch inference
-                batch_detections = process_batch_gpu(
-                    model, frame_batch, frame_numbers, 
-                    gpu_config, person_tracks, next_person_id
-                )
+                if gpu_tracker:
+                    # Use GPU appearance tracker
+                    batch_detections = process_batch_gpu_with_tracker(
+                        model, frame_batch, frame_numbers, 
+                        gpu_config, gpu_tracker, fps
+                    )
+                else:
+                    # Use simple position-based tracking
+                    batch_detections = process_batch_gpu(
+                        model, frame_batch, frame_numbers, 
+                        gpu_config, person_tracks, next_person_id
+                    )
                 
                 # Update next person ID
                 if batch_detections:
@@ -386,7 +420,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         return {
             'detections': detections,
             'annotated_video_path': annotated_filename,
-            'persons_dir': str(persons_dir.relative_to(Path.cwd())) if persons_dir.exists() else None,
+            'persons_dir': str(persons_dir) if persons_dir.exists() else None,
             'processing_summary': {
                 'total_frames': total_frames,
                 'processed_frames': processed_frames,
@@ -719,14 +753,30 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
     extracted_count = 0
     
     for person_id, detections in person_tracks.items():
-        person_dir = persons_dir / person_id
+        # Ensure person_id is a string for path operations
+        person_id_str = str(person_id) if isinstance(person_id, int) else person_id
+        person_dir = persons_dir / person_id_str
         person_dir.mkdir(parents=True, exist_ok=True)
         
-        # Extract representative images (every 10th detection or max 10 images)
-        sample_detections = detections[::max(1, len(detections) // 10)][:10]
+        # Extract all detection frames with intelligent sampling
+        # Sample every N frames to avoid storing redundant consecutive frames
+        # This reduces storage while maintaining diversity
+        FRAME_SAMPLE_INTERVAL = 5  # Extract every 5th frame (approx 6 images per second at 30fps)
+        
+        # If person appears briefly, extract all frames
+        if len(detections) <= 30:  # Less than 1 second of appearance
+            sample_detections = detections
+        else:
+            # Sample frames at regular intervals
+            sample_detections = detections[::FRAME_SAMPLE_INTERVAL]
+            # Always include first and last detection
+            if detections[0] not in sample_detections:
+                sample_detections.insert(0, detections[0])
+            if detections[-1] not in sample_detections:
+                sample_detections.append(detections[-1])
         
         person_metadata = {
-            "person_id": person_id,
+            "person_id": person_id_str,
             "total_detections": len(detections),
             "first_appearance": detections[0]["timestamp"],
             "last_appearance": detections[-1]["timestamp"],
@@ -751,7 +801,7 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
                 MIN_BBOX_WIDTH = 128
                 
                 if w < MIN_BBOX_WIDTH:
-                    print(f"⚠️ Skipping {person_id} frame {frame_number}: bbox width {w}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                    print(f"⚠️ Skipping {person_id_str} frame {frame_number}: bbox width {w}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
                     continue
                 
                 # Extract person region with some padding
@@ -764,7 +814,7 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
                 person_img = frame[y1:y2, x1:x2]
                 
                 if person_img.size > 0:
-                    img_filename = f"{person_id}_frame_{frame_number:06d}.jpg"
+                    img_filename = f"{person_id_str}_frame_{frame_number:06d}.jpg"
                     img_path = person_dir / img_filename
                     cv2.imwrite(str(img_path), person_img)
                     
@@ -783,10 +833,90 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
         
         if len(person_metadata["images"]) > 0:
             extracted_count += 1
-            print(f"✅ Created {person_id} folder with {len(person_metadata['images'])} images")
+            print(f"✅ Created {person_id_str} folder with {len(person_metadata['images'])} images (from {len(detections)} detections)")
         else:
-            print(f"⚠️ No valid images for {person_id} (all too small)")
+            print(f"⚠️ No valid images for {person_id_str} (all too small)")
     
     cap.release()
     print(f"📸 Extracted {extracted_count} persons with valid images")
     return extracted_count
+
+
+
+def process_batch_gpu_with_tracker(model, frames, frame_numbers, gpu_config, gpu_tracker, fps):
+    """
+    Process a batch of frames using GPU appearance tracker
+    """
+    detections = []
+    
+    try:
+        # First, detect persons in all frames
+        raw_detections_by_frame = {}
+        
+        if hasattr(model, "predict"):  # YOLO model
+            # Process all frames at once on GPU
+            results = model.predict(
+                frames, 
+                stream=False, 
+                conf=0.5,  # Higher confidence for speed
+                classes=[0],  # Person class only
+                device=gpu_config["device"],
+                verbose=False
+            )
+            
+            # Extract detections from results
+            for frame_idx, (result, frame_num) in enumerate(zip(results, frame_numbers)):
+                frame_detections = []
+                
+                if result.boxes is not None and len(result.boxes) > 0:
+                    for box in result.boxes:
+                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                        confidence = float(box.conf[0].cpu().numpy())
+                        
+                        # Calculate bounding box dimensions
+                        bbox_width = int(x2 - x1)
+                        bbox_height = int(y2 - y1)
+                        
+                        # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+                        MIN_BBOX_WIDTH = 128
+                        
+                        if bbox_width < MIN_BBOX_WIDTH:
+                            continue
+                        
+                        frame_detections.append({
+                            "bbox": [float(x1), float(y1), float(bbox_width), float(bbox_height)],
+                            "confidence": confidence,
+                            "frame_number": frame_num,
+                            "timestamp": frame_num / fps
+                        })
+                
+                raw_detections_by_frame[frame_idx] = frame_detections
+        
+        # Process each frame with the tracker
+        for frame_idx, (frame, frame_num) in enumerate(zip(frames, frame_numbers)):
+            frame_detections = raw_detections_by_frame.get(frame_idx, [])
+            
+            # Update tracker with appearance features
+            tracked_detections = gpu_tracker.update(frame_detections, frame, frame_num)
+            
+            # Convert to our standard format
+            for det in tracked_detections:
+                detection = {
+                    "frame_number": det["frame_number"],
+                    "timestamp": det["timestamp"],
+                    "x": int(det["bbox"][0]),
+                    "y": int(det["bbox"][1]),
+                    "width": int(det["bbox"][2]),
+                    "height": int(det["bbox"][3]),
+                    "confidence": det["confidence"],
+                    "person_id": det.get("track_id", 0),
+                    "track_id": det.get("person_id", "UNKNOWN")
+                }
+                detections.append(detection)
+        
+        return detections
+        
+    except Exception as e:
+        print(f"⚠️ GPU tracker error: {e}, falling back to simple tracking")
+        # Fall back to simple tracking
+        return process_batch_gpu(model, frames, frame_numbers, gpu_config, {}, 1)

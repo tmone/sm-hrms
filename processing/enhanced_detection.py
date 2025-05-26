@@ -242,8 +242,22 @@ def extract_persons_data(video_path, person_tracks, persons_dir):
         person_dir = os.path.join(persons_dir, person_id)
         os.makedirs(person_dir, exist_ok=True)
         
-        # Extract representative images (every 10th detection or max 10 images)
-        sample_detections = detections[::max(1, len(detections) // 10)][:10]
+        # Extract all detection frames with intelligent sampling
+        # Sample every N frames to avoid storing redundant consecutive frames
+        # This reduces storage while maintaining diversity
+        FRAME_SAMPLE_INTERVAL = 5  # Extract every 5th frame (approx 6 images per second at 30fps)
+        
+        # If person appears briefly, extract all frames
+        if len(detections) <= 30:  # Less than 1 second of appearance
+            sample_detections = detections
+        else:
+            # Sample frames at regular intervals
+            sample_detections = detections[::FRAME_SAMPLE_INTERVAL]
+            # Always include first and last detection
+            if detections[0] not in sample_detections:
+                sample_detections.insert(0, detections[0])
+            if detections[-1] not in sample_detections:
+                sample_detections.append(detections[-1])
         
         person_metadata = {
             'person_id': person_id,
@@ -301,7 +315,7 @@ def extract_persons_data(video_path, person_tracks, persons_dir):
         with open(metadata_path, 'w') as f:
             json.dump(person_metadata, f, indent=2)
         
-        logger.info(f"Created {person_id} folder with {len(person_metadata['images'])} images")
+        logger.info(f"Created {person_id} folder with {len(person_metadata['images'])} images (from {len(detections)} detections)")
     
     cap.release()
 

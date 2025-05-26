@@ -454,24 +454,38 @@ def process_video(id):
         video.error_message = None
         video.processing_completed_at = None
         
-        # Queue the actual processing task using enhanced detection system
+        # Check if GPU processing is requested
+        use_gpu = request.form.get('use_gpu') == 'true'
+        
+        # Store task options in video record for reference
+        processing_options = {
+            'extract_persons': bool(extract_persons),
+            'face_recognition': bool(face_recognition), 
+            'extract_frames': bool(extract_frames),
+            'use_enhanced_detection': True,
+            'use_gpu': use_gpu
+        }
+        
+        # Queue the actual processing task
         try:
-            # Try enhanced detection with AI first
-            from processing.enhanced_detection import enhanced_person_detection_task
-            
-            # Store task options in video record for reference
-            processing_options = {
-                'extract_persons': bool(extract_persons),
-                'face_recognition': bool(face_recognition), 
-                'extract_frames': bool(extract_frames),
-                'use_enhanced_detection': True
-            }
-            video.processing_log = f"Enhanced processing options: {processing_options} - Started at {datetime.utcnow()}"
-            db.session.commit()
-            
-            print(f"🚀 Starting enhanced person detection for video {video.id}: {video.filename}")
-            start_enhanced_fallback_processing(video, processing_options, current_app._get_current_object())
-            flash(f'Enhanced person extraction started for "{video.filename}". This will create an annotated video with bounding boxes and extract person data folders.', 'info')
+            if use_gpu:
+                # Use GPU-accelerated processing (same as auto-processing)
+                video.processing_log = f"Enhanced GPU processing options: {processing_options} - Started at {datetime.utcnow()}"
+                db.session.commit()
+                
+                print(f"🚀 Starting enhanced GPU person detection for video {video.id}: {video.filename}")
+                start_enhanced_gpu_processing(video, processing_options, current_app._get_current_object())
+                flash(f'Enhanced person extraction started for "{video.filename}" with GPU acceleration.', 'info')
+            else:
+                # Use CPU-based enhanced detection
+                from processing.enhanced_detection import enhanced_person_detection_task
+                
+                video.processing_log = f"Enhanced processing options: {processing_options} - Started at {datetime.utcnow()}"
+                db.session.commit()
+                
+                print(f"🚀 Starting enhanced person detection for video {video.id}: {video.filename}")
+                start_enhanced_fallback_processing(video, processing_options, current_app._get_current_object())
+                flash(f'Enhanced person extraction started for "{video.filename}". This will create an annotated video with bounding boxes and extract person data folders.', 'info')
             
         except ImportError as import_error:
             print(f"⚠️ Full enhanced detection not available: {import_error}")

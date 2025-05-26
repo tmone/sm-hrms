@@ -297,6 +297,17 @@ def delete(id):
             db.session.commit()
             print(f"🔄 Changed video {id} status from 'processing' to 'cancelled' for deletion")
         
+        # Get all detected persons for this video before deletion
+        detected_persons = DetectedPerson.query.filter_by(video_id=id).all()
+        person_ids_to_check = set()
+        
+        # Collect unique person IDs from this video
+        for detection in detected_persons:
+            if detection.person_id:
+                person_ids_to_check.add(detection.person_id)
+        
+        print(f"📊 Found {len(person_ids_to_check)} unique persons in video {id}: {person_ids_to_check}")
+        
         # Delete all detected persons first to avoid foreign key constraint issues
         try:
             deleted_count = DetectedPerson.query.filter_by(video_id=id).delete()
@@ -305,6 +316,29 @@ def delete(id):
         except Exception as e:
             print(f"⚠️ Error deleting detected persons: {e}")
             db.session.rollback()
+        
+        # Check if these persons are still referenced by other videos
+        from pathlib import Path
+        persons_dir = Path('processing/outputs/persons')
+        
+        for person_id in person_ids_to_check:
+            # Check if this person_id is still referenced by any other video
+            remaining_detections = DetectedPerson.query.filter_by(person_id=person_id).count()
+            
+            if remaining_detections == 0:
+                # No other videos reference this person, safe to delete folder
+                person_folder_name = f"PERSON-{person_id:04d}" if isinstance(person_id, int) else str(person_id)
+                person_folder = persons_dir / person_folder_name
+                
+                if person_folder.exists():
+                    try:
+                        import shutil
+                        shutil.rmtree(person_folder)
+                        print(f"🗑️ Deleted person folder: {person_folder} (no longer referenced)")
+                    except Exception as e:
+                        print(f"⚠️ Could not delete person folder {person_folder}: {e}")
+            else:
+                print(f"📌 Keeping person {person_id} folder (still referenced by {remaining_detections} detections)")
         
         # Delete physical files
         upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
@@ -343,6 +377,16 @@ def delete(id):
         # Delete from database
         db.session.delete(video)
         db.session.commit()
+        
+        # Sync metadata for remaining persons
+        if person_ids_to_check:
+            print("🔄 Synchronizing metadata for remaining persons...")
+            try:
+                from hr_management.blueprints.persons import sync_metadata_with_database
+                sync_metadata_with_database()
+                print("✅ Metadata synchronization complete")
+            except Exception as e:
+                print(f"⚠️ Could not sync metadata: {e}")
         
         flash(f'Video "{video.filename}" deleted successfully!', 'success')
         print(f"✅ Successfully deleted video {id}: {video.filename}")

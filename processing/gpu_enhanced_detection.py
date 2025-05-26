@@ -7,6 +7,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 import json
+import glob
 
 # Try to import torch and check CUDA availability
 try:
@@ -31,6 +32,86 @@ try:
         print("✅ GPU Appearance Tracker available")
 except ImportError as e:
     print(f"⚠️ GPU Appearance Tracker not available: {e}")
+
+def get_next_person_id():
+    """
+    Get the next available person ID by checking existing person folders
+    and maintaining a persistent counter file.
+    This ensures unique IDs across all video processing sessions.
+    """
+    persons_dir = Path('processing/outputs/persons')
+    persons_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Path to the ID counter file
+    counter_file = persons_dir / 'person_id_counter.json'
+    
+    # First, check existing folders to find the maximum ID
+    existing_persons = list(persons_dir.glob('PERSON-*'))
+    max_folder_id = 0
+    
+    for person_folder in existing_persons:
+        try:
+            folder_name = person_folder.name
+            if folder_name.startswith('PERSON-'):
+                person_id = int(folder_name.replace('PERSON-', ''))
+                max_folder_id = max(max_folder_id, person_id)
+        except ValueError:
+            continue
+    
+    # Check the counter file
+    max_counter_id = 0
+    if counter_file.exists():
+        try:
+            with open(counter_file, 'r') as f:
+                data = json.load(f)
+                max_counter_id = data.get('last_person_id', 0)
+        except Exception as e:
+            print(f"⚠️ Error reading counter file: {e}")
+    
+    # Use the maximum of both
+    max_id = max(max_folder_id, max_counter_id)
+    next_id = max_id + 1
+    
+    # Update the counter file
+    try:
+        with open(counter_file, 'w') as f:
+            json.dump({
+                'last_person_id': next_id,
+                'updated_at': datetime.now().isoformat(),
+                'total_persons': len(existing_persons)
+            }, f, indent=2)
+    except Exception as e:
+        print(f"⚠️ Error updating counter file: {e}")
+    
+    print(f"📊 Found {len(existing_persons)} existing persons, next ID will be: PERSON-{next_id:04d}")
+    return next_id
+
+
+def update_person_id_counter(last_used_id):
+    """
+    Update the person ID counter after processing
+    """
+    persons_dir = Path('processing/outputs/persons')
+    counter_file = persons_dir / 'person_id_counter.json'
+    
+    try:
+        current_max = 0
+        if counter_file.exists():
+            with open(counter_file, 'r') as f:
+                data = json.load(f)
+                current_max = data.get('last_person_id', 0)
+        
+        # Only update if we used a higher ID
+        if last_used_id > current_max:
+            with open(counter_file, 'w') as f:
+                json.dump({
+                    'last_person_id': last_used_id,
+                    'updated_at': datetime.now().isoformat()
+                }, f, indent=2)
+            print(f"📊 Updated person ID counter to: {last_used_id}")
+    except Exception as e:
+        print(f"⚠️ Error updating person ID counter: {e}")
+
 
 def update_video_progress(video_id, progress, message="Processing...", app=None):
     """Update video processing progress in database"""
@@ -224,7 +305,8 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 gpu_tracker = GPUPersonTracker(
                     appearance_weight=0.7,
                     position_weight=0.3,
-                    device=gpu_config['device']
+                    device=gpu_config['device'],
+                    initial_track_id=next_person_id
                 )
                 print("✅ Using GPU Appearance Tracker for enhanced person tracking")
             except Exception as e:
@@ -237,7 +319,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         frame_batch = []
         frame_numbers = []
         person_tracks = {}  # Track persons across frames
-        next_person_id = 1
+        next_person_id = get_next_person_id()  # Get global next ID instead of starting from 1
         
         print(f"🚀 Starting GPU-accelerated detection with batch size: {batch_size}")
         
@@ -283,8 +365,21 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 
                 # Update next person ID
                 if batch_detections:
-                    max_person_id = max(d.get('person_id', 0) for d in batch_detections)
-                    next_person_id = max(next_person_id, max_person_id + 1)
+                    # Extract numeric IDs, handling both int and string formats
+                    numeric_ids = []
+                    for d in batch_detections:
+                        pid = d.get('person_id', 0)
+                        if isinstance(pid, str) and pid.startswith('PERSON-'):
+                            try:
+                                numeric_ids.append(int(pid.replace('PERSON-', '')))
+                            except ValueError:
+                                pass
+                        elif isinstance(pid, int):
+                            numeric_ids.append(pid)
+                    
+                    if numeric_ids:
+                        max_person_id = max(numeric_ids)
+                        next_person_id = max(next_person_id, max_person_id + 1)
                 
                 detections.extend(batch_detections)
                 
@@ -389,12 +484,22 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             pid = det.get('person_id', 0)
             if pid not in person_tracks:
                 person_tracks[pid] = []
+            # Ensure person_id is numeric for consistency
+            numeric_pid = pid
+            if isinstance(pid, str) and pid.startswith('PERSON-'):
+                try:
+                    numeric_pid = int(pid.replace('PERSON-', ''))
+                except ValueError:
+                    numeric_pid = 0
+            elif not isinstance(pid, int):
+                numeric_pid = 0
+                
             person_tracks[pid].append({
                 'frame_number': det['frame_number'],
                 'timestamp': det['timestamp'],
                 'bbox': [det['x'], det['y'], det['width'], det['height']],
                 'confidence': det['confidence'],
-                'person_id': f"PERSON-{pid:04d}"
+                'person_id': numeric_pid
             })
         
         # Extract person images
@@ -413,6 +518,11 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 person_summary[pid] = {'count': 0, 'frames': []}
             person_summary[pid]['count'] += 1
             person_summary[pid]['frames'].append(det['frame_number'])
+        
+        # Update the person ID counter with the highest ID used
+        if person_tracks:
+            max_used_id = max(pid if isinstance(pid, int) else 0 for pid in person_tracks.keys())
+            update_person_id_counter(max_used_id)
         
         # Return just the filename, not the full path
         # The database expects just the filename, not the full path
@@ -556,37 +666,60 @@ def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, n
 
 def assign_person_id(x1, y1, x2, y2, frame_num, person_tracks, next_person_id):
     """
-    Simple person tracking based on position proximity
+    Improved person tracking based on position proximity and size
     """
     center_x = (x1 + x2) / 2
     center_y = (y1 + y2) / 2
+    width = x2 - x1
+    height = y2 - y1
     
     # Check if this detection matches any existing track
-    min_distance = float('inf')
+    best_score = float('inf')
     matched_id = None
     
     for person_id, track_info in person_tracks.items():
         last_frame = track_info['last_frame']
         last_center = track_info['last_center']
+        last_size = track_info.get('last_size', (width, height))
         
-        # Only consider tracks from recent frames (within 10 frames)
-        if frame_num - last_frame < 10:
-            distance = ((center_x - last_center[0])**2 + (center_y - last_center[1])**2)**0.5
-            if distance < min_distance and distance < 100:  # Max 100 pixel movement
-                min_distance = distance
-                matched_id = person_id
+        # Only consider tracks from recent frames
+        frame_diff = frame_num - last_frame
+        if frame_diff > 30:  # Lost track after 1 second (assuming 30fps)
+            continue
+            
+        # Calculate position distance
+        pos_distance = ((center_x - last_center[0])**2 + (center_y - last_center[1])**2)**0.5
+        
+        # Calculate size difference (helps when people cross)
+        size_diff = abs(width - last_size[0]) + abs(height - last_size[1])
+        
+        # Calculate movement speed (pixels per frame)
+        speed = pos_distance / max(frame_diff, 1)
+        
+        # Reasonable movement speed: humans typically move < 50 pixels/frame
+        if speed > 50:
+            continue
+            
+        # Combined score (lower is better)
+        score = pos_distance + size_diff * 0.5
+        
+        if score < best_score and pos_distance < 150:  # Increased threshold
+            best_score = score
+            matched_id = person_id
     
     if matched_id:
         # Update existing track
         person_tracks[matched_id]['last_frame'] = frame_num
         person_tracks[matched_id]['last_center'] = (center_x, center_y)
+        person_tracks[matched_id]['last_size'] = (width, height)
         return matched_id
     else:
-        # Create new track
-        new_id = len(person_tracks) + 1
+        # Create new track with unique ID
+        new_id = next_person_id
         person_tracks[new_id] = {
             'last_frame': frame_num,
-            'last_center': (center_x, center_y)
+            'last_center': (center_x, center_y),
+            'last_size': (width, height)
         }
         return new_id
 
@@ -740,12 +873,56 @@ def detect_with_opencv_dnn(model, frame, frame_num):
     return []
 
 
+def validate_and_merge_tracks(person_tracks):
+    """
+    Validate person tracks and merge potential duplicates
+    """
+    # Group tracks by similar appearance timeframes
+    merged_tracks = {}
+    
+    for person_id, detections in person_tracks.items():
+        if not detections:
+            continue
+            
+        # Sort detections by frame number
+        detections.sort(key=lambda d: d['frame_number'])
+        
+        # Check if this track might be a duplicate of an existing one
+        is_duplicate = False
+        
+        for existing_id, existing_detections in merged_tracks.items():
+            # Check temporal overlap
+            existing_frames = set(d['frame_number'] for d in existing_detections)
+            current_frames = set(d['frame_number'] for d in detections)
+            
+            # If there's significant frame overlap, likely the same person
+            overlap = len(existing_frames & current_frames)
+            if overlap > min(len(existing_frames), len(current_frames)) * 0.3:
+                # Merge into existing track
+                print(f"🔄 Merging track {person_id} into {existing_id} (overlap: {overlap} frames)")
+                existing_detections.extend(detections)
+                is_duplicate = True
+                break
+        
+        if not is_duplicate:
+            merged_tracks[person_id] = detections
+    
+    # Re-sort all detections in merged tracks
+    for person_id in merged_tracks:
+        merged_tracks[person_id].sort(key=lambda d: d['frame_number'])
+    
+    return merged_tracks
+
+
 def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
     """
     Extract person images and metadata to PERSON-XXXX folders
     Optimized version for GPU processing pipeline
     """
     print(f"📸 Extracting person data to {persons_dir}")
+    
+    # Validate and merge potential duplicate tracks
+    person_tracks = validate_and_merge_tracks(person_tracks)
     
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -914,8 +1091,8 @@ def process_batch_gpu_with_tracker(model, frames, frame_numbers, gpu_config, gpu
                     "width": int(det["bbox"][2]),
                     "height": int(det["bbox"][3]),
                     "confidence": det["confidence"],
-                    "person_id": det.get("track_id", 0),
-                    "track_id": det.get("person_id", "UNKNOWN")
+                    "person_id": det.get("person_id", det.get("track_id", 0)),
+                    "track_id": det.get("track_id", det.get("person_id", 0))
                 }
                 detections.append(detection)
         

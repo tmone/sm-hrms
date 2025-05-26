@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import shutil
 from datetime import datetime
+from sqlalchemy import func
 
 persons_bp = Blueprint('persons', __name__, url_prefix='/persons')
 
@@ -46,25 +47,48 @@ def index():
                                 'confidence': img_data['confidence']
                             })
                     
-                    # Find which video this person belongs to by checking timestamps
+                    # Skip persons with no images
+                    if not images:
+                        # Also check if any actual image files exist in the folder
+                        image_files = list(person_dir.glob('*.jpg')) + list(person_dir.glob('*.png'))
+                        if not image_files:
+                            continue
+                    
+                    # Get video info from metadata
+                    video_info_list = metadata.get('videos', [])
+                    
+                    # For display purposes, we'll show the first video this person appears in
+                    # If person appears in multiple videos, we could enhance this later
                     video_id = None
                     video_filename = "Unknown"
-                    for video in videos:
-                        if hasattr(video, 'processing_completed_at') and video.processing_completed_at:
-                            # This is a simple heuristic - in production you'd have better tracking
-                            video_id = video.id
-                            video_filename = video.filename
-                            break
+                    if video_info_list:
+                        first_video = video_info_list[0]
+                        video_id = first_video.get('video_id')
+                        video_filename = first_video.get('filename', 'Unknown')
+                    
+                    # Calculate total detections and other stats from metadata
+                    total_detections = metadata.get('total_detections', 0)
+                    if not total_detections and video_info_list:
+                        # Calculate from videos if not in metadata
+                        total_detections = sum(len(v.get('frames', [])) for v in video_info_list)
+                    
+                    # Get first/last appearance times
+                    first_appearance = metadata.get('first_appearance', 0)
+                    last_appearance = metadata.get('last_appearance', 0)
+                    
+                    # Calculate duration (handle case where times might be frames or seconds)
+                    duration = last_appearance - first_appearance if last_appearance > first_appearance else 0
                     
                     persons_data.append({
                         'person_id': metadata['person_id'],
                         'video_id': video_id,
                         'video_filename': video_filename,
-                        'total_detections': metadata['total_detections'],
-                        'first_appearance': metadata['first_appearance'],
-                        'last_appearance': metadata['last_appearance'],
-                        'duration': metadata['last_appearance'] - metadata['first_appearance'],
-                        'avg_confidence': metadata['avg_confidence'],
+                        'video_count': len(video_info_list),  # How many videos this person appears in
+                        'total_detections': total_detections,
+                        'first_appearance': first_appearance,
+                        'last_appearance': last_appearance,
+                        'duration': duration,
+                        'avg_confidence': metadata.get('avg_confidence', metadata.get('confidence', 0)),
                         'images': images,
                         'image_count': len(metadata.get('images', [])),
                         'person_dir': str(person_dir.relative_to('processing/outputs'))
@@ -310,11 +334,18 @@ def merge_persons(primary_person_id, persons_to_merge):
         db = current_app.db
         DetectedPerson = current_app.DetectedPerson
         
+        # Extract numeric IDs for database update
+        primary_numeric_id = int(primary_person_id.replace('PERSON-', '')) if primary_person_id.startswith('PERSON-') else primary_person_id
+        
         # Update DetectedPerson records
         for person_id in persons_to_merge:
-            DetectedPerson.query.filter_by(person_id=person_id).update({
-                'person_id': primary_person_id
+            # Convert to numeric ID for database
+            numeric_id = int(person_id.replace('PERSON-', '')) if person_id.startswith('PERSON-') else person_id
+            
+            updated = DetectedPerson.query.filter_by(person_id=numeric_id).update({
+                'person_id': primary_numeric_id
             })
+            print(f"📝 Updated {updated} database records: person_id {numeric_id} → {primary_numeric_id}")
         
         db.session.commit()
         
@@ -324,25 +355,28 @@ def merge_persons(primary_person_id, persons_to_merge):
         # Get Video model from current_app
         Video = current_app.Video
         
-        # Get all videos and recalculate their person counts
+        # Get all videos and recalculate their person counts based on actual detections
         videos = Video.query.filter(Video.status == 'completed').all()
         for video in videos:
-            # Count unique persons in the persons directory
-            unique_persons = set()
-            if persons_dir.exists():
-                for person_dir in persons_dir.iterdir():
-                    if person_dir.is_dir() and person_dir.name.startswith('PERSON-'):
-                        unique_persons.add(person_dir.name)
+            # Count unique persons detected in this specific video
+            unique_persons = db.session.query(DetectedPerson.person_id)\
+                .filter(DetectedPerson.video_id == video.id)\
+                .distinct()\
+                .count()
             
             # Update video person count
             old_count = video.person_count
-            video.person_count = len(unique_persons)
+            video.person_count = unique_persons
             print(f"📹 Video {video.id} ({video.filename}): {old_count} → {video.person_count} persons")
         
         db.session.commit()
         
         print(f"✅ Merge complete: {merged_count} persons merged, {total_images_added} images added")
         print(f"✅ Updated video person counts")
+        
+        # Sync all metadata files with database
+        print("🔄 Synchronizing metadata files...")
+        sync_metadata_with_database()
         
         return {
             'success': True,
@@ -355,3 +389,121 @@ def merge_persons(primary_person_id, persons_to_merge):
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
+
+
+def sync_metadata_with_database():
+    """Synchronize all person metadata files with the database"""
+    from flask import current_app
+    db = current_app.db
+    DetectedPerson = current_app.DetectedPerson
+    Video = current_app.Video
+    
+    persons_dir = Path('processing/outputs/persons')
+    if not persons_dir.exists():
+        print("❌ Persons directory not found")
+        return
+    
+    print("🔄 Starting metadata synchronization...")
+    
+    # Get all person folders
+    for person_dir in persons_dir.iterdir():
+        if person_dir.is_dir() and person_dir.name.startswith('PERSON-'):
+            person_id = person_dir.name
+            numeric_id = int(person_id.replace('PERSON-', ''))
+            metadata_path = person_dir / 'metadata.json'
+            
+            if not metadata_path.exists():
+                print(f"⚠️  No metadata for {person_id}, creating...")
+                metadata = {
+                    'person_id': person_id,
+                    'first_seen': None,
+                    'last_seen': None,
+                    'confidence': 0,
+                    'images': [],
+                    'videos': []
+                }
+            else:
+                with open(metadata_path) as f:
+                    metadata = json.load(f)
+            
+            # Get all detections for this person from database
+            detections = DetectedPerson.query.filter_by(person_id=numeric_id).all()
+            
+            if not detections:
+                print(f"⚠️  {person_id} has no database records")
+                continue
+            
+            # Update metadata based on database
+            videos_info = {}
+            all_timestamps = []
+            
+            for detection in detections:
+                video = Video.query.get(detection.video_id)
+                if not video:
+                    continue
+                
+                # Group detections by video
+                if video.id not in videos_info:
+                    videos_info[video.id] = {
+                        'video_id': video.id,
+                        'filename': video.filename,
+                        'upload_path': video.upload_path,
+                        'frames': []
+                    }
+                
+                videos_info[video.id]['frames'].append({
+                    'frame_num': detection.frame_num,
+                    'confidence': detection.confidence,
+                    'bbox': detection.bbox,
+                    'timestamp': detection.timestamp.isoformat() if detection.timestamp else None
+                })
+                
+                if detection.timestamp:
+                    all_timestamps.append(detection.timestamp)
+            
+            # Update metadata
+            metadata['videos'] = list(videos_info.values())
+            
+            # Update first/last seen based on all detections
+            if all_timestamps:
+                metadata['first_seen'] = min(all_timestamps).isoformat()
+                metadata['last_seen'] = max(all_timestamps).isoformat()
+            
+            # Update confidence as average
+            if detections:
+                avg_confidence = sum(d.confidence for d in detections) / len(detections)
+                metadata['confidence'] = round(avg_confidence, 3)
+            
+            # Count actual images in folder
+            image_files = list(person_dir.glob('*.jpg')) + list(person_dir.glob('*.png'))
+            metadata['total_images'] = len(image_files)
+            
+            # Update images list if needed
+            if len(metadata.get('images', [])) != len(image_files):
+                metadata['images'] = []
+                for img_file in sorted(image_files)[:100]:  # Limit to first 100
+                    metadata['images'].append({
+                        'filename': img_file.name,
+                        'confidence': 0.95  # Default if not available
+                    })
+            
+            # Save updated metadata
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            
+            print(f"✅ Updated metadata for {person_id}: {len(detections)} detections, {len(image_files)} images")
+    
+    print("✅ Metadata synchronization complete")
+
+
+@persons_bp.route('/sync-metadata')
+@login_required
+def sync_metadata():
+    """Endpoint to trigger metadata synchronization"""
+    try:
+        sync_metadata_with_database()
+        flash('Metadata synchronized successfully', 'success')
+    except Exception as e:
+        flash(f'Error synchronizing metadata: {str(e)}', 'error')
+    
+    return redirect(url_for('persons.index'))

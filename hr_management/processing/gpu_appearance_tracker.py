@@ -95,7 +95,8 @@ class GPUPersonTracker:
                  max_distance: float = 100.0,
                  max_frames_lost: int = 30,
                  min_similarity: float = 0.5,
-                 device: str = 'cuda'):
+                 device: str = 'cuda',
+                 initial_track_id: int = 1):
         """
         Initialize tracker
         
@@ -106,6 +107,7 @@ class GPUPersonTracker:
             max_frames_lost: Frames before a track is considered lost
             min_similarity: Minimum similarity threshold for matching
             device: Device to run on ('cuda' or 'cpu')
+            initial_track_id: Starting track ID (for global uniqueness)
         """
         self.appearance_weight = appearance_weight
         self.position_weight = position_weight
@@ -119,7 +121,7 @@ class GPUPersonTracker:
         
         # Track storage
         self.tracks = {}  # track_id -> track_data
-        self.next_track_id = 1
+        self.next_track_id = initial_track_id
         
         # Feature storage for active tracks
         self.track_features = {}  # track_id -> feature tensor
@@ -197,7 +199,7 @@ class GPUPersonTracker:
             
             # Add track info to detection
             det['track_id'] = track_id
-            det['person_id'] = f"PERSON-{track_id:04d}"
+            det['person_id'] = track_id  # Keep as numeric for consistency
             tracked_detections.append(det)
         
         # Update lost tracks

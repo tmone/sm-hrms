@@ -117,6 +117,13 @@
                     <i class="fas fa-video mr-2"></i>
                     Process Videos
                 </a>
+                
+                <!-- Sync Metadata Button -->
+                <a href="{{ url_for('persons.sync_metadata') }}" 
+                   class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                    <i class="fas fa-sync mr-2"></i>
+                    Sync Metadata
+                </a>
             </div>
             
             <!-- Search -->
@@ -163,7 +170,7 @@
                                 <div class="grid grid-cols-3 gap-2 mb-3">
                                     {% for img in person.images[:3] %}
                                         <img src="{{ url_for('persons.serve_person_image', filepath=img.path) }}" 
-                                             class="w-full h-20 object-cover rounded hover:opacity-90 cursor-pointer" 
+                                             class="w-full h-20 object-contain bg-gray-100 dark:bg-gray-700 rounded hover:opacity-90 cursor-pointer" 
                                              alt="{{ person.person_id }}"
                                              onclick="viewPersonImages('{{ person.person_id }}')"
                                              title="Confidence: {{ '%.2f'|format(img.confidence) }}">
@@ -205,10 +212,16 @@
                                         class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded text-sm transition duration-150 ease-in-out">
                                     <i class="fas fa-images mr-1"></i>View All
                                 </button>
+                                {% if person.video_id %}
                                 <a href="{{ url_for('videos.detail', id=person.video_id) }}" 
                                    class="bg-gray-500 hover:bg-gray-600 text-white py-2 px-3 rounded text-sm transition duration-150 ease-in-out text-center">
                                     <i class="fas fa-video mr-1"></i>Video
                                 </a>
+                                {% else %}
+                                <button disabled class="bg-gray-300 text-gray-500 py-2 px-3 rounded text-sm cursor-not-allowed">
+                                    <i class="fas fa-video mr-1"></i>No Video
+                                </button>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -240,7 +253,7 @@
             </button>
         </div>
         
-        <div id="modalImagesContainer" class="max-h-96 overflow-y-auto">
+        <div id="modalImagesContainer" class="max-h-[80vh] overflow-y-auto">
             <div class="flex justify-center">
                 <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
             </div>
@@ -290,7 +303,7 @@ function viewPersonImages(personId) {
                     html += `
                         <div class="relative group">
                             <img src="/persons/serve/${img.path}" 
-                                 class="w-full h-40 object-cover rounded-lg shadow hover:shadow-lg transition-shadow duration-200" 
+                                 class="w-full h-40 object-contain bg-gray-100 dark:bg-gray-700 rounded-lg shadow hover:shadow-lg transition-shadow duration-200" 
                                  alt="${personId}">
                             <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white p-2 rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                                 <div class="text-xs">

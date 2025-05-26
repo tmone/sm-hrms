@@ -4,188 +4,246 @@
 
 {% block content %}
 <div class="container-fluid px-4">
-    <div class="row">
-        <div class="col-12">
-            <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">
-                        <i class="fas fa-users"></i> Detected Persons
-                    </h5>
-                    <div>
-                        <span class="badge bg-light text-primary">{{ persons|length }} Total Persons</span>
-                        <a href="{{ url_for('persons.merge') }}" class="btn btn-sm btn-light ms-2">
-                            <i class="fas fa-code-branch"></i> Merge Persons
-                        </a>
-                    </div>
+    <!-- Page Header -->
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-800 dark:text-white mb-2">
+            <i class="fas fa-users mr-2"></i>Detected Persons
+        </h1>
+        <p class="text-gray-600 dark:text-gray-400">
+            Manage and merge detected persons from video processing
+        </p>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-blue-100 dark:bg-blue-900 rounded-full">
+                    <i class="fas fa-users text-blue-600 dark:text-blue-400 text-xl"></i>
                 </div>
-                
-                <div class="card-body">
-                    {% if persons %}
-                        <div class="row">
-                            {% for person in persons %}
-                                <div class="col-12 col-md-6 col-lg-4 col-xl-3 mb-4">
-                                    <div class="card h-100 person-card">
-                                        <div class="card-header">
-                                            <h6 class="mb-0">{{ person.person_id }}</h6>
-                                            <small class="text-muted">{{ person.video_filename }}</small>
-                                        </div>
-                                        
-                                        <div class="card-body">
-                                            <!-- Person Images -->
-                                            <div class="person-images mb-3">
-                                                {% if person.images %}
-                                                    <div class="row g-1">
-                                                        {% for img in person.images[:3] %}
-                                                            <div class="col-4">
-                                                                <img src="{{ url_for('persons.serve_person_image', filepath=img.path) }}" 
-                                                                     class="img-fluid rounded" 
-                                                                     alt="{{ person.person_id }}"
-                                                                     title="Confidence: {{ '%.2f'|format(img.confidence) }}">
-                                                            </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                    {% if person.image_count > 3 %}
-                                                        <small class="text-muted d-block text-center mt-1">
-                                                            +{{ person.image_count - 3 }} more images
-                                                        </small>
-                                                    {% endif %}
-                                                {% else %}
-                                                    <div class="text-center text-muted py-3">
-                                                        <i class="fas fa-image fa-3x"></i>
-                                                        <p class="mb-0 mt-2">No images</p>
-                                                    </div>
-                                                {% endif %}
-                                            </div>
-                                            
-                                            <!-- Person Stats -->
-                                            <div class="person-stats">
-                                                <div class="d-flex justify-content-between mb-1">
-                                                    <small class="text-muted">Detections:</small>
-                                                    <small class="fw-bold">{{ person.total_detections }}</small>
-                                                </div>
-                                                <div class="d-flex justify-content-between mb-1">
-                                                    <small class="text-muted">Duration:</small>
-                                                    <small class="fw-bold">{{ '%.1f'|format(person.duration) }}s</small>
-                                                </div>
-                                                <div class="d-flex justify-content-between mb-1">
-                                                    <small class="text-muted">Avg Confidence:</small>
-                                                    <small class="fw-bold">{{ '%.1f%%'|format(person.avg_confidence * 100) }}</small>
-                                                </div>
-                                                <div class="d-flex justify-content-between">
-                                                    <small class="text-muted">Images:</small>
-                                                    <small class="fw-bold">{{ person.image_count }}</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="card-footer bg-light">
-                                            <div class="btn-group btn-group-sm w-100" role="group">
-                                                <button type="button" class="btn btn-outline-primary" 
-                                                        onclick="viewPersonImages('{{ person.person_id }}')">
-                                                    <i class="fas fa-images"></i> View All
-                                                </button>
-                                                <a href="{{ url_for('videos.detail', id=person.video_id) }}" 
-                                                   class="btn btn-outline-secondary">
-                                                    <i class="fas fa-video"></i> Video
-                                                </a>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <div class="text-center py-5">
-                            <i class="fas fa-users fa-4x text-muted mb-3"></i>
-                            <h5 class="text-muted">No Persons Detected</h5>
-                            <p class="text-muted">Process some videos to detect persons</p>
-                            <a href="{{ url_for('videos.index') }}" class="btn btn-primary">
-                                <i class="fas fa-video"></i> Go to Videos
-                            </a>
-                        </div>
-                    {% endif %}
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Total Persons</p>
+                    <p class="text-2xl font-semibold text-gray-800 dark:text-white">{{ persons|length }}</p>
                 </div>
             </div>
         </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-green-100 dark:bg-green-900 rounded-full">
+                    <i class="fas fa-images text-green-600 dark:text-green-400 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Total Images</p>
+                    <p class="text-2xl font-semibold text-gray-800 dark:text-white">
+                        {{ persons|sum(attribute='image_count') }}
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-purple-100 dark:bg-purple-900 rounded-full">
+                    <i class="fas fa-video text-purple-600 dark:text-purple-400 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Videos Processed</p>
+                    <p class="text-2xl font-semibold text-gray-800 dark:text-white">
+                        {{ persons|map(attribute='video_id')|unique|list|length }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Bar -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6 p-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <a href="{{ url_for('persons.merge') }}" 
+                   class="bg-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                    <i class="fas fa-code-branch mr-2"></i>
+                    Merge Persons
+                </a>
+                <a href="{{ url_for('videos.index') }}" 
+                   class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                    <i class="fas fa-video mr-2"></i>
+                    Process Videos
+                </a>
+            </div>
+            
+            <!-- Search -->
+            <div class="relative">
+                <input type="text" 
+                       id="searchPersons" 
+                       placeholder="Search persons..." 
+                       class="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:text-white">
+                <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Persons Grid -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        {% if persons %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-6">
+                {% for person in persons %}
+                    <div class="person-card bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-lg transition-shadow duration-200" 
+                         data-person-id="{{ person.person_id }}"
+                         data-video="{{ person.video_filename }}">
+                        <!-- Person Header -->
+                        <div class="p-4 border-b border-gray-200 dark:border-gray-600">
+                            <h3 class="font-semibold text-lg text-gray-800 dark:text-white">
+                                {{ person.person_id }}
+                            </h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 truncate" title="{{ person.video_filename }}">
+                                <i class="fas fa-video mr-1"></i>{{ person.video_filename }}
+                            </p>
+                        </div>
+                        
+                        <!-- Person Images -->
+                        <div class="p-4">
+                            {% if person.images %}
+                                <div class="grid grid-cols-3 gap-2 mb-3">
+                                    {% for img in person.images[:3] %}
+                                        <img src="{{ url_for('persons.serve_person_image', filepath=img.path) }}" 
+                                             class="w-full h-20 object-cover rounded hover:opacity-90 cursor-pointer" 
+                                             alt="{{ person.person_id }}"
+                                             onclick="viewPersonImages('{{ person.person_id }}')"
+                                             title="Confidence: {{ '%.2f'|format(img.confidence) }}">
+                                    {% endfor %}
+                                </div>
+                                {% if person.image_count > 3 %}
+                                    <p class="text-center text-sm text-gray-500 dark:text-gray-400">
+                                        +{{ person.image_count - 3 }} more images
+                                    </p>
+                                {% endif %}
+                            {% else %}
+                                <div class="text-center py-8 text-gray-400">
+                                    <i class="fas fa-image fa-3x mb-2"></i>
+                                    <p class="text-sm">No images</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Person Stats -->
+                        <div class="px-4 pb-3 space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600 dark:text-gray-400">Detections:</span>
+                                <span class="font-medium text-gray-800 dark:text-white">{{ person.total_detections }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600 dark:text-gray-400">Duration:</span>
+                                <span class="font-medium text-gray-800 dark:text-white">{{ '%.1f'|format(person.duration) }}s</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600 dark:text-gray-400">Confidence:</span>
+                                <span class="font-medium text-gray-800 dark:text-white">{{ '%.0f%%'|format(person.avg_confidence * 100) }}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Action Buttons -->
+                        <div class="p-4 bg-gray-100 dark:bg-gray-800 rounded-b-lg">
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="viewPersonImages('{{ person.person_id }}')" 
+                                        class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded text-sm transition duration-150 ease-in-out">
+                                    <i class="fas fa-images mr-1"></i>View All
+                                </button>
+                                <a href="{{ url_for('videos.detail', id=person.video_id) }}" 
+                                   class="bg-gray-500 hover:bg-gray-600 text-white py-2 px-3 rounded text-sm transition duration-150 ease-in-out text-center">
+                                    <i class="fas fa-video mr-1"></i>Video
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-16">
+                <i class="fas fa-users fa-4x text-gray-300 dark:text-gray-600 mb-4"></i>
+                <h3 class="text-xl font-semibold text-gray-600 dark:text-gray-400 mb-2">No Persons Detected</h3>
+                <p class="text-gray-500 dark:text-gray-500 mb-6">Process some videos to detect persons</p>
+                <a href="{{ url_for('videos.index') }}" 
+                   class="bg-primary hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                    <i class="fas fa-video mr-2"></i>Go to Videos
+                </a>
+            </div>
+        {% endif %}
     </div>
 </div>
 
 <!-- Person Images Modal -->
-<div class="modal fade" id="personImagesModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <span id="modalPersonId"></span> - All Images
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" id="modalImagesContainer">
-                <div class="text-center">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                </div>
+<div class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50" id="personImagesModal">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-lg bg-white dark:bg-gray-800">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold text-gray-800 dark:text-white">
+                <span id="modalPersonId"></span> - All Images
+            </h3>
+            <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <i class="fas fa-times text-2xl"></i>
+            </button>
+        </div>
+        
+        <div id="modalImagesContainer" class="max-h-96 overflow-y-auto">
+            <div class="flex justify-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
             </div>
         </div>
     </div>
 </div>
 
-<style>
-.person-card {
-    transition: transform 0.2s;
-}
-
-.person-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-
-.person-images img {
-    object-fit: cover;
-    height: 80px;
-    width: 100%;
-    border: 1px solid #dee2e6;
-}
-
-.person-images img:hover {
-    border-color: #0d6efd;
-}
-
-.person-stats {
-    font-size: 0.875rem;
-}
-</style>
-
 <script>
-function viewPersonImages(personId) {
-    // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('personImagesModal'));
-    document.getElementById('modalPersonId').textContent = personId;
-    modal.show();
+// Search functionality
+document.getElementById('searchPersons').addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const personCards = document.querySelectorAll('.person-card');
     
-    // Load images
+    personCards.forEach(card => {
+        const personId = card.dataset.personId.toLowerCase();
+        const videoName = card.dataset.video.toLowerCase();
+        const isVisible = personId.includes(searchTerm) || videoName.includes(searchTerm);
+        
+        card.style.display = isVisible ? 'block' : 'none';
+    });
+});
+
+// Modal functions
+function viewPersonImages(personId) {
+    const modal = document.getElementById('personImagesModal');
+    const modalPersonId = document.getElementById('modalPersonId');
+    const container = document.getElementById('modalImagesContainer');
+    
+    modalPersonId.textContent = personId;
+    modal.classList.remove('hidden');
+    
+    // Show loading
+    container.innerHTML = `
+        <div class="flex justify-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+    `;
+    
+    // Fetch images
     fetch(`/persons/api/${personId}/images`)
         .then(response => response.json())
         .then(data => {
-            const container = document.getElementById('modalImagesContainer');
-            
             if (data.images && data.images.length > 0) {
-                let html = '<div class="row g-2">';
+                let html = '<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">';
                 
                 data.images.forEach(img => {
                     html += `
-                        <div class="col-6 col-md-4 col-lg-3">
-                            <div class="position-relative">
-                                <img src="/persons/serve/${img.path}" 
-                                     class="img-fluid rounded" 
-                                     alt="${personId}">
-                                <div class="position-absolute bottom-0 start-0 end-0 bg-dark bg-opacity-75 text-white p-1 small">
-                                    <div class="d-flex justify-content-between">
+                        <div class="relative group">
+                            <img src="/persons/serve/${img.path}" 
+                                 class="w-full h-40 object-cover rounded-lg shadow hover:shadow-lg transition-shadow duration-200" 
+                                 alt="${personId}">
+                            <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white p-2 rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                <div class="text-xs">
+                                    <div class="flex justify-between">
                                         <span>Frame: ${img.frame_number}</span>
                                         <span>${(img.confidence * 100).toFixed(0)}%</span>
                                     </div>
-                                    <div>${img.timestamp.toFixed(1)}s</div>
+                                    <div>Time: ${img.timestamp.toFixed(1)}s</div>
                                 </div>
                             </div>
                         </div>
@@ -195,14 +253,41 @@ function viewPersonImages(personId) {
                 html += '</div>';
                 container.innerHTML = html;
             } else {
-                container.innerHTML = '<div class="text-center text-muted">No images found</div>';
+                container.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-image fa-3x mb-3"></i>
+                        <p>No images found</p>
+                    </div>
+                `;
             }
         })
         .catch(error => {
             console.error('Error loading person images:', error);
-            document.getElementById('modalImagesContainer').innerHTML = 
-                '<div class="alert alert-danger">Error loading images</div>';
+            container.innerHTML = `
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                    Error loading images
+                </div>
+            `;
         });
 }
+
+function closeModal() {
+    document.getElementById('personImagesModal').classList.add('hidden');
+}
+
+// Close modal when clicking outside
+document.getElementById('personImagesModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeModal();
+    }
+});
+
+// Keyboard shortcut to close modal
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeModal();
+    }
+});
 </script>
 {% endblock %}

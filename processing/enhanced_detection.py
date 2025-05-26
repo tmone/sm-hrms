@@ -169,9 +169,10 @@ def create_annotated_video(video_path, person_tracks, output_dir):
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
-    # Setup output video writer
+    # Setup output video writer with timestamp
     video_name = os.path.splitext(os.path.basename(video_path))[0]
-    output_video_path = os.path.join(output_dir, f"detected_{video_name}.mp4")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_video_path = os.path.join(output_dir, f"{video_name}_annotated_{timestamp}.mp4")
     
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
@@ -319,14 +320,15 @@ def extract_persons_data(video_path, person_tracks, persons_dir):
     
     cap.release()
 
-def process_video_with_enhanced_detection(video_path, output_base_dir="processing/outputs"):
+def process_video_with_enhanced_detection(video_path, output_base_dir="static/uploads"):
     """Main function to process video with enhanced person detection and tracking"""
     logger.info(f"Starting enhanced video processing: {video_path}")
     
     # Setup output directories
     video_name = os.path.splitext(os.path.basename(video_path))[0]
-    output_dir = os.path.join(output_base_dir, f"detected_{video_name}")
-    persons_dir = os.path.join(output_dir, "persons")
+    output_dir = output_base_dir  # Use base dir directly, not a subdirectory
+    # Keep persons in a separate directory for organization
+    persons_dir = "processing/outputs/persons"
     
     try:
         # Step 1: Detect and track persons across frames

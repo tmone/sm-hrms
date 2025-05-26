@@ -412,15 +412,11 @@ function toggleProcessOptions() {
                                data-video-type="detected"
                                data-video-path="{{ video.annotated_video_path }}">
                             <!-- Primary: Use the stream-detected endpoint -->
-                            <source src="{{ url_for('videos.stream_detected_video', filename=video.annotated_video_path) }}" type="{{ 'video/x-msvideo' if video.annotated_video_path.endswith('.avi') else 'video/mp4' }}">
-                            <!-- Fallback 1: Direct path -->
-                            <source src="/processing/outputs/{{ video.annotated_video_path }}" type="{{ 'video/x-msvideo' if video.annotated_video_path.endswith('.avi') else 'video/mp4' }}">
-                            <!-- Fallback 2: Try with .avi extension if .mp4 fails -->
-                            {% if video.annotated_video_path.endswith('.mp4') %}
-                            <source src="/processing/outputs/{{ video.annotated_video_path.replace('.mp4', '.avi') }}" type="video/x-msvideo">
-                            {% endif %}
-                            <!-- Fallback 3: Other endpoints -->
-                            <source src="{{ url_for('videos.serve_detected_video', filename=video.annotated_video_path) }}" type="{{ 'video/x-msvideo' if video.annotated_video_path.endswith('.avi') else 'video/mp4' }}">
+                            <source src="{{ url_for('videos.stream_detected_video', filename=video.annotated_video_path) }}" type="video/mp4">
+                            <!-- Fallback 1: Use serve_video_static since all videos are in static/uploads -->
+                            <source src="{{ url_for('videos.serve_video_static', filename=video.annotated_video_path) }}" type="video/mp4">
+                            <!-- Fallback 2: Use serve_detected_video -->
+                            <source src="{{ url_for('videos.serve_detected_video', filename=video.annotated_video_path) }}" type="video/mp4">
                             Your browser does not support the video tag.
                         </video>
                         <div class="mt-2 text-sm text-green-600 bg-green-50 p-2 rounded">

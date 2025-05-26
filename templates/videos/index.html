@@ -53,8 +53,22 @@
             </form>
         </div>
 
+        <!-- View Mode Toggle -->
+        <div class="flex justify-end mb-4">
+            <div class="bg-white rounded-lg shadow-sm p-1 inline-flex">
+                <button onclick="setViewMode('table')" id="tableViewBtn"
+                        class="px-3 py-1 rounded text-sm font-medium transition-colors view-mode-btn">
+                    <i class="fas fa-list mr-1"></i> Table
+                </button>
+                <button onclick="setViewMode('grid')" id="gridViewBtn" 
+                        class="px-3 py-1 rounded text-sm font-medium transition-colors view-mode-btn">
+                    <i class="fas fa-th mr-1"></i> Grid
+                </button>
+            </div>
+        </div>
+
         <!-- Videos List -->
-        <div class="bg-white rounded-lg shadow-md">
+        <div class="bg-white rounded-lg shadow-md" id="tableView">
             {% if videos %}
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
@@ -197,6 +211,127 @@
                 </div>
             {% endif %}
         </div>
+
+        <!-- Grid View -->
+        <div class="hidden" id="gridView">
+            {% if videos %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {% for video in videos %}
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-200">
+                        <!-- Video Preview -->
+                        <div class="relative aspect-video bg-gray-900">
+                            {% if video.status == 'completed' and video.annotated_video_path %}
+                                <video class="w-full h-full object-cover" 
+                                       id="preview-{{ video.id }}"
+                                       muted
+                                       loop
+                                       preload="metadata"
+                                       onmouseover="this.play()"
+                                       onmouseout="this.pause(); this.currentTime=0;"
+                                       onerror="handlePreviewError({{ video.id }})">
+                                    <source src="{{ url_for('videos.serve_video_static', filename=video.annotated_video_path) }}" type="video/mp4">
+                                </video>
+                                <!-- Play overlay -->
+                                <div class="absolute inset-0 flex items-center justify-center pointer-events-none video-overlay">
+                                    <div class="bg-black bg-opacity-50 rounded-full p-3">
+                                        <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M8 5v10l7-5z"/>
+                                        </svg>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="w-full h-full flex items-center justify-center">
+                                    <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                            {% endif %}
+                            
+                            <!-- Status Badge -->
+                            <div class="absolute top-2 right-2">
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
+                                      {% if video.status == 'completed' %}bg-green-100 text-green-800
+                                      {% elif video.status == 'processing' %}bg-yellow-100 text-yellow-800
+                                      {% elif video.status == 'failed' %}bg-red-100 text-red-800
+                                      {% elif video.status == 'uploaded' %}bg-green-100 text-green-800
+                                      {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    {{ video.status.title() }}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <!-- Video Info -->
+                        <div class="p-4">
+                            <h3 class="font-medium text-gray-900 truncate mb-1" title="{{ video.filename }}">
+                                {{ video.filename }}
+                            </h3>
+                            <div class="text-sm text-gray-500 space-y-1">
+                                <div class="flex justify-between">
+                                    <span>Duration:</span>
+                                    <span>{{ "%.1f"|format(video.duration) if video.duration else "--" }}s</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Persons:</span>
+                                    <span>{{ video.person_count or 0 }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Size:</span>
+                                    <span>{{ (video.file_size / 1024 / 1024) | round(1) }} MB</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Actions -->
+                            <div class="mt-3 flex justify-between items-center">
+                                <a href="{{ url_for('videos.detail', id=video.id) }}" 
+                                   class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                    View Details
+                                </a>
+                                <div class="flex space-x-2">
+                                    {% if video.status == 'uploaded' or video.status == 'completed' %}
+                                    <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST" class="inline">
+                                        <input type="hidden" name="extract_persons" value="true">
+                                        <button type="submit" 
+                                                class="text-green-600 hover:text-green-800" 
+                                                title="Process Video">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                            </svg>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    
+                                    <form action="{{ url_for('videos.delete', id=video.id) }}" method="POST" class="inline" 
+                                          onsubmit="return confirm('Delete {{ video.filename }}?')">
+                                        <button type="submit"
+                                                class="text-red-600 hover:text-red-800" 
+                                                title="Delete Video">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="p-12 text-center">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">No videos found</h3>
+                    <p class="mt-1 text-sm text-gray-500">Get started by uploading your first video.</p>
+                    <div class="mt-6">
+                        <button onclick="openUploadModal()" 
+                           class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                            Upload Video
+                        </button>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
     </div>
 </div>
 
@@ -252,8 +387,85 @@
     </div>
 </div>
 
+<style>
+/* View mode button styles */
+.view-mode-btn {
+    background-color: transparent;
+    color: #6b7280;
+}
+
+.view-mode-btn.active {
+    background-color: #3b82f6;
+    color: white;
+}
+
+/* Video card styles */
+.aspect-video {
+    aspect-ratio: 16/9;
+}
+
+.video-overlay {
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+video:hover + .video-overlay {
+    opacity: 0;
+}
+
+/* Grid responsive */
+@media (max-width: 640px) {
+    .grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+</style>
+
 <script>
 console.log('🔄 Videos index page loaded - Enhanced progress tracking v2.0');
+
+// View mode functions
+window.setViewMode = function(mode) {
+    const tableView = document.getElementById('tableView');
+    const gridView = document.getElementById('gridView');
+    const tableBtn = document.getElementById('tableViewBtn');
+    const gridBtn = document.getElementById('gridViewBtn');
+    
+    if (mode === 'grid') {
+        tableView.classList.add('hidden');
+        gridView.classList.remove('hidden');
+        tableBtn.classList.remove('active');
+        gridBtn.classList.add('active');
+        localStorage.setItem('videoViewMode', 'grid');
+    } else {
+        tableView.classList.remove('hidden');
+        gridView.classList.add('hidden');
+        tableBtn.classList.add('active');
+        gridBtn.classList.remove('active');
+        localStorage.setItem('videoViewMode', 'table');
+    }
+}
+
+// Handle video preview errors
+window.handlePreviewError = function(videoId) {
+    const video = document.getElementById(`preview-${videoId}`);
+    if (video) {
+        // Hide the video and show fallback
+        video.style.display = 'none';
+        const parent = video.parentElement;
+        const fallback = document.createElement('div');
+        fallback.className = 'w-full h-full flex items-center justify-center bg-gray-100';
+        fallback.innerHTML = `
+            <div class="text-center">
+                <svg class="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>
+                </svg>
+                <p class="text-sm text-gray-500">Preview unavailable</p>
+            </div>
+        `;
+        parent.appendChild(fallback);
+    }
+}
 
 // Define functions in global scope immediately
 window.openUploadModal = function() {
@@ -270,6 +482,10 @@ window.closeUploadModal = function() {
 // Initialize upload functionality after DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Initializing upload functionality...');
+    
+    // Restore saved view mode
+    const savedMode = localStorage.getItem('videoViewMode') || 'table';
+    setViewMode(savedMode);
     
     // Get elements
     const dropZone = document.getElementById('dropZone');

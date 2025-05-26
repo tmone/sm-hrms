@@ -655,7 +655,8 @@ def check_detected_file(filename):
     """Check if detected video file exists and get its info"""
     import os
     
-    outputs_dir = os.path.join('processing', 'outputs')
+    # Videos are now in static/uploads
+    outputs_dir = os.path.join('static', 'uploads')
     file_path = os.path.join(outputs_dir, filename)
     
     info = {
@@ -1016,8 +1017,8 @@ def serve_annotated_video(filename):
 def serve_detected_video(filename):
     """Serve detected/annotated videos with proper streaming support"""
     try:
-        # The detected videos are in processing/outputs
-        outputs_dir = os.path.join('processing', 'outputs')
+        # Videos are now in static/uploads
+        outputs_dir = os.path.join('static', 'uploads')
         file_path = os.path.join(outputs_dir, filename)
         
         print(f"🎯 Detected video request: {filename}")
@@ -1097,7 +1098,8 @@ def stream_detected_video(filename):
     """Stream detected videos directly from outputs directory"""
     import os
     
-    outputs_dir = os.path.join('processing', 'outputs')
+    # Videos are now in static/uploads
+    outputs_dir = os.path.join('static', 'uploads')
     file_path = os.path.join(outputs_dir, filename)
     
     print(f"🎬 Stream detected video request: {filename}")

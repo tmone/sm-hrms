@@ -118,7 +118,8 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             update_video_progress(video_id, 10, f"Video loaded: {total_frames} frames, {duration:.1f}s", app)
         
         # Create output directory for annotated video
-        output_dir = Path('processing/outputs')
+        # Use the same folder as uploads for consistency
+        output_dir = Path('static/uploads')
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Generate output filename
@@ -378,7 +379,8 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         
         # Extract person images before finalizing
         print(f"\n📸 Extracting person images...")
-        persons_dir = output_dir / "persons"
+        # Keep persons in a separate directory for organization
+        persons_dir = Path('processing/outputs/persons')
         persons_dir.mkdir(parents=True, exist_ok=True)
         
         # Group detections by person_id for extraction
@@ -753,8 +755,11 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
     extracted_count = 0
     
     for person_id, detections in person_tracks.items():
-        # Ensure person_id is a string for path operations
-        person_id_str = str(person_id) if isinstance(person_id, int) else person_id
+        # Create PERSON-XXXX folder name
+        if isinstance(person_id, int):
+            person_id_str = f"PERSON-{person_id:04d}"
+        else:
+            person_id_str = str(person_id)
         person_dir = persons_dir / person_id_str
         person_dir.mkdir(parents=True, exist_ok=True)
         

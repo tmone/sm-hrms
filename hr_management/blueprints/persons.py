@@ -24,41 +24,51 @@ def index():
     videos = Video.query.filter(Video.status == 'completed').all()
     
     persons_data = []
-    for video in videos:
-        # Check if persons directory exists
-        persons_dir = Path('processing/outputs') / f"detected_{Path(video.file_path).stem}" / "persons"
-        if persons_dir.exists():
-            for person_dir in persons_dir.iterdir():
-                if person_dir.is_dir() and person_dir.name.startswith('PERSON-'):
-                    metadata_path = person_dir / 'metadata.json'
-                    if metadata_path.exists():
-                        with open(metadata_path) as f:
-                            metadata = json.load(f)
-                        
-                        # Get sample images
-                        images = []
-                        for img_data in metadata.get('images', [])[:3]:  # First 3 images
-                            img_path = person_dir / img_data['filename']
-                            if img_path.exists():
-                                images.append({
-                                    'filename': img_data['filename'],
-                                    'path': str(img_path.relative_to('processing/outputs')),
-                                    'confidence': img_data['confidence']
-                                })
-                        
-                        persons_data.append({
-                            'person_id': metadata['person_id'],
-                            'video_id': video.id,
-                            'video_filename': video.filename,
-                            'total_detections': metadata['total_detections'],
-                            'first_appearance': metadata['first_appearance'],
-                            'last_appearance': metadata['last_appearance'],
-                            'duration': metadata['last_appearance'] - metadata['first_appearance'],
-                            'avg_confidence': metadata['avg_confidence'],
-                            'images': images,
-                            'image_count': len(metadata.get('images', [])),
-                            'person_dir': str(person_dir.relative_to('processing/outputs'))
-                        })
+    # Check for persons in the main outputs directory
+    persons_dir = Path('processing/outputs') / "persons"
+    
+    if persons_dir.exists():
+        for person_dir in persons_dir.iterdir():
+            if person_dir.is_dir() and person_dir.name.startswith('PERSON-'):
+                metadata_path = person_dir / 'metadata.json'
+                if metadata_path.exists():
+                    with open(metadata_path) as f:
+                        metadata = json.load(f)
+                    
+                    # Get sample images
+                    images = []
+                    for img_data in metadata.get('images', [])[:3]:  # First 3 images
+                        img_path = person_dir / img_data['filename']
+                        if img_path.exists():
+                            images.append({
+                                'filename': img_data['filename'],
+                                'path': str(img_path.relative_to('processing/outputs')),
+                                'confidence': img_data['confidence']
+                            })
+                    
+                    # Find which video this person belongs to by checking timestamps
+                    video_id = None
+                    video_filename = "Unknown"
+                    for video in videos:
+                        if hasattr(video, 'processing_completed_at') and video.processing_completed_at:
+                            # This is a simple heuristic - in production you'd have better tracking
+                            video_id = video.id
+                            video_filename = video.filename
+                            break
+                    
+                    persons_data.append({
+                        'person_id': metadata['person_id'],
+                        'video_id': video_id,
+                        'video_filename': video_filename,
+                        'total_detections': metadata['total_detections'],
+                        'first_appearance': metadata['first_appearance'],
+                        'last_appearance': metadata['last_appearance'],
+                        'duration': metadata['last_appearance'] - metadata['first_appearance'],
+                        'avg_confidence': metadata['avg_confidence'],
+                        'images': images,
+                        'image_count': len(metadata.get('images', [])),
+                        'person_dir': str(person_dir.relative_to('processing/outputs'))
+                    })
     
     # Sort by person_id
     persons_data.sort(key=lambda x: x['person_id'])
@@ -100,32 +110,38 @@ def merge():
     videos = Video.query.filter(Video.status == 'completed').all()
     
     persons_data = []
-    for video in videos:
-        persons_dir = Path('processing/outputs') / f"detected_{Path(video.file_path).stem}" / "persons"
-        if persons_dir.exists():
-            for person_dir in persons_dir.iterdir():
-                if person_dir.is_dir() and person_dir.name.startswith('PERSON-'):
-                    metadata_path = person_dir / 'metadata.json'
-                    if metadata_path.exists():
-                        with open(metadata_path) as f:
-                            metadata = json.load(f)
-                        
-                        # Get first image
-                        first_image = None
-                        if metadata.get('images'):
-                            img_filename = metadata['images'][0]['filename']
-                            img_path = person_dir / img_filename
-                            if img_path.exists():
-                                first_image = str(img_path.relative_to('processing/outputs'))
-                        
-                        persons_data.append({
-                            'person_id': metadata['person_id'],
-                            'video_filename': video.filename,
-                            'total_detections': metadata['total_detections'],
-                            'avg_confidence': metadata['avg_confidence'],
-                            'first_image': first_image,
-                            'person_path': str(person_dir)
-                        })
+    # Check for persons in the main outputs directory
+    persons_dir = Path('processing/outputs') / "persons"
+    
+    if persons_dir.exists():
+        for person_dir in persons_dir.iterdir():
+            if person_dir.is_dir() and person_dir.name.startswith('PERSON-'):
+                metadata_path = person_dir / 'metadata.json'
+                if metadata_path.exists():
+                    with open(metadata_path) as f:
+                        metadata = json.load(f)
+                    
+                    # Get first image
+                    first_image = None
+                    if metadata.get('images'):
+                        img_filename = metadata['images'][0]['filename']
+                        img_path = person_dir / img_filename
+                        if img_path.exists():
+                            first_image = str(img_path.relative_to('processing/outputs'))
+                    
+                    # Find video info
+                    video_filename = "Unknown"
+                    if videos:
+                        video_filename = videos[0].filename  # Simple heuristic
+                    
+                    persons_data.append({
+                        'person_id': metadata['person_id'],
+                        'video_filename': video_filename,
+                        'total_detections': metadata['total_detections'],
+                        'avg_confidence': metadata['avg_confidence'],
+                        'first_image': first_image,
+                        'person_path': str(person_dir)
+                    })
     
     persons_data.sort(key=lambda x: x['person_id'])
     

@@ -152,18 +152,11 @@ def merge():
 @login_required
 def get_person_images(person_id):
     """Get all images for a person"""
-    # Find the person directory
-    outputs_dir = Path('processing/outputs')
-    person_dir = None
+    # Persons are now in a single directory
+    persons_dir = Path('processing/outputs/persons')
+    person_dir = persons_dir / person_id
     
-    for video_dir in outputs_dir.iterdir():
-        if video_dir.is_dir() and video_dir.name.startswith('detected_'):
-            possible_person_dir = video_dir / 'persons' / person_id
-            if possible_person_dir.exists():
-                person_dir = possible_person_dir
-                break
-    
-    if not person_dir:
+    if not person_dir.exists():
         return jsonify({'error': 'Person not found'}), 404
     
     metadata_path = person_dir / 'metadata.json'
@@ -221,43 +214,38 @@ def merge_persons(primary_person_id, persons_to_merge):
     Returns:
         dict with success status and message
     """
+    print(f"=== Starting merge: Primary={primary_person_id}, To merge={persons_to_merge}")
     try:
-        outputs_dir = Path('processing/outputs')
-        primary_dir = None
+        # Persons are now in a single directory
+        persons_dir = Path('processing/outputs/persons')
+        primary_dir = persons_dir / primary_person_id
         
-        # Find primary person directory
-        for video_dir in outputs_dir.iterdir():
-            if video_dir.is_dir() and video_dir.name.startswith('detected_'):
-                possible_dir = video_dir / 'persons' / primary_person_id
-                if possible_dir.exists():
-                    primary_dir = possible_dir
-                    break
+        if not primary_dir.exists():
+            print(f"❌ Primary directory not found: {primary_dir}")
+            return {'success': False, 'error': f'Primary person {primary_person_id} not found at {primary_dir}'}
         
-        if not primary_dir:
-            return {'success': False, 'error': f'Primary person {primary_person_id} not found'}
+        print(f"✅ Found primary directory: {primary_dir}")
         
         # Load primary metadata
         primary_metadata_path = primary_dir / 'metadata.json'
         with open(primary_metadata_path) as f:
             primary_metadata = json.load(f)
         
+        print(f"✅ Loaded primary metadata: {primary_metadata.get('total_detections', 0)} detections")
+        
         merged_count = 0
         total_images_added = 0
         
         # Merge each person
         for person_id in persons_to_merge:
-            # Find person directory
-            person_dir = None
-            for video_dir in outputs_dir.iterdir():
-                if video_dir.is_dir() and video_dir.name.startswith('detected_'):
-                    possible_dir = video_dir / 'persons' / person_id
-                    if possible_dir.exists():
-                        person_dir = possible_dir
-                        break
+            # Find person directory in the main persons folder
+            person_dir = persons_dir / person_id
             
-            if not person_dir:
-                print(f"Warning: Person {person_id} not found, skipping")
+            if not person_dir.exists():
+                print(f"⚠️ Warning: Person {person_id} not found at {person_dir}, skipping")
                 continue
+            
+            print(f"✅ Processing merge for {person_id} from {person_dir}")
             
             # Load metadata
             metadata_path = person_dir / 'metadata.json'
@@ -265,6 +253,7 @@ def merge_persons(primary_person_id, persons_to_merge):
                 metadata = json.load(f)
             
             # Copy images to primary directory
+            person_images_added = 0
             for img_data in metadata.get('images', []):
                 src_img = person_dir / img_data['filename']
                 if src_img.exists():
@@ -272,12 +261,14 @@ def merge_persons(primary_person_id, persons_to_merge):
                     new_filename = f"{person_id}_{img_data['filename']}"
                     dst_img = primary_dir / new_filename
                     shutil.copy2(src_img, dst_img)
+                    print(f"  📁 Copied: {src_img.name} → {dst_img.name}")
                     
                     # Update image data
                     img_data['filename'] = new_filename
                     img_data['original_person_id'] = person_id
                     primary_metadata['images'].append(img_data)
                     total_images_added += 1
+                    person_images_added += 1
             
             # Update detection counts
             primary_metadata['total_detections'] += metadata['total_detections']
@@ -289,8 +280,10 @@ def merge_persons(primary_person_id, persons_to_merge):
                 primary_metadata['last_appearance'] = metadata['last_appearance']
             
             # Remove the merged person directory
+            print(f"🗑️ Removing merged directory: {person_dir}")
             shutil.rmtree(person_dir)
             merged_count += 1
+            print(f"✅ Merged {person_id} into {primary_person_id}: {person_images_added} images moved")
         
         # Recalculate average confidence
         if primary_metadata['images']:
@@ -325,6 +318,32 @@ def merge_persons(primary_person_id, persons_to_merge):
         
         db.session.commit()
         
+        # Update video person counts
+        print("📊 Updating video person counts...")
+        
+        # Get Video model from current_app
+        Video = current_app.Video
+        
+        # Get all videos and recalculate their person counts
+        videos = Video.query.filter(Video.status == 'completed').all()
+        for video in videos:
+            # Count unique persons in the persons directory
+            unique_persons = set()
+            if persons_dir.exists():
+                for person_dir in persons_dir.iterdir():
+                    if person_dir.is_dir() and person_dir.name.startswith('PERSON-'):
+                        unique_persons.add(person_dir.name)
+            
+            # Update video person count
+            old_count = video.person_count
+            video.person_count = len(unique_persons)
+            print(f"📹 Video {video.id} ({video.filename}): {old_count} → {video.person_count} persons")
+        
+        db.session.commit()
+        
+        print(f"✅ Merge complete: {merged_count} persons merged, {total_images_added} images added")
+        print(f"✅ Updated video person counts")
+        
         return {
             'success': True,
             'merged_count': merged_count,
@@ -332,4 +351,7 @@ def merge_persons(primary_person_id, persons_to_merge):
         }
         
     except Exception as e:
+        print(f"❌ Merge error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {'success': False, 'error': str(e)}

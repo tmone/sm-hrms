@@ -2,6 +2,30 @@
 
 {% block title %}Person Management - {{ super() }}{% endblock %}
 
+{% block head %}
+{{ super() }}
+<style>
+/* Highlight selected cards */
+.person-card:has(input[type="checkbox"]:checked) {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.person-card:has(input[type="checkbox"]:checked) {
+    background-color: rgba(59, 130, 246, 0.05);
+}
+
+/* Make checkbox more prominent when in select mode */
+.select-checkbox input[type="checkbox"] {
+    cursor: pointer;
+}
+
+.select-checkbox input[type="checkbox"]:hover {
+    transform: scale(1.1);
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid px-4">
     <!-- Page Header -->
@@ -61,11 +85,33 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6 p-4">
         <div class="flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center gap-4">
-                <a href="{{ url_for('persons.merge') }}" 
-                   class="bg-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                <!-- Selection Controls -->
+                <button onclick="toggleSelectMode()" id="selectModeBtn"
+                        class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                    <i class="fas fa-check-square mr-2"></i>
+                    <span id="selectModeText">Select Mode</span>
+                </button>
+                
+                <!-- Merge Button (Hidden by default) -->
+                <button onclick="mergeSelected()" id="mergeBtn"
+                        class="hidden bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
                     <i class="fas fa-code-branch mr-2"></i>
-                    Merge Persons
-                </a>
+                    Merge Selected (<span id="selectedCount">0</span>)
+                </button>
+                
+                <!-- Select All/None (Hidden by default) -->
+                <div id="selectionControls" class="hidden flex items-center gap-2">
+                    <button onclick="selectAll()" 
+                            class="text-blue-600 hover:text-blue-800 text-sm">
+                        Select All
+                    </button>
+                    <span class="text-gray-400">|</span>
+                    <button onclick="selectNone()" 
+                            class="text-blue-600 hover:text-blue-800 text-sm">
+                        Select None
+                    </button>
+                </div>
+                
                 <a href="{{ url_for('videos.index') }}" 
                    class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
                     <i class="fas fa-video mr-2"></i>
@@ -89,9 +135,18 @@
         {% if persons %}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-6">
                 {% for person in persons %}
-                    <div class="person-card bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-lg transition-shadow duration-200" 
+                    <div class="person-card bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-lg transition-shadow duration-200 relative" 
                          data-person-id="{{ person.person_id }}"
                          data-video="{{ person.video_filename }}">
+                        <!-- Selection Checkbox -->
+                        <div class="absolute top-2 right-2 z-10 select-checkbox hidden">
+                            <input type="checkbox" 
+                                   id="select-{{ person.person_id }}" 
+                                   value="{{ person.person_id }}"
+                                   onchange="updateSelection()"
+                                   class="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+                        </div>
+                        
                         <!-- Person Header -->
                         <div class="p-4 border-b border-gray-200 dark:border-gray-600">
                             <h3 class="font-semibold text-lg text-gray-800 dark:text-white">
@@ -289,5 +344,119 @@ document.addEventListener('keydown', function(e) {
         closeModal();
     }
 });
+
+// Selection mode functionality
+let isSelectMode = false;
+let selectedPersons = new Set();
+
+function toggleSelectMode() {
+    isSelectMode = !isSelectMode;
+    const selectBtn = document.getElementById('selectModeBtn');
+    const selectText = document.getElementById('selectModeText');
+    const mergeBtn = document.getElementById('mergeBtn');
+    const selectionControls = document.getElementById('selectionControls');
+    const checkboxes = document.querySelectorAll('.select-checkbox');
+    
+    if (isSelectMode) {
+        selectBtn.classList.remove('bg-gray-600', 'hover:bg-gray-700');
+        selectBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        selectText.textContent = 'Cancel Selection';
+        selectionControls.classList.remove('hidden');
+        checkboxes.forEach(cb => cb.classList.remove('hidden'));
+    } else {
+        selectBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        selectBtn.classList.add('bg-gray-600', 'hover:bg-gray-700');
+        selectText.textContent = 'Select Mode';
+        mergeBtn.classList.add('hidden');
+        selectionControls.classList.add('hidden');
+        checkboxes.forEach(cb => {
+            cb.classList.add('hidden');
+            cb.querySelector('input').checked = false;
+        });
+        selectedPersons.clear();
+        updateSelection();
+    }
+}
+
+function updateSelection() {
+    selectedPersons.clear();
+    const checkboxes = document.querySelectorAll('.select-checkbox input:checked');
+    checkboxes.forEach(cb => selectedPersons.add(cb.value));
+    
+    const selectedCount = document.getElementById('selectedCount');
+    const mergeBtn = document.getElementById('mergeBtn');
+    
+    selectedCount.textContent = selectedPersons.size;
+    
+    if (selectedPersons.size >= 2) {
+        mergeBtn.classList.remove('hidden');
+    } else {
+        mergeBtn.classList.add('hidden');
+    }
+}
+
+function selectAll() {
+    const checkboxes = document.querySelectorAll('.select-checkbox input');
+    checkboxes.forEach(cb => cb.checked = true);
+    updateSelection();
+}
+
+function selectNone() {
+    const checkboxes = document.querySelectorAll('.select-checkbox input');
+    checkboxes.forEach(cb => cb.checked = false);
+    updateSelection();
+}
+
+function mergeSelected() {
+    if (selectedPersons.size < 2) {
+        alert('Please select at least 2 persons to merge');
+        return;
+    }
+    
+    // Convert Set to Array and sort to get minimum ID
+    const personsArray = Array.from(selectedPersons).sort();
+    const primaryPerson = personsArray[0]; // Minimum ID becomes primary
+    const personsToMerge = personsArray.slice(1); // Rest will be merged into primary
+    
+    const confirmMsg = `Merge ${personsToMerge.join(', ')} into ${primaryPerson}?\n\nThis will combine all detections and images into ${primaryPerson}.`;
+    
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+    
+    // Create form and submit
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("persons.merge") }}';
+    
+    // Add CSRF token if needed
+    const csrfToken = document.querySelector('meta[name="csrf-token"]');
+    if (csrfToken) {
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrf_token';
+        csrfInput.value = csrfToken.content;
+        form.appendChild(csrfInput);
+    }
+    
+    // Add primary person
+    const primaryInput = document.createElement('input');
+    primaryInput.type = 'hidden';
+    primaryInput.name = 'primary_person';
+    primaryInput.value = primaryPerson;
+    form.appendChild(primaryInput);
+    
+    // Add persons to merge
+    personsToMerge.forEach(personId => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'persons_to_merge';
+        input.value = personId;
+        form.appendChild(input);
+    });
+    
+    document.body.appendChild(form);
+    form.submit();
+}
 </script>
 {% endblock %}

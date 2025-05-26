@@ -377,6 +377,7 @@ def retry_processing(id):
         video.processing_started_at = datetime.utcnow()
         video.processing_completed_at = None
         video.error_message = None
+        video.annotated_video_path = None  # Clear old annotated video path
         
         db.session.commit()
         
@@ -453,6 +454,7 @@ def process_video(id):
         video.processing_progress = 0
         video.error_message = None
         video.processing_completed_at = None
+        video.annotated_video_path = None  # Clear old annotated video path
         
         # Check if GPU processing is requested
         use_gpu = request.form.get('use_gpu') == 'true'

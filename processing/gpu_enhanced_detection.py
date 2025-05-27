@@ -897,7 +897,7 @@ def validate_and_merge_tracks(person_tracks):
             
             # If there's significant frame overlap, likely the same person
             overlap = len(existing_frames & current_frames)
-            if overlap > min(len(existing_frames), len(current_frames)) * 0.3:
+            if overlap > min(len(existing_frames), len(current_frames)) * 0.8:  # Increased from 0.3 to prevent merging different people
                 # Merge into existing track
                 print(f"🔄 Merging track {person_id} into {existing_id} (overlap: {overlap} frames)")
                 existing_detections.extend(detections)

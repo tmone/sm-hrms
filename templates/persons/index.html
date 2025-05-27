@@ -120,6 +120,13 @@
                     Merge Selected (<span id="selectedCount">0</span>)
                 </button>
                 
+                <!-- Delete Button (Hidden by default) -->
+                <button onclick="deleteSelected()" id="deleteBtn"
+                        class="hidden bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                    <i class="fas fa-trash mr-2"></i>
+                    Delete Selected (<span id="selectedCountDelete">0</span>)
+                </button>
+                
                 <!-- Select All/None (Hidden by default) -->
                 <div id="selectionControls" class="hidden flex items-center gap-2">
                     <button onclick="selectAll()" 
@@ -561,6 +568,7 @@ function toggleSelectMode() {
     const selectBtn = document.getElementById('selectModeBtn');
     const selectText = document.getElementById('selectModeText');
     const mergeBtn = document.getElementById('mergeBtn');
+    const deleteBtn = document.getElementById('deleteBtn');
     const selectionControls = document.getElementById('selectionControls');
     const checkboxes = document.querySelectorAll('.select-checkbox');
     
@@ -575,6 +583,7 @@ function toggleSelectMode() {
         selectBtn.classList.add('bg-gray-600', 'hover:bg-gray-700');
         selectText.textContent = 'Select Mode';
         mergeBtn.classList.add('hidden');
+        deleteBtn.classList.add('hidden');
         selectionControls.classList.add('hidden');
         checkboxes.forEach(cb => {
             cb.classList.add('hidden');
@@ -591,14 +600,23 @@ function updateSelection() {
     checkboxes.forEach(cb => selectedPersons.add(cb.value));
     
     const selectedCount = document.getElementById('selectedCount');
+    const selectedCountDelete = document.getElementById('selectedCountDelete');
     const mergeBtn = document.getElementById('mergeBtn');
+    const deleteBtn = document.getElementById('deleteBtn');
     
     selectedCount.textContent = selectedPersons.size;
+    selectedCountDelete.textContent = selectedPersons.size;
     
     if (selectedPersons.size >= 2) {
         mergeBtn.classList.remove('hidden');
     } else {
         mergeBtn.classList.add('hidden');
+    }
+    
+    if (selectedPersons.size >= 1) {
+        deleteBtn.classList.remove('hidden');
+    } else {
+        deleteBtn.classList.add('hidden');
     }
 }
 
@@ -664,6 +682,44 @@ function mergeSelected() {
     
     document.body.appendChild(form);
     form.submit();
+}
+
+function deleteSelected() {
+    if (selectedPersons.size === 0) {
+        alert('Please select at least one person to delete');
+        return;
+    }
+    
+    const personsArray = Array.from(selectedPersons);
+    const confirmMsg = `Are you sure you want to delete ${selectedPersons.size} person(s)?\n\nThis will permanently remove:\n${personsArray.join(', ')}\n\nThis action cannot be undone.`;
+    
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+    
+    // Send delete request
+    fetch('/persons/remove-multiple', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            person_ids: personsArray
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Successfully deleted ${data.deleted_count} person(s)`);
+            location.reload(); // Reload to see updated list
+        } else {
+            alert(`Error: ${data.error || 'Failed to delete persons'}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to delete persons');
+    });
 }
 </script>
 {% endblock %}

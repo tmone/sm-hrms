@@ -176,37 +176,44 @@ def merge():
 @login_required
 def get_person_images(person_id):
     """Get all images for a person"""
-    # Persons are now in a single directory
-    persons_dir = Path('processing/outputs/persons')
-    person_dir = persons_dir / person_id
+    try:
+        # Persons are now in a single directory
+        persons_dir = Path('processing/outputs/persons')
+        person_dir = persons_dir / person_id
+        
+        if not person_dir.exists():
+            return jsonify({'error': 'Person not found'}), 404
+        
+        metadata_path = person_dir / 'metadata.json'
+        if not metadata_path.exists():
+            return jsonify({'error': 'Metadata not found'}), 404
+        
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+        
+        images = []
+        for img_data in metadata.get('images', []):
+            img_path = person_dir / img_data['filename']
+            if img_path.exists():
+                images.append({
+                    'filename': img_data['filename'],
+                    'path': f"persons/{person_id}/{img_data['filename']}",
+                    'frame_number': img_data.get('frame_number', 0),
+                    'timestamp': img_data.get('timestamp', 0),
+                    'confidence': img_data.get('confidence', 0)
+                })
+        
+        return jsonify({
+            'person_id': person_id,
+            'total_images': len(images),
+            'images': images
+        })
     
-    if not person_dir.exists():
-        return jsonify({'error': 'Person not found'}), 404
-    
-    metadata_path = person_dir / 'metadata.json'
-    if not metadata_path.exists():
-        return jsonify({'error': 'Metadata not found'}), 404
-    
-    with open(metadata_path) as f:
-        metadata = json.load(f)
-    
-    images = []
-    for img_data in metadata.get('images', []):
-        img_path = person_dir / img_data['filename']
-        if img_path.exists():
-            images.append({
-                'filename': img_data['filename'],
-                'path': str(img_path.relative_to('processing/outputs')),
-                'frame_number': img_data['frame_number'],
-                'timestamp': img_data['timestamp'],
-                'confidence': img_data['confidence']
-            })
-    
-    return jsonify({
-        'person_id': person_id,
-        'total_images': len(images),
-        'images': images
-    })
+    except Exception as e:
+        print(f"❌ Error getting person images: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 @persons_bp.route('/serve/<path:filepath>')
@@ -447,18 +454,23 @@ def sync_metadata_with_database():
                     videos_info[video.id] = {
                         'video_id': video.id,
                         'filename': video.filename,
-                        'upload_path': video.upload_path,
+                        'file_path': video.file_path,
                         'frames': []
                     }
                 
                 videos_info[video.id]['frames'].append({
-                    'frame_num': detection.frame_num,
+                    'frame_number': detection.frame_number,
                     'confidence': detection.confidence,
-                    'bbox': detection.bbox,
-                    'timestamp': detection.timestamp.isoformat() if detection.timestamp else None
+                    'bbox': {
+                        'x': detection.bbox_x,
+                        'y': detection.bbox_y,
+                        'width': detection.bbox_width,
+                        'height': detection.bbox_height
+                    } if detection.bbox_x is not None else None,
+                    'timestamp': detection.timestamp
                 })
                 
-                if detection.timestamp:
+                if detection.timestamp is not None:
                     all_timestamps.append(detection.timestamp)
             
             # Update metadata
@@ -466,8 +478,8 @@ def sync_metadata_with_database():
             
             # Update first/last seen based on all detections
             if all_timestamps:
-                metadata['first_seen'] = min(all_timestamps).isoformat()
-                metadata['last_seen'] = max(all_timestamps).isoformat()
+                metadata['first_seen'] = min(all_timestamps)
+                metadata['last_seen'] = max(all_timestamps)
             
             # Update confidence as average
             if detections:
@@ -597,6 +609,59 @@ def split_person():
         
     except Exception as e:
         print(f"❌ Split error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@persons_bp.route('/remove-multiple', methods=['POST'])
+@login_required
+def remove_multiple():
+    """Remove multiple persons and their associated data"""
+    try:
+        data = request.get_json()
+        person_ids = data.get('person_ids', [])
+        
+        if not person_ids:
+            return jsonify({'success': False, 'error': 'No persons selected'})
+        
+        deleted_count = 0
+        persons_dir = Path('processing/outputs/persons')
+        
+        # Import database models
+        from flask import current_app
+        db = current_app.db
+        DetectedPerson = current_app.DetectedPerson
+        
+        for person_id in person_ids:
+            try:
+                # Remove person directory
+                person_dir = persons_dir / person_id
+                if person_dir.exists():
+                    shutil.rmtree(person_dir)
+                    print(f"🗑️ Removed directory: {person_dir}")
+                
+                # Remove from database
+                # Convert to numeric ID for database
+                numeric_id = int(person_id.replace('PERSON-', '')) if person_id.startswith('PERSON-') else person_id
+                deleted = DetectedPerson.query.filter_by(person_id=numeric_id).delete()
+                print(f"📝 Deleted {deleted} database records for person_id {numeric_id}")
+                
+                deleted_count += 1
+                
+            except Exception as e:
+                print(f"❌ Error deleting {person_id}: {str(e)}")
+                continue
+        
+        # Commit database changes
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'deleted_count': deleted_count,
+            'message': f'Successfully deleted {deleted_count} person(s)'
+        })
+        
+    except Exception as e:
+        print(f"❌ Remove multiple error: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})

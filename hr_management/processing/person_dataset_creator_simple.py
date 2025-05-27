@@ -243,6 +243,13 @@ class PersonDatasetCreatorSimple:
             count = sum(1 for label in y if label == i)
             print(f"   {person_id}: {count} samples")
         
+        # Check which classes are actually present
+        unique_labels = np.unique(y) if len(y) > 0 else []
+        if len(unique_labels) < len(person_ids):
+            missing_classes = set(range(len(person_ids))) - set(unique_labels)
+            for missing in missing_classes:
+                print(f"⚠️  WARNING: {person_ids[missing]} has no valid features!")
+        
         return np.array(X), np.array(y), person_ids
     
     def augment_dataset(self, dataset_name: str, augmentation_factor: int = 3) -> Dict:

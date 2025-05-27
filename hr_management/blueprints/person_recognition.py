@@ -12,6 +12,7 @@ from datetime import datetime
 import tempfile
 import shutil
 import sys
+import numpy as np
 
 person_recognition_bp = Blueprint('person_recognition', __name__, url_prefix='/person-recognition')
 
@@ -159,8 +160,14 @@ def train_model():
         if len(X) == 0:
             return jsonify({'success': False, 'error': 'No training data found'})
         
-        if len(person_ids) < 2:
-            return jsonify({'success': False, 'error': 'Need at least 2 persons for training'})
+        # Check unique classes in the data
+        unique_classes = len(np.unique(y))
+        if unique_classes < 2:
+            return jsonify({'success': False, 'error': f'Need at least 2 persons with valid data for training. Found only {unique_classes} person(s) with features.'})
+        
+        # Warn if some persons have no data
+        if unique_classes < len(person_ids):
+            print(f"⚠️  Warning: {len(person_ids) - unique_classes} person(s) have no valid training data")
         
         # Train model
         trainer = PersonRecognitionTrainer()

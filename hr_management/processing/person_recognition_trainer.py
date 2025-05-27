@@ -86,14 +86,24 @@ class PersonRecognitionTrainer:
         y_pred = model.predict(X_test_scaled)
         
         # Classification report
+        # Only use labels that actually appear in the test set
+        unique_test_labels = np.unique(y_test)
+        unique_pred_labels = np.unique(y_pred)
+        all_labels = np.unique(np.concatenate([unique_test_labels, unique_pred_labels]))
+        
+        # Filter target names to only include classes that exist
+        filtered_target_names = [person_ids[i] for i in all_labels if i < len(person_ids)]
+        
         report = classification_report(
             y_test, y_pred, 
-            target_names=person_ids,
-            output_dict=True
+            labels=all_labels,
+            target_names=filtered_target_names,
+            output_dict=True,
+            zero_division=0
         )
         
         # Confusion matrix
-        cm = confusion_matrix(y_test, y_pred)
+        cm = confusion_matrix(y_test, y_pred, labels=all_labels)
         
         # Save model and related data
         model_dir = self.models_dir / model_name
@@ -104,12 +114,17 @@ class PersonRecognitionTrainer:
         joblib.dump(scaler, model_dir / 'scaler.pkl')
         
         # Save metadata
+        # Get actual person_ids that have data
+        actual_person_ids = [person_ids[i] for i in sorted(all_labels) if i < len(person_ids)]
+        
         metadata = {
             'model_name': model_name,
             'model_type': model_type,
             'created_at': datetime.now().isoformat(),
-            'person_ids': person_ids,
-            'num_persons': len(person_ids),
+            'person_ids': actual_person_ids,  # Only persons with actual training data
+            'all_person_ids': person_ids,  # All persons in the dataset
+            'num_persons': len(actual_person_ids),
+            'num_persons_total': len(person_ids),
             'num_samples': len(X),
             'num_train_samples': len(X_train),
             'num_test_samples': len(X_test),

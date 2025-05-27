@@ -724,5 +724,19 @@ function displayTestResults(results, testType) {
         contentDiv.innerHTML = html;
     }
 }
+
+// Check URL parameters on page load
+window.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Check for test parameter
+    const testModel = urlParams.get('test');
+    if (testModel) {
+        // Wait a bit for the page to load models
+        setTimeout(() => {
+            showTestModal(testModel);
+        }, 500);
+    }
+});
 </script>
 {% endblock %}

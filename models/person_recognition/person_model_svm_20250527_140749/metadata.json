@@ -1,0 +1,159 @@
+{
+  "model_name": "person_model_svm_20250527_140749",
+  "model_type": "svm",
+  "created_at": "2025-05-27T14:07:49.402008",
+  "person_ids": [
+    "PERSON-0001",
+    "PERSON-0007",
+    "PERSON-0008",
+    "PERSON-0010",
+    "PERSON-0011",
+    "PERSON-0012",
+    "PERSON-0014"
+  ],
+  "all_person_ids": [
+    "PERSON-0001",
+    "PERSON-0002",
+    "PERSON-0007",
+    "PERSON-0008",
+    "PERSON-0010",
+    "PERSON-0011",
+    "PERSON-0012",
+    "PERSON-0014"
+  ],
+  "num_persons": 7,
+  "num_persons_total": 8,
+  "num_samples": 132,
+  "num_train_samples": 105,
+  "num_test_samples": 27,
+  "train_score": 0.9904761904761905,
+  "test_score": 0.8518518518518519,
+  "cv_scores": [
+    0.7169811320754716,
+    0.6923076923076923
+  ],
+  "cv_mean": 0.704644412191582,
+  "cv_std": 0.01233671988388968,
+  "classification_report": {
+    "PERSON-0001": {
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1-score": 0.6666666666666666,
+      "support": 2.0
+    },
+    "PERSON-0007": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 7.0
+    },
+    "PERSON-0008": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 5.0
+    },
+    "PERSON-0010": {
+      "precision": 0.5555555555555556,
+      "recall": 1.0,
+      "f1-score": 0.7142857142857143,
+      "support": 5.0
+    },
+    "PERSON-0011": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 3.0
+    },
+    "PERSON-0012": {
+      "precision": 1.0,
+      "recall": 0.6666666666666666,
+      "f1-score": 0.8,
+      "support": 3.0
+    },
+    "PERSON-0014": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 2.0
+    },
+    "accuracy": 0.8518518518518519,
+    "macro avg": {
+      "precision": 0.7936507936507936,
+      "recall": 0.7380952380952381,
+      "f1-score": 0.7401360544217688,
+      "support": 27.0
+    },
+    "weighted avg": {
+      "precision": 0.8436213991769548,
+      "recall": 0.8518518518518519,
+      "f1-score": 0.8261022927689594,
+      "support": 27.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      1,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      7,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      5,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      5,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      3,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      1,
+      0,
+      2,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0
+    ]
+  ]
+}

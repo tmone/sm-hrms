@@ -95,10 +95,10 @@
     <div class="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h3 class="text-lg font-semibold mb-4">Cross-Validation Scores</h3>
         <div class="flex items-center space-x-4">
-            {% for i, score in enumerate(metadata.cv_scores) %}
+            {% for score in metadata.cv_scores %}
             <div class="text-center">
                 <div class="text-2xl font-bold text-blue-600">{{ "%.1f%%"|format(score * 100) }}</div>
-                <div class="text-sm text-gray-500">Fold {{ i + 1 }}</div>
+                <div class="text-sm text-gray-500">Fold {{ loop.index }}</div>
             </div>
             {% endfor %}
         </div>
@@ -107,14 +107,10 @@
 
 <!-- Include test modal from parent template -->
 <script>
-// Load parent's test modal functionality
+// Test modal functionality for model details page
 function showTestModal(modelName) {
-    if (window.parent && window.parent.showTestModal) {
-        window.parent.showTestModal(modelName);
-    } else {
-        // Redirect to main page with test parameter
-        window.location.href = '{{ url_for("person_recognition.index") }}?test=' + modelName;
-    }
+    // Redirect to main page with test parameter
+    window.location.href = '{{ url_for("person_recognition.index") }}?test=' + encodeURIComponent(modelName);
 }
 
 // Draw confusion matrix

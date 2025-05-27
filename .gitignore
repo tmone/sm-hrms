@@ -148,3 +148,4 @@ hr_management/processing/temp/*
 Thumbs.db
 .claude/
 processing/outputs/
+datasets/

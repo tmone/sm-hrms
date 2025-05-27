@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Model: {{ model_name }} - {{ super() }}{% endblock %}
+
+{% block head %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Page Header -->
+    <div class="mb-6">
+        <div class="flex items-center mb-2">
+            <a href="{{ url_for('person_recognition.index') }}" class="text-blue-600 hover:text-blue-800 mr-2">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <h1 class="text-3xl font-bold text-gray-800 dark:text-white">
+                Model: {{ model_name }}
+            </h1>
+        </div>
+        <p class="text-gray-600 dark:text-gray-400">
+            Type: {{ metadata.model_type|upper }} | Created: {{ metadata.created_at }}
+        </p>
+    </div>
+
+    <!-- Model Performance -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold mb-2">Test Accuracy</h3>
+            <p class="text-3xl font-bold text-green-600">{{ "%.1f%%"|format(metadata.test_score * 100) }}</p>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold mb-2">Cross-Validation</h3>
+            <p class="text-3xl font-bold text-blue-600">{{ "%.1f%%"|format(metadata.cv_mean * 100) }}</p>
+            <p class="text-sm text-gray-500">±{{ "%.1f%%"|format(metadata.cv_std * 200) }}</p>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold mb-2">Training Details</h3>
+            <div class="space-y-1 text-sm">
+                <p><span class="text-gray-600">Persons:</span> {{ metadata.num_persons }}</p>
+                <p><span class="text-gray-600">Samples:</span> {{ metadata.num_samples }}</p>
+                <p><span class="text-gray-600">Train/Test:</span> {{ metadata.num_train_samples }}/{{ metadata.num_test_samples }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="mb-6">
+        <button onclick="showTestModal('{{ model_name }}')" 
+                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+            <i class="fas fa-play mr-2"></i>
+            Test Model
+        </button>
+    </div>
+
+    <!-- Confusion Matrix -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold mb-4">Confusion Matrix</h3>
+            <canvas id="confusionMatrix"></canvas>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold mb-4">Per-Person Performance</h3>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead>
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Person</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Precision</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Recall</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">F1-Score</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                        {% for person_id in metadata.person_ids %}
+                        {% set report = metadata.classification_report[person_id] %}
+                        <tr>
+                            <td class="px-4 py-2 text-sm font-medium">{{ person_id }}</td>
+                            <td class="px-4 py-2 text-sm">{{ "%.2f"|format(report.precision) }}</td>
+                            <td class="px-4 py-2 text-sm">{{ "%.2f"|format(report.recall) }}</td>
+                            <td class="px-4 py-2 text-sm">{{ "%.2f"|format(report['f1-score']) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cross-Validation Scores -->
+    <div class="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold mb-4">Cross-Validation Scores</h3>
+        <div class="flex items-center space-x-4">
+            {% for i, score in enumerate(metadata.cv_scores) %}
+            <div class="text-center">
+                <div class="text-2xl font-bold text-blue-600">{{ "%.1f%%"|format(score * 100) }}</div>
+                <div class="text-sm text-gray-500">Fold {{ i + 1 }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Include test modal from parent template -->
+<script>
+// Load parent's test modal functionality
+function showTestModal(modelName) {
+    if (window.parent && window.parent.showTestModal) {
+        window.parent.showTestModal(modelName);
+    } else {
+        // Redirect to main page with test parameter
+        window.location.href = '{{ url_for("person_recognition.index") }}?test=' + modelName;
+    }
+}
+
+// Draw confusion matrix
+const ctx = document.getElementById('confusionMatrix').getContext('2d');
+const confusionData = {{ metadata.confusion_matrix|tojson }};
+const labels = {{ metadata.person_ids|tojson }};
+
+// Create heatmap data
+const data = [];
+const maxValue = Math.max(...confusionData.flat());
+
+for (let i = 0; i < confusionData.length; i++) {
+    for (let j = 0; j < confusionData[i].length; j++) {
+        data.push({
+            x: labels[j],
+            y: labels[i],
+            v: confusionData[i][j]
+        });
+    }
+}
+
+// Simple heatmap visualization
+const canvas = document.getElementById('confusionMatrix');
+const cellSize = Math.min(400 / labels.length, 60);
+canvas.width = cellSize * labels.length + 100;
+canvas.height = cellSize * labels.length + 100;
+
+// Draw grid
+ctx.fillStyle = '#f0f0f0';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// Draw cells
+for (let i = 0; i < labels.length; i++) {
+    for (let j = 0; j < labels.length; j++) {
+        const value = confusionData[i][j];
+        const intensity = value / maxValue;
+        
+        // Color based on diagonal (correct predictions)
+        if (i === j) {
+            ctx.fillStyle = `rgba(34, 197, 94, ${0.2 + intensity * 0.8})`;
+        } else {
+            ctx.fillStyle = `rgba(239, 68, 68, ${0.2 + intensity * 0.8})`;
+        }
+        
+        ctx.fillRect(j * cellSize + 50, i * cellSize + 50, cellSize - 2, cellSize - 2);
+        
+        // Draw value
+        ctx.fillStyle = intensity > 0.5 ? 'white' : 'black';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(value, j * cellSize + cellSize/2 + 50, i * cellSize + cellSize/2 + 50);
+    }
+}
+
+// Draw labels
+ctx.fillStyle = 'black';
+ctx.font = '10px Arial';
+for (let i = 0; i < labels.length; i++) {
+    // X-axis labels
+    ctx.save();
+    ctx.translate(i * cellSize + cellSize/2 + 50, 40);
+    ctx.rotate(-Math.PI/4);
+    ctx.textAlign = 'right';
+    ctx.fillText(labels[i], 0, 0);
+    ctx.restore();
+    
+    // Y-axis labels
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(labels[i], 45, i * cellSize + cellSize/2 + 50);
+}
+
+// Axis labels
+ctx.font = 'bold 12px Arial';
+ctx.textAlign = 'center';
+ctx.fillText('Predicted', canvas.width/2, 15);
+ctx.save();
+ctx.translate(15, canvas.height/2);
+ctx.rotate(-Math.PI/2);
+ctx.fillText('Actual', 0, 0);
+ctx.restore();
+</script>
+{% endblock %}

@@ -36,7 +36,8 @@
       "Bash(awk:*)",
       "Bash(sqlite3:*)",
       "Bash(sed:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(pip install:*)"
     ],
     "deny": []
   }

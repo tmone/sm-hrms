@@ -484,6 +484,10 @@ def create_app(config_name=None):
         from hr_management.blueprints import gpu_management_bp
         app.register_blueprint(gpu_management_bp, url_prefix='/gpu')
         
+        # Person recognition blueprint
+        from hr_management.blueprints.person_recognition import person_recognition_bp
+        app.register_blueprint(person_recognition_bp, url_prefix='/person-recognition')
+        
         print("All blueprints registered successfully")
         
     except ImportError as e:

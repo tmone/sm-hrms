@@ -1,0 +1,728 @@
+{% extends "base.html" %}
+
+{% block title %}Person Recognition - {{ super() }}{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+.model-card {
+    transition: all 0.3s ease;
+}
+
+.model-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.dataset-card {
+    border-left: 4px solid #3b82f6;
+}
+
+.progress-bar {
+    transition: width 0.3s ease;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">Person Recognition</h1>
+            <div class="flex gap-3">
+                <button onclick="showCreateDatasetModal()" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                    <i class="fas fa-database mr-2"></i>Create Dataset
+                </button>
+                <button onclick="showTrainModelModal()" 
+                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                    <i class="fas fa-brain mr-2"></i>Train Model
+                </button>
+            </div>
+        </div>
+
+        <!-- Info Box -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex items-start">
+                <i class="fas fa-info-circle text-blue-500 text-lg mr-3 mt-1"></i>
+                <div>
+                    <h3 class="font-semibold text-gray-800 mb-2">About Person Recognition</h3>
+                    <p class="text-gray-600 text-sm">
+                        Train AI models to recognize specific persons from your reviewed detections. 
+                        Create datasets from confirmed persons and train models for automatic recognition in new videos.
+                    </p>
+                    <div class="mt-3 flex gap-4">
+                        <a href="{{ url_for('persons.index') }}" 
+                           class="text-blue-600 hover:text-blue-800 text-sm inline-flex items-center">
+                            <i class="fas fa-users mr-1"></i>Review Persons
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Datasets Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">Datasets</h2>
+                <span class="text-sm text-gray-500">{{ datasets|length }} total</span>
+            </div>
+            
+            {% if datasets %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for dataset in datasets %}
+                <div class="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow">
+                    <h3 class="font-medium text-gray-800 mb-2">{{ dataset.name }}</h3>
+                    <div class="space-y-1 text-sm text-gray-600">
+                        <div class="flex justify-between">
+                            <span>Persons:</span>
+                            <span class="font-medium">{{ dataset.num_persons }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Images:</span>
+                            <span class="font-medium">{{ dataset.total_images }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Features:</span>
+                            <span class="font-medium">{{ dataset.total_faces }}</span>
+                        </div>
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-gray-200">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-gray-500">{{ dataset.created_at[:10] }}</span>
+                            <div class="flex gap-2">
+                                <a href="{{ url_for('person_recognition.dataset_details', dataset_name=dataset.name) }}" 
+                                   class="text-blue-600 hover:text-blue-800 text-sm">View</a>
+                                <button onclick="trainFromDataset('{{ dataset.name }}')" 
+                                        class="text-green-600 hover:text-green-800 text-sm">Train</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fas fa-database text-4xl text-gray-300 mb-3"></i>
+                <p class="text-gray-500 mb-4">No datasets created yet</p>
+                <button onclick="showCreateDatasetModal()" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">
+                    Create First Dataset
+                </button>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Models Section -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">Trained Models</h2>
+                <span class="text-sm text-gray-500">{{ models|length }} total</span>
+            </div>
+            
+            {% if models %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for model in models %}
+                <div class="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="font-medium text-gray-800">{{ model.name }}</h3>
+                        <span class="px-2 py-1 text-xs rounded-full 
+                              {% if model.test_accuracy > 0.9 %}bg-green-100 text-green-800
+                              {% elif model.test_accuracy > 0.8 %}bg-yellow-100 text-yellow-800
+                              {% else %}bg-red-100 text-red-800{% endif %}">
+                            {{ model.type|upper }}
+                        </span>
+                    </div>
+                    
+                    <div class="space-y-1 text-sm text-gray-600">
+                        <div class="flex justify-between">
+                            <span>Persons:</span>
+                            <span class="font-medium">{{ model.num_persons }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Test Accuracy:</span>
+                            <span class="font-medium {% if model.test_accuracy > 0.9 %}text-green-600{% elif model.test_accuracy > 0.8 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                                {{ "%.1f%%"|format(model.test_accuracy * 100) }}
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>CV Score:</span>
+                            <span class="font-medium">{{ "%.1f%%"|format(model.cv_accuracy * 100) }}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 pt-3 border-t border-gray-200">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-gray-500">{{ model.created_at[:10] }}</span>
+                            <div class="flex gap-2">
+                                <a href="{{ url_for('person_recognition.model_details', model_name=model.name) }}" 
+                                   class="text-blue-600 hover:text-blue-800 text-sm">Details</a>
+                                <button onclick="showTestModal('{{ model.name }}')" 
+                                        class="text-green-600 hover:text-green-800 text-sm">Test</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fas fa-brain text-4xl text-gray-300 mb-3"></i>
+                <p class="text-gray-500 mb-4">No models trained yet</p>
+                <button onclick="showTrainModelModal()" 
+                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm">
+                    Train First Model
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Create Dataset Modal -->
+<div id="createDatasetModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-lg bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold text-gray-800">
+                Create Person Dataset
+            </h3>
+            <button onclick="closeCreateDatasetModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-2xl"></i>
+            </button>
+        </div>
+        
+        <div class="mb-4 p-4 bg-green-50 rounded-lg">
+            <div class="flex items-start">
+                <i class="fas fa-check-circle text-green-600 mt-0.5 mr-2"></i>
+                <div>
+                    <p class="text-sm font-medium text-green-800">
+                        Ready to Create Dataset
+                    </p>
+                    <p class="text-xs text-green-700 mt-1">
+                        All persons have been manually reviewed, merged, and split as needed. 
+                        Each person ID now represents a unique individual.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Dataset Name
+            </label>
+            <input type="text" id="datasetName" 
+                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   placeholder="e.g., employees_2024">
+        </div>
+        
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Select Persons to Include
+            </label>
+            <div id="personsList" class="max-h-60 overflow-y-auto border border-gray-300 rounded-md p-2">
+                <div class="text-center py-4 text-gray-500">
+                    <i class="fas fa-spinner fa-spin"></i> Loading persons...
+                </div>
+            </div>
+        </div>
+        
+        <div class="mb-4">
+            <label class="flex items-center">
+                <input type="checkbox" id="augmentDataset" checked 
+                       class="mr-2 text-blue-600 focus:ring-blue-500">
+                <span class="text-sm text-gray-700">
+                    Augment dataset (recommended for better training)
+                </span>
+            </label>
+        </div>
+        
+        <div class="flex justify-end gap-3">
+            <button onclick="closeCreateDatasetModal()" 
+                    class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                Cancel
+            </button>
+            <button onclick="createDataset()" 
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md">
+                <i class="fas fa-database mr-2"></i>Create Dataset
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Train Model Modal -->
+<div id="trainModelModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-md shadow-lg rounded-lg bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold text-gray-800">
+                Train Recognition Model
+            </h3>
+            <button onclick="closeTrainModelModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-2xl"></i>
+            </button>
+        </div>
+        
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Select Dataset
+            </label>
+            <select id="trainDatasetSelect" 
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Choose a dataset...</option>
+                {% for dataset in datasets %}
+                <option value="{{ dataset.name }}">
+                    {{ dataset.name }} ({{ dataset.num_persons }} persons)
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Model Type
+            </label>
+            <select id="modelType" 
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="svm">SVM (Recommended)</option>
+                <option value="svm_linear">SVM Linear</option>
+                <option value="random_forest">Random Forest</option>
+                <option value="mlp">Neural Network</option>
+            </select>
+        </div>
+        
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Model Name (optional)
+            </label>
+            <input type="text" id="modelName" 
+                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   placeholder="Auto-generated if empty">
+        </div>
+        
+        <div class="flex justify-end gap-3">
+            <button onclick="closeTrainModelModal()" 
+                    class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                Cancel
+            </button>
+            <button onclick="trainModel()" 
+                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md">
+                <i class="fas fa-brain mr-2"></i>Train Model
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Test Model Modal -->
+<div id="testModelModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-lg shadow-lg rounded-lg bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold text-gray-800">
+                Test Model: <span id="testModelName"></span>
+            </h3>
+            <button onclick="closeTestModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-2xl"></i>
+            </button>
+        </div>
+        
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Test Type
+            </label>
+            <div class="flex gap-4">
+                <label class="flex items-center">
+                    <input type="radio" name="testType" value="image" checked 
+                           onchange="updateTestType()" class="mr-2">
+                    <span>Image</span>
+                </label>
+                <label class="flex items-center">
+                    <input type="radio" name="testType" value="video" 
+                           onchange="updateTestType()" class="mr-2">
+                    <span>Video</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Select File
+            </label>
+            <input type="file" id="testFile" accept="image/*" 
+                   class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+        </div>
+        
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Confidence Threshold
+            </label>
+            <input type="range" id="confidenceThreshold" min="0" max="1" step="0.05" value="0.6"
+                   class="w-full" oninput="updateThresholdLabel()">
+            <span id="thresholdLabel" class="text-sm text-gray-600">0.6</span>
+        </div>
+        
+        <div class="flex justify-end gap-3">
+            <button onclick="closeTestModal()" 
+                    class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+                Cancel
+            </button>
+            <button onclick="runTest()" 
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md">
+                <i class="fas fa-play mr-2"></i>Run Test
+            </button>
+        </div>
+        
+        <!-- Test Results -->
+        <div id="testResults" class="hidden mt-4 pt-4 border-t border-gray-200">
+            <h4 class="font-medium mb-2">Results:</h4>
+            <div id="testResultsContent" class="text-sm"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedPersons = new Set();
+let currentTestModel = '';
+
+// Load available persons when modal opens
+function showCreateDatasetModal() {
+    document.getElementById('createDatasetModal').classList.remove('hidden');
+    loadAvailablePersons();
+}
+
+function closeCreateDatasetModal() {
+    document.getElementById('createDatasetModal').classList.add('hidden');
+    selectedPersons.clear();
+}
+
+function loadAvailablePersons() {
+    fetch('/person-recognition/api/persons/available')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('personsList');
+            
+            if (data.persons.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500">No persons available</p>';
+                return;
+            }
+            
+            // Add select all checkbox and info
+            let html = `
+                <div class="mb-3 pb-3 border-b border-gray-200">
+                    <label class="flex items-center p-2 bg-blue-50 rounded cursor-pointer">
+                        <input type="checkbox" id="selectAllPersons" 
+                               onchange="toggleAllPersons()" 
+                               class="mr-3 text-blue-600" checked>
+                        <div class="flex-1">
+                            <span class="font-medium">Select All Persons</span>
+                            <span class="text-sm text-gray-600 ml-2">
+                                (${data.persons.length} persons total)
+                            </span>
+                        </div>
+                    </label>
+                    <p class="text-xs text-gray-500 mt-1 px-2">
+                        All persons have been reviewed and confirmed to represent unique individuals
+                    </p>
+                </div>
+            `;
+            
+            html += '<div class="space-y-2">';
+            data.persons.forEach(person => {
+                // Auto-select all persons by default
+                selectedPersons.add(person.person_id);
+                
+                html += `
+                    <label class="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer">
+                        <input type="checkbox" value="${person.person_id}" 
+                               onchange="togglePerson('${person.person_id}')" 
+                               class="person-checkbox mr-3 text-blue-600" checked>
+                        <div class="flex-1">
+                            <span class="font-medium">${person.person_id}</span>
+                            <span class="text-sm text-gray-500 ml-2">
+                                ${person.image_count} images, ${person.total_detections} detections
+                            </span>
+                        </div>
+                    </label>
+                `;
+            });
+            html += '</div>';
+            
+            container.innerHTML = html;
+            
+            // Update the dataset name suggestion
+            const datasetNameInput = document.getElementById('datasetName');
+            if (!datasetNameInput.value) {
+                const today = new Date().toISOString().split('T')[0];
+                datasetNameInput.value = `all_persons_${today}`;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading persons:', error);
+            document.getElementById('personsList').innerHTML = 
+                '<p class="text-center text-red-500">Error loading persons</p>';
+        });
+}
+
+function togglePerson(personId) {
+    if (selectedPersons.has(personId)) {
+        selectedPersons.delete(personId);
+    } else {
+        selectedPersons.add(personId);
+    }
+    
+    // Update select all checkbox state
+    const allCheckboxes = document.querySelectorAll('.person-checkbox');
+    const checkedCount = document.querySelectorAll('.person-checkbox:checked').length;
+    const selectAllCheckbox = document.getElementById('selectAllPersons');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = checkedCount === allCheckboxes.length;
+        selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < allCheckboxes.length;
+    }
+}
+
+function toggleAllPersons() {
+    const selectAll = document.getElementById('selectAllPersons').checked;
+    const checkboxes = document.querySelectorAll('.person-checkbox');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll;
+        const personId = checkbox.value;
+        if (selectAll) {
+            selectedPersons.add(personId);
+        } else {
+            selectedPersons.delete(personId);
+        }
+    });
+}
+
+function createDataset() {
+    const datasetName = document.getElementById('datasetName').value.trim();
+    const augment = document.getElementById('augmentDataset').checked;
+    
+    if (!datasetName) {
+        alert('Please enter a dataset name');
+        return;
+    }
+    
+    if (selectedPersons.size === 0) {
+        alert('Please select at least one person');
+        return;
+    }
+    
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating...';
+    
+    fetch('/person-recognition/datasets/create', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            dataset_name: datasetName,
+            person_ids: Array.from(selectedPersons),
+            augment: augment,
+            augmentation_factor: 3
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Dataset "${data.dataset_name}" created successfully!`);
+            location.reload();
+        } else {
+            alert(`Error: ${data.error}`);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-database mr-2"></i>Create Dataset';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to create dataset');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-database mr-2"></i>Create Dataset';
+    });
+}
+
+// Training functions
+function showTrainModelModal() {
+    document.getElementById('trainModelModal').classList.remove('hidden');
+}
+
+function closeTrainModelModal() {
+    document.getElementById('trainModelModal').classList.add('hidden');
+}
+
+function trainFromDataset(datasetName) {
+    document.getElementById('trainDatasetSelect').value = datasetName;
+    showTrainModelModal();
+}
+
+function trainModel() {
+    const dataset = document.getElementById('trainDatasetSelect').value;
+    const modelType = document.getElementById('modelType').value;
+    const modelName = document.getElementById('modelName').value.trim();
+    
+    if (!dataset) {
+        alert('Please select a dataset');
+        return;
+    }
+    
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Training...';
+    
+    fetch('/person-recognition/train', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            dataset_name: dataset,
+            model_type: modelType,
+            model_name: modelName || null
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Model trained successfully!\nAccuracy: ${(data.results.test_score * 100).toFixed(1)}%`);
+            location.reload();
+        } else {
+            alert(`Error: ${data.error}`);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-brain mr-2"></i>Train Model';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to train model');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-brain mr-2"></i>Train Model';
+    });
+}
+
+// Testing functions
+function showTestModal(modelName) {
+    currentTestModel = modelName;
+    document.getElementById('testModelName').textContent = modelName;
+    document.getElementById('testModelModal').classList.remove('hidden');
+    document.getElementById('testResults').classList.add('hidden');
+}
+
+function closeTestModal() {
+    document.getElementById('testModelModal').classList.add('hidden');
+}
+
+function updateTestType() {
+    const testType = document.querySelector('input[name="testType"]:checked').value;
+    const fileInput = document.getElementById('testFile');
+    
+    if (testType === 'video') {
+        fileInput.accept = 'video/*';
+    } else {
+        fileInput.accept = 'image/*';
+    }
+}
+
+function updateThresholdLabel() {
+    const value = document.getElementById('confidenceThreshold').value;
+    document.getElementById('thresholdLabel').textContent = value;
+}
+
+function runTest() {
+    const testType = document.querySelector('input[name="testType"]:checked').value;
+    const fileInput = document.getElementById('testFile');
+    const threshold = document.getElementById('confidenceThreshold').value;
+    
+    if (!fileInput.files[0]) {
+        alert('Please select a file to test');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append(testType, fileInput.files[0]);
+    formData.append('model_name', currentTestModel);
+    formData.append('confidence_threshold', threshold);
+    
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processing...';
+    
+    fetch(`/person-recognition/test-${testType}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            displayTestResults(data.results, testType);
+        } else {
+            alert(`Error: ${data.error}`);
+        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play mr-2"></i>Run Test';
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to run test');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play mr-2"></i>Run Test';
+    });
+}
+
+function displayTestResults(results, testType) {
+    const resultsDiv = document.getElementById('testResults');
+    const contentDiv = document.getElementById('testResultsContent');
+    
+    resultsDiv.classList.remove('hidden');
+    
+    if (testType === 'image') {
+        if (results.persons.length === 0) {
+            contentDiv.innerHTML = '<p class="text-gray-500">No persons detected in the image</p>';
+        } else {
+            let html = '<div class="space-y-2">';
+            results.persons.forEach(person => {
+                const color = person.person_id === 'unknown' ? 'gray' : 
+                            person.confidence > 0.8 ? 'green' : 
+                            person.confidence > 0.6 ? 'yellow' : 'red';
+                
+                html += `
+                    <div class="p-2 bg-${color}-50 rounded">
+                        <div class="font-medium">${person.person_id}</div>
+                        <div class="text-sm text-gray-600">
+                            Confidence: ${(person.confidence * 100).toFixed(1)}%
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            contentDiv.innerHTML = html;
+        }
+    } else {
+        // Video results
+        let html = '<div class="space-y-2">';
+        html += `<p class="text-sm text-gray-600 mb-2">
+            Processed ${results.processed_frames} frames in ${results.processing_time.toFixed(1)}s
+        </p>`;
+        
+        if (Object.keys(results.persons_detected).length === 0) {
+            html += '<p class="text-gray-500">No persons detected in the video</p>';
+        } else {
+            for (const [personId, stats] of Object.entries(results.persons_detected)) {
+                html += `
+                    <div class="p-2 bg-blue-50 rounded">
+                        <div class="font-medium">${personId}</div>
+                        <div class="text-sm text-gray-600">
+                            Detected ${stats.detection_count} times<br>
+                            Duration: ${stats.duration.toFixed(1)}s<br>
+                            Avg Confidence: ${(stats.avg_confidence * 100).toFixed(1)}%
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        html += '</div>';
+        contentDiv.innerHTML = html;
+    }
+}
+</script>
+{% endblock %}

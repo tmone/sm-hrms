@@ -32,6 +32,15 @@ sam2>=0.1.0
 supervision>=0.20.0
 roboflow>=1.0.0
 
+# Person Recognition (Machine Learning)
+scikit-learn>=1.3.0
+joblib>=1.3.0
+
+# Face Recognition (Optional - can be difficult to install on Windows)
+# Uncomment the following lines if you want face detection features:
+# dlib>=19.24.0
+# face_recognition>=1.3.0
+
 # Optional Dependencies (install if available)
 Flask-SocketIO>=5.0.0
 Flask-Babel>=3.0.0

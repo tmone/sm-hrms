@@ -507,3 +507,96 @@ def sync_metadata():
         flash(f'Error synchronizing metadata: {str(e)}', 'error')
     
     return redirect(url_for('persons.index'))
+
+
+@persons_bp.route('/split', methods=['POST'])
+@login_required
+def split_person():
+    """Split selected images from one person into a new person"""
+    try:
+        data = request.get_json()
+        person_id = data.get('person_id')
+        image_paths = data.get('image_paths', [])
+        
+        if not person_id or not image_paths:
+            return jsonify({'success': False, 'error': 'Missing person_id or image_paths'})
+        
+        # Get the next available person ID
+        from processing.gpu_enhanced_detection import get_next_person_id
+        new_person_id = f"PERSON-{get_next_person_id():04d}"
+        
+        # Create new person directory
+        persons_dir = Path('processing/outputs/persons')
+        old_person_dir = persons_dir / person_id
+        new_person_dir = persons_dir / new_person_id
+        new_person_dir.mkdir(exist_ok=True)
+        
+        # Move selected images to new person
+        moved_images = []
+        for img_path in image_paths:
+            # Extract just the filename from the path
+            img_filename = Path(img_path).name
+            old_img_path = old_person_dir / img_filename
+            new_img_path = new_person_dir / img_filename
+            
+            if old_img_path.exists():
+                shutil.move(str(old_img_path), str(new_img_path))
+                moved_images.append({
+                    'filename': img_filename,
+                    'confidence': 0.95  # Default confidence
+                })
+        
+        # Create metadata for new person
+        new_metadata = {
+            'person_id': new_person_id,
+            'total_detections': len(moved_images),
+            'first_appearance': 0,
+            'last_appearance': 0,
+            'avg_confidence': 0.95,
+            'confidence': 0.95,
+            'images': moved_images,
+            'videos': [],
+            'split_from': person_id,
+            'split_date': datetime.now().isoformat()
+        }
+        
+        with open(new_person_dir / 'metadata.json', 'w') as f:
+            json.dump(new_metadata, f, indent=2)
+        
+        # Update old person's metadata
+        old_metadata_path = old_person_dir / 'metadata.json'
+        if old_metadata_path.exists():
+            with open(old_metadata_path) as f:
+                old_metadata = json.load(f)
+            
+            # Remove split images from old metadata
+            remaining_images = []
+            split_filenames = {img['filename'] for img in moved_images}
+            for img in old_metadata.get('images', []):
+                if img['filename'] not in split_filenames:
+                    remaining_images.append(img)
+            
+            old_metadata['images'] = remaining_images
+            old_metadata['total_detections'] = len(remaining_images)
+            
+            with open(old_metadata_path, 'w') as f:
+                json.dump(old_metadata, f, indent=2)
+        
+        # Update the person ID counter
+        from processing.gpu_enhanced_detection import update_person_id_counter
+        update_person_id_counter(int(new_person_id.replace('PERSON-', '')))
+        
+        # Sync metadata with database
+        sync_metadata_with_database()
+        
+        return jsonify({
+            'success': True,
+            'new_person_id': new_person_id,
+            'images_moved': len(moved_images)
+        })
+        
+    except Exception as e:
+        print(f"❌ Split error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})

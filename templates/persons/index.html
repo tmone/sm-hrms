@@ -23,11 +23,32 @@
 .select-checkbox input[type="checkbox"]:hover {
     transform: scale(1.1);
 }
+
+/* Sticky action bar */
+.sticky-action-bar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background-color: white;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    margin-top: -1rem;
+    margin-bottom: 1.5rem;
+}
+
+.dark .sticky-action-bar {
+    background-color: rgb(31 41 55);
+}
+
+/* Add some extra shadow when scrolling */
+.sticky-action-bar.is-stuck {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid px-4">
+<div class="container-fluid px-4 relative">
     <!-- Page Header -->
     <div class="mb-6">
         <h1 class="text-3xl font-bold text-gray-800 dark:text-white mb-2">
@@ -82,7 +103,7 @@
     </div>
 
     <!-- Action Bar -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6 p-4">
+    <div class="sticky-action-bar rounded-lg shadow-lg p-4 border border-gray-200 dark:border-gray-700" id="actionBar">
         <div class="flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center gap-4">
                 <!-- Selection Controls -->
@@ -253,6 +274,41 @@
             </button>
         </div>
         
+        <!-- Split Mode Controls -->
+        <div id="splitModeControls" class="hidden mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-medium text-blue-800 dark:text-blue-200">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Select images to split into a new person
+                    </p>
+                    <p class="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                        <span id="selectedImagesCount">0</span> images selected
+                    </p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="executeSplit()" 
+                            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm transition duration-150 ease-in-out inline-flex items-center">
+                        <i class="fas fa-check mr-2"></i>
+                        Create New Person
+                    </button>
+                    <button onclick="cancelSplitMode()" 
+                            class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm transition duration-150 ease-in-out">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div id="normalModeControls" class="mb-4 flex gap-2">
+            <button onclick="enterSplitMode()" 
+                    class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm transition duration-150 ease-in-out inline-flex items-center">
+                <i class="fas fa-cut mr-2"></i>
+                Split Person
+            </button>
+        </div>
+        
         <div id="modalImagesContainer" class="max-h-[80vh] overflow-y-auto">
             <div class="flex justify-center">
                 <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -299,12 +355,18 @@ function viewPersonImages(personId) {
             if (data.images && data.images.length > 0) {
                 let html = '<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">';
                 
-                data.images.forEach(img => {
+                data.images.forEach((img, index) => {
                     html += `
-                        <div class="relative group">
+                        <div class="relative group image-container" data-image-index="${index}" data-image-path="${img.path}">
                             <img src="/persons/serve/${img.path}" 
                                  class="w-full h-40 object-contain bg-gray-100 dark:bg-gray-700 rounded-lg shadow hover:shadow-lg transition-shadow duration-200" 
                                  alt="${personId}">
+                            <!-- Selection checkbox (hidden by default) -->
+                            <div class="split-checkbox hidden absolute top-2 left-2 z-10">
+                                <input type="checkbox" class="w-5 h-5 rounded cursor-pointer" onchange="updateSelectedCount()">
+                            </div>
+                            <!-- Selection overlay -->
+                            <div class="split-overlay hidden absolute inset-0 bg-green-500 bg-opacity-30 rounded-lg pointer-events-none"></div>
                             <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white p-2 rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                                 <div class="text-xs">
                                     <div class="flex justify-between">
@@ -342,6 +404,7 @@ function viewPersonImages(personId) {
 
 function closeModal() {
     document.getElementById('personImagesModal').classList.add('hidden');
+    cancelSplitMode(); // Reset split mode when closing
 }
 
 // Close modal when clicking outside
@@ -357,6 +420,137 @@ document.addEventListener('keydown', function(e) {
         closeModal();
     }
 });
+
+// Sticky action bar shadow effect
+const actionBar = document.getElementById('actionBar');
+if (actionBar) {
+    const observer = new IntersectionObserver(
+        ([entry]) => {
+            if (!entry.isIntersecting) {
+                actionBar.classList.add('is-stuck');
+            } else {
+                actionBar.classList.remove('is-stuck');
+            }
+        },
+        { threshold: [1] }
+    );
+    
+    // Create a sentinel element
+    const sentinel = document.createElement('div');
+    sentinel.style.position = 'absolute';
+    sentinel.style.top = '0';
+    sentinel.style.height = '1px';
+    actionBar.parentElement.insertBefore(sentinel, actionBar);
+    
+    observer.observe(sentinel);
+}
+
+// Split functionality
+let isSplitMode = false;
+let currentPersonId = null;
+
+function enterSplitMode() {
+    isSplitMode = true;
+    currentPersonId = document.getElementById('modalPersonId').textContent;
+    
+    // Show/hide controls
+    document.getElementById('normalModeControls').classList.add('hidden');
+    document.getElementById('splitModeControls').classList.remove('hidden');
+    
+    // Show checkboxes and make images clickable
+    document.querySelectorAll('.split-checkbox').forEach(cb => cb.classList.remove('hidden'));
+    
+    // Add click handlers to image containers
+    document.querySelectorAll('.image-container').forEach(container => {
+        container.style.cursor = 'pointer';
+        container.onclick = function() {
+            const checkbox = this.querySelector('input[type="checkbox"]');
+            const overlay = this.querySelector('.split-overlay');
+            checkbox.checked = !checkbox.checked;
+            
+            if (checkbox.checked) {
+                overlay.classList.remove('hidden');
+            } else {
+                overlay.classList.add('hidden');
+            }
+            
+            updateSelectedCount();
+        };
+    });
+}
+
+function cancelSplitMode() {
+    isSplitMode = false;
+    
+    // Show/hide controls
+    document.getElementById('normalModeControls').classList.remove('hidden');
+    document.getElementById('splitModeControls').classList.add('hidden');
+    
+    // Hide checkboxes and remove click handlers
+    document.querySelectorAll('.split-checkbox').forEach(cb => {
+        cb.classList.add('hidden');
+        cb.querySelector('input').checked = false;
+    });
+    
+    document.querySelectorAll('.split-overlay').forEach(overlay => {
+        overlay.classList.add('hidden');
+    });
+    
+    document.querySelectorAll('.image-container').forEach(container => {
+        container.style.cursor = 'default';
+        container.onclick = null;
+    });
+    
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const checkedBoxes = document.querySelectorAll('.image-container input[type="checkbox"]:checked');
+    document.getElementById('selectedImagesCount').textContent = checkedBoxes.length;
+}
+
+function executeSplit() {
+    const checkedImages = [];
+    document.querySelectorAll('.image-container input[type="checkbox"]:checked').forEach(checkbox => {
+        const container = checkbox.closest('.image-container');
+        checkedImages.push(container.dataset.imagePath);
+    });
+    
+    if (checkedImages.length === 0) {
+        alert('Please select at least one image to split');
+        return;
+    }
+    
+    if (!confirm(`Are you sure you want to split ${checkedImages.length} images into a new person?`)) {
+        return;
+    }
+    
+    // Send split request
+    fetch('/persons/split', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            person_id: currentPersonId,
+            image_paths: checkedImages
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Successfully created new person: ${data.new_person_id}`);
+            closeModal();
+            location.reload(); // Reload to see the new person
+        } else {
+            alert(`Error: ${data.error}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to split person');
+    });
+}
 
 // Selection mode functionality
 let isSelectMode = false;

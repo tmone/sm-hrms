@@ -396,6 +396,108 @@ def merge_persons(primary_person_id, persons_to_merge):
         return {'success': False, 'error': str(e)}
 
 
+def update_datasets_after_person_deletion(deleted_person_ids):
+    """Update datasets to remove deleted persons"""
+    datasets_dir = Path('datasets/person_recognition')
+    updated_datasets = []
+    
+    if not datasets_dir.exists():
+        return updated_datasets
+    
+    print(f"🔄 Checking datasets for deleted persons: {deleted_person_ids}")
+    
+    # Check each dataset
+    for dataset_dir in datasets_dir.iterdir():
+        if not dataset_dir.is_dir():
+            continue
+            
+        dataset_info_path = dataset_dir / 'dataset_info.json'
+        if not dataset_info_path.exists():
+            continue
+            
+        # Load dataset info
+        with open(dataset_info_path) as f:
+            dataset_info = json.load(f)
+        
+        # Check if any deleted persons are in this dataset
+        dataset_persons = set(dataset_info.get('persons', {}).keys())
+        deleted_set = set(deleted_person_ids)
+        
+        if dataset_persons & deleted_set:
+            # This dataset contains deleted persons
+            print(f"📊 Dataset {dataset_dir.name} contains deleted persons")
+            
+            # Remove deleted persons from dataset
+            for person_id in deleted_person_ids:
+                if person_id in dataset_info['persons']:
+                    # Remove person data
+                    person_data = dataset_info['persons'].pop(person_id)
+                    
+                    # Update totals
+                    dataset_info['total_images'] -= person_data.get('images_count', 0)
+                    dataset_info['total_faces'] -= person_data.get('faces_count', 0)
+                    dataset_info['total_embeddings'] -= person_data.get('embeddings_count', 0)
+                    
+                    # Remove person's files
+                    for subdir in ['images', 'faces', 'features']:
+                        person_subdir = dataset_dir / subdir / person_id
+                        if person_subdir.exists():
+                            shutil.rmtree(person_subdir)
+                            print(f"   🗑️ Removed {person_id} from {subdir}")
+            
+            # Update dataset info
+            dataset_info['modified_at'] = datetime.now().isoformat()
+            dataset_info['person_count'] = len(dataset_info['persons'])
+            
+            # Check if dataset is now empty
+            if dataset_info['person_count'] == 0:
+                # Dataset has no persons left, delete it
+                try:
+                    shutil.rmtree(dataset_dir)
+                    print(f"   🗑️ Deleted empty dataset: {dataset_dir.name}")
+                    updated_datasets.append(f"{dataset_dir.name} (deleted - empty)")
+                except Exception as e:
+                    print(f"   ⚠️  Error deleting empty dataset {dataset_dir.name}: {e}")
+                    # Still save the updated info even if we can't delete
+                    with open(dataset_info_path, 'w') as f:
+                        json.dump(dataset_info, f, indent=2)
+                    updated_datasets.append(f"{dataset_dir.name} (emptied)")
+            else:
+                # Save updated dataset info
+                with open(dataset_info_path, 'w') as f:
+                    json.dump(dataset_info, f, indent=2)
+                
+                updated_datasets.append(dataset_dir.name)
+                print(f"   ✅ Updated dataset: {dataset_dir.name}")
+    
+    # Also update the main person_features.pkl if it exists
+    features_pkl = Path('datasets/person_features.pkl')
+    if features_pkl.exists():
+        try:
+            import pickle
+            with open(features_pkl, 'rb') as f:
+                features_data = pickle.load(f)
+            
+            # Remove deleted persons from features
+            original_count = len(features_data.get('person_ids', []))
+            if 'person_ids' in features_data:
+                features_data['person_ids'] = [pid for pid in features_data['person_ids'] 
+                                               if pid not in deleted_person_ids]
+            
+            # Update features arrays to match
+            if len(features_data['person_ids']) < original_count:
+                print(f"   🔄 Updating person_features.pkl")
+                # This is complex - we'd need to filter the feature vectors too
+                # For now, just mark it as needing regeneration
+                features_pkl.rename(features_pkl.with_suffix('.pkl.old'))
+                print(f"   ⚠️  Renamed person_features.pkl to .old - regeneration needed")
+                
+        except Exception as e:
+            print(f"   ⚠️  Error updating person_features.pkl: {e}")
+    
+    return updated_datasets
+
+
 def sync_metadata_with_database():
     """Synchronize all person metadata files with the database"""
     from flask import current_app
@@ -629,6 +731,9 @@ def remove_multiple():
         db = current_app.db
         DetectedPerson = current_app.DetectedPerson
         
+        # Check and update datasets that use these persons
+        datasets_updated = update_datasets_after_person_deletion(person_ids)
+        
         for person_id in person_ids:
             try:
                 # Remove person directory
@@ -655,6 +760,7 @@ def remove_multiple():
         return jsonify({
             'success': True,
             'deleted_count': deleted_count,
+            'datasets_updated': datasets_updated,
             'message': f'Successfully deleted {deleted_count} person(s)'
         })
         
@@ -677,9 +783,13 @@ def reset_all_persons():
         
         # 1. Clear all person folders
         persons_dir = Path('processing/outputs/persons')
+        all_person_ids = []
         if persons_dir.exists():
-            # Remove all PERSON-* directories
+            # Collect all person IDs before deletion
             person_folders = list(persons_dir.glob('PERSON-*'))
+            all_person_ids = [folder.name for folder in person_folders]
+            
+            # Remove all PERSON-* directories
             for folder in person_folders:
                 try:
                     shutil.rmtree(folder)
@@ -717,6 +827,12 @@ def reset_all_persons():
             
             # Commit changes
             db.session.commit()
+        
+        # 4. Update all datasets to remove all persons
+        if all_person_ids:
+            datasets_updated = update_datasets_after_person_deletion(all_person_ids)
+            if datasets_updated:
+                print(f"📊 Updated {len(datasets_updated)} datasets after clearing all persons")
         
         return jsonify({
             'success': True,

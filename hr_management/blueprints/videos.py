@@ -321,6 +321,9 @@ def delete(id):
         from pathlib import Path
         persons_dir = Path('processing/outputs/persons')
         
+        # Track persons that will be deleted
+        persons_to_delete = []
+        
         for person_id in person_ids_to_check:
             # Check if this person_id is still referenced by any other video
             remaining_detections = DetectedPerson.query.filter_by(person_id=person_id).count()
@@ -328,6 +331,7 @@ def delete(id):
             if remaining_detections == 0:
                 # No other videos reference this person, safe to delete folder
                 person_folder_name = f"PERSON-{person_id:04d}" if isinstance(person_id, int) else str(person_id)
+                persons_to_delete.append(person_folder_name)
                 person_folder = persons_dir / person_folder_name
                 
                 if person_folder.exists():
@@ -339,6 +343,13 @@ def delete(id):
                         print(f"⚠️ Could not delete person folder {person_folder}: {e}")
             else:
                 print(f"📌 Keeping person {person_id} folder (still referenced by {remaining_detections} detections)")
+        
+        # Update datasets that contained these deleted persons
+        if persons_to_delete:
+            from hr_management.blueprints.persons import update_datasets_after_person_deletion
+            datasets_updated = update_datasets_after_person_deletion(persons_to_delete)
+            if datasets_updated:
+                print(f"📊 Updated {len(datasets_updated)} datasets after person deletion")
         
         # Delete physical files
         upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')

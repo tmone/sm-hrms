@@ -90,12 +90,25 @@
                     </div>
                     <div class="mt-3 pt-3 border-t border-gray-200">
                         <div class="flex justify-between items-center">
-                            <span class="text-xs text-gray-500">{{ dataset.created_at[:10] }}</span>
+                            <span class="text-xs text-gray-500">
+                                {{ dataset.created_at[:10] }}
+                                {% if dataset.is_default %}
+                                <span class="ml-1 bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded">Default</span>
+                                {% endif %}
+                            </span>
                             <div class="flex gap-2">
                                 <a href="{{ url_for('person_recognition.dataset_details', dataset_name=dataset.name) }}" 
                                    class="text-blue-600 hover:text-blue-800 text-sm">View</a>
                                 <button onclick="trainFromDataset('{{ dataset.name }}')" 
                                         class="text-green-600 hover:text-green-800 text-sm">Train</button>
+                                <button onclick="setDefaultDataset('{{ dataset.name }}')" 
+                                        class="text-purple-600 hover:text-purple-800 text-sm" title="Set as default">
+                                        <i class="fas fa-star{% if not dataset.is_default %}-o{% endif %}"></i>
+                                </button>
+                                <button onclick="deleteDataset('{{ dataset.name }}')" 
+                                        class="text-red-600 hover:text-red-800 text-sm" title="Delete dataset">
+                                        <i class="fas fa-trash"></i>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -272,8 +285,9 @@
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">Choose a dataset...</option>
                 {% for dataset in datasets %}
-                <option value="{{ dataset.name }}">
+                <option value="{{ dataset.name }}" {% if dataset.is_default %}selected{% endif %}>
                     {{ dataset.name }} ({{ dataset.num_persons }} persons)
+                    {% if dataset.is_default %} [Default]{% endif %}
                 </option>
                 {% endfor %}
             </select>
@@ -558,6 +572,50 @@ function trainFromDataset(datasetName) {
     showTrainModelModal();
 }
 
+// Dataset management functions
+function setDefaultDataset(datasetName) {
+    fetch('/person-recognition/datasets/' + encodeURIComponent(datasetName) + '/set-default', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert('Failed to set default dataset: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to set default dataset');
+    });
+}
+
+function deleteDataset(datasetName) {
+    if (confirm(`Are you sure you want to delete the dataset "${datasetName}"? This action cannot be undone.`)) {
+        // Create a form and submit it
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/person-recognition/datasets/' + encodeURIComponent(datasetName) + '/delete';
+        
+        // Add CSRF token if needed
+        const csrfToken = document.querySelector('meta[name="csrf-token"]');
+        if (csrfToken) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'csrf_token';
+            input.value = csrfToken.content;
+            form.appendChild(input);
+        }
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
 function trainModel() {
     const dataset = document.getElementById('trainDatasetSelect').value;
     const modelType = document.getElementById('modelType').value;
@@ -753,6 +811,16 @@ function displayTestResults(results, testType) {
 // Check URL parameters on page load
 window.addEventListener('DOMContentLoaded', function() {
     const urlParams = new URLSearchParams(window.location.search);
+    
+    // Check for train parameter
+    const trainDataset = urlParams.get('train');
+    if (trainDataset) {
+        // Wait a bit for the page to load datasets
+        setTimeout(() => {
+            document.getElementById('trainDatasetSelect').value = trainDataset;
+            showTrainModelModal();
+        }, 500);
+    }
     
     // Check for test parameter
     const testModel = urlParams.get('test');

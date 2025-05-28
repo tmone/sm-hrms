@@ -6,13 +6,27 @@
 <div class="container-fluid px-4">
     <!-- Page Header -->
     <div class="mb-6">
-        <div class="flex items-center mb-2">
-            <a href="{{ url_for('person_recognition.index') }}" class="text-blue-600 hover:text-blue-800 mr-2">
-                <i class="fas fa-arrow-left"></i>
-            </a>
-            <h1 class="text-3xl font-bold text-gray-800 dark:text-white">
-                Dataset: {{ dataset_name }}
-            </h1>
+        <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center">
+                <a href="{{ url_for('person_recognition.index') }}" class="text-blue-600 hover:text-blue-800 mr-2">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
+                <h1 class="text-3xl font-bold text-gray-800 dark:text-white">
+                    Dataset: {{ dataset_name }}
+                </h1>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="trainFromDataset('{{ dataset_name }}')" 
+                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                    <i class="fas fa-brain mr-2"></i>
+                    Train Model
+                </button>
+                <button onclick="deleteDataset('{{ dataset_name }}')" 
+                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                    <i class="fas fa-trash-alt mr-2"></i>
+                    Delete Dataset
+                </button>
+            </div>
         </div>
         <p class="text-gray-600 dark:text-gray-400">
             Created: {{ dataset_info.created_at }}
@@ -133,20 +147,32 @@
 </div>
 
 <script>
+// Redirect to main page to show train modal
 function trainFromDataset(datasetName) {
-    // Redirect to main page with dataset pre-selected
-    window.location.href = '{{ url_for("person_recognition.index") }}?train=' + datasetName;
+    window.location.href = '{{ url_for("person_recognition.index") }}?train=' + encodeURIComponent(datasetName);
 }
 
-// Check if we should open training modal
-window.addEventListener('DOMContentLoaded', function() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const trainDataset = urlParams.get('train');
-    if (trainDataset && window.parent !== window) {
-        // We're in the main page, trigger training
-        window.parent.document.getElementById('trainDatasetSelect').value = trainDataset;
-        window.parent.showTrainModelModal();
+// Delete dataset function
+function deleteDataset(datasetName) {
+    if (confirm(`Are you sure you want to delete the dataset "${datasetName}"? This action cannot be undone.`)) {
+        // Create a form and submit it
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/person-recognition/datasets/' + encodeURIComponent(datasetName) + '/delete';
+        
+        // Add CSRF token if needed
+        const csrfToken = document.querySelector('meta[name="csrf-token"]');
+        if (csrfToken) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'csrf_token';
+            input.value = csrfToken.content;
+            form.appendChild(input);
+        }
+        
+        document.body.appendChild(form);
+        form.submit();
     }
-});
+}
 </script>
 {% endblock %}

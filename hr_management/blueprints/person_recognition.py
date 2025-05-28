@@ -32,6 +32,18 @@ def index():
     # Get available datasets
     datasets_dir = Path('datasets/person_recognition')
     datasets = []
+    
+    # Get default dataset from config
+    default_dataset = None
+    config_path = datasets_dir / 'config.json'
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                config = json.load(f)
+                default_dataset = config.get('default_dataset')
+        except:
+            pass
+    
     if datasets_dir.exists():
         for dataset_dir in datasets_dir.iterdir():
             if dataset_dir.is_dir() and (dataset_dir / 'dataset_info.json').exists():
@@ -42,7 +54,8 @@ def index():
                         'created_at': info.get('created_at', 'Unknown'),
                         'num_persons': len(info.get('persons', {})),
                         'total_images': info.get('total_images', 0),
-                        'total_faces': info.get('total_faces', info.get('total_features', 0))  # Fallback to total_features
+                        'total_faces': info.get('total_faces', info.get('total_features', 0)),  # Fallback to total_features
+                        'is_default': dataset_dir.name == default_dataset
                     })
     
     return render_template('person_recognition/index.html', 
@@ -86,10 +99,29 @@ def create_dataset():
             aug_results = creator.augment_dataset(dataset_name, augmentation_factor)
             dataset_info['augmentation'] = aug_results
         
+        # Set as default dataset
+        config_path = Path('datasets/person_recognition/config.json')
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        config = {}
+        if config_path.exists():
+            try:
+                with open(config_path) as f:
+                    config = json.load(f)
+            except:
+                pass
+        
+        config['default_dataset'] = dataset_name
+        config['updated_at'] = datetime.now().isoformat()
+        
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        
         return jsonify({
             'success': True,
             'dataset_name': dataset_name,
-            'dataset_info': dataset_info
+            'dataset_info': dataset_info,
+            'set_as_default': True
         })
         
     except Exception as e:
@@ -303,6 +335,74 @@ def test_image():
         print(f"❌ Image test error: {str(e)}")
         import traceback
         traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@person_recognition_bp.route('/datasets/<dataset_name>/delete', methods=['POST'])
+@login_required
+def delete_dataset(dataset_name):
+    """Delete a dataset"""
+    try:
+        import shutil
+        
+        # Path to the dataset directory
+        dataset_dir = Path('datasets/person_recognition') / dataset_name
+        
+        if not dataset_dir.exists():
+            flash(f'Dataset {dataset_name} not found', 'error')
+            return redirect(url_for('person_recognition.index'))
+        
+        # Check if this is the default dataset
+        config_path = Path('datasets/person_recognition/config.json')
+        if config_path.exists():
+            with open(config_path) as f:
+                config = json.load(f)
+                if config.get('default_dataset') == dataset_name:
+                    # Clear the default
+                    config['default_dataset'] = None
+                    with open(config_path, 'w') as f:
+                        json.dump(config, f, indent=2)
+        
+        # Delete the dataset directory
+        shutil.rmtree(dataset_dir)
+        
+        flash(f'Dataset {dataset_name} has been deleted successfully', 'success')
+        return redirect(url_for('person_recognition.index'))
+        
+    except Exception as e:
+        flash(f'Error deleting dataset: {str(e)}', 'error')
+        return redirect(url_for('person_recognition.dataset_details', dataset_name=dataset_name))
+
+
+@person_recognition_bp.route('/datasets/<dataset_name>/set-default', methods=['POST'])
+@login_required
+def set_default_dataset(dataset_name):
+    """Set a dataset as the default for training"""
+    try:
+        # Path to the dataset directory
+        dataset_dir = Path('datasets/person_recognition') / dataset_name
+        
+        if not dataset_dir.exists():
+            return jsonify({'success': False, 'error': f'Dataset {dataset_name} not found'})
+        
+        # Update config file
+        config_path = Path('datasets/person_recognition/config.json')
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        config = {}
+        if config_path.exists():
+            with open(config_path) as f:
+                config = json.load(f)
+        
+        config['default_dataset'] = dataset_name
+        config['updated_at'] = datetime.now().isoformat()
+        
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        
+        return jsonify({'success': True, 'message': f'{dataset_name} set as default dataset'})
+        
+    except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
 

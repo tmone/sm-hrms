@@ -334,3 +334,42 @@ def get_available_persons():
     return jsonify({
         'persons': sorted(persons, key=lambda x: x['person_id'])
     })
+
+
+@person_recognition_bp.route('/models/<model_name>/delete', methods=['POST'])
+@login_required
+def delete_model(model_name):
+    """Delete a person recognition model"""
+    try:
+        import shutil
+        
+        # Debug logging
+        print(f"Attempting to delete model: {model_name}")
+        
+        # Path to the model directory
+        model_dir = Path('models/person_recognition') / model_name
+        print(f"Model directory path: {model_dir}")
+        print(f"Model directory exists: {model_dir.exists()}")
+        
+        if not model_dir.exists():
+            flash(f'Model {model_name} not found at {model_dir}', 'error')
+            return redirect(url_for('person_recognition.index'))
+        
+        # Check if this is the default model
+        config_path = Path('models/person_recognition/config.json')
+        if config_path.exists():
+            with open(config_path) as f:
+                config = json.load(f)
+                if config.get('default_model') == model_name:
+                    flash('Cannot delete the default model. Please set another model as default first.', 'error')
+                    return redirect(url_for('person_recognition.model_details', model_name=model_name))
+        
+        # Delete the model directory
+        shutil.rmtree(model_dir)
+        
+        flash(f'Model {model_name} has been deleted successfully', 'success')
+        return redirect(url_for('person_recognition.index'))
+        
+    except Exception as e:
+        flash(f'Error deleting model: {str(e)}', 'error')
+        return redirect(url_for('person_recognition.model_details', model_name=model_name))

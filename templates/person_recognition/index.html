@@ -160,6 +160,8 @@
                                    class="text-blue-600 hover:text-blue-800 text-sm">Details</a>
                                 <button onclick="showTestModal('{{ model.name }}')" 
                                         class="text-green-600 hover:text-green-800 text-sm">Test</button>
+                                <button onclick="confirmDeleteModel('{{ model.name }}')" 
+                                        class="text-red-600 hover:text-red-800 text-sm">Delete</button>
                             </div>
                         </div>
                     </div>
@@ -610,6 +612,29 @@ function showTestModal(modelName) {
 
 function closeTestModal() {
     document.getElementById('testModelModal').classList.add('hidden');
+}
+
+// Delete model functionality
+function confirmDeleteModel(modelName) {
+    if (confirm(`Are you sure you want to delete the model "${modelName}"? This action cannot be undone.`)) {
+        // Create a form and submit it
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/person-recognition/models/' + encodeURIComponent(modelName) + '/delete';
+        
+        // Add CSRF token if needed
+        const csrfToken = document.querySelector('meta[name="csrf-token"]');
+        if (csrfToken) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'csrf_token';
+            input.value = csrfToken.content;
+            form.appendChild(input);
+        }
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
 }
 
 function updateTestType() {

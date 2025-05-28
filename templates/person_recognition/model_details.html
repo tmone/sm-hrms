@@ -48,11 +48,17 @@
     </div>
 
     <!-- Actions -->
-    <div class="mb-6">
+    <div class="mb-6 flex gap-3">
         <button onclick="showTestModal('{{ model_name }}')" 
                 class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
             <i class="fas fa-play mr-2"></i>
             Test Model
+        </button>
+        
+        <button onclick="confirmDeleteModel('{{ model_name }}')" 
+                class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+            <i class="fas fa-trash-alt mr-2"></i>
+            Delete Model
         </button>
     </div>
 
@@ -111,6 +117,29 @@
 function showTestModal(modelName) {
     // Redirect to main page with test parameter
     window.location.href = '{{ url_for("person_recognition.index") }}?test=' + encodeURIComponent(modelName);
+}
+
+// Delete model functionality
+function confirmDeleteModel(modelName) {
+    if (confirm(`Are you sure you want to delete the model "${modelName}"? This action cannot be undone.`)) {
+        // Create a form and submit it
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/person-recognition/models/' + encodeURIComponent(modelName) + '/delete';
+        
+        // Add CSRF token if needed
+        const csrfToken = document.querySelector('meta[name="csrf-token"]');
+        if (csrfToken) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'csrf_token';
+            input.value = csrfToken.content;
+            form.appendChild(input);
+        }
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
 }
 
 // Draw confusion matrix

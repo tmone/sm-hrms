@@ -7,6 +7,7 @@ from datetime import datetime
 from ultralytics import YOLO
 import logging
 from typing import List, Dict, Tuple, Any
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,12 +21,67 @@ class PersonTracker:
         self.next_track_id = 1
         self.max_distance = max_distance
         self.min_confidence = min_confidence
+        # Track global person IDs to ensure uniqueness across videos
+        self.next_person_id = self._get_next_person_id()
+    
+    def _get_next_person_id(self):
+        """Get the next available person ID by checking existing person folders"""
+        persons_dir = Path('processing/outputs/persons')
+        persons_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Path to the ID counter file
+        counter_file = persons_dir / 'person_id_counter.json'
+        
+        # First, check existing folders to find the maximum ID
+        existing_persons = list(persons_dir.glob('PERSON-*'))
+        max_folder_id = 0
+        
+        for person_folder in existing_persons:
+            try:
+                folder_name = person_folder.name
+                if folder_name.startswith('PERSON-'):
+                    person_id = int(folder_name.replace('PERSON-', ''))
+                    max_folder_id = max(max_folder_id, person_id)
+            except ValueError:
+                continue
+        
+        # Check the counter file
+        max_counter_id = 0
+        if counter_file.exists():
+            try:
+                with open(counter_file, 'r') as f:
+                    data = json.load(f)
+                    max_counter_id = data.get('last_person_id', 0)
+            except Exception as e:
+                logger.warning(f"Error reading counter file: {e}")
+        
+        # Use the maximum of both
+        max_id = max(max_folder_id, max_counter_id)
+        next_id = max_id + 1
+        
+        logger.info(f"Found {len(existing_persons)} existing persons, starting from: PERSON-{next_id:04d}")
+        return next_id
         
     def euclidean_distance(self, box1, box2):
         """Calculate distance between two bounding box centers"""
         center1 = (box1[0] + box1[2]/2, box1[1] + box1[3]/2)
         center2 = (box2[0] + box2[2]/2, box2[1] + box2[3]/2)
         return np.sqrt((center1[0] - center2[0])**2 + (center1[1] - center2[1])**2)
+    
+    def save_person_id_counter(self):
+        """Save the updated person ID counter"""
+        persons_dir = Path('processing/outputs/persons')
+        counter_file = persons_dir / 'person_id_counter.json'
+        
+        try:
+            with open(counter_file, 'w') as f:
+                json.dump({
+                    'last_person_id': self.next_person_id - 1,
+                    'updated_at': datetime.now().isoformat()
+                }, f, indent=2)
+            logger.info(f"Updated person ID counter to: {self.next_person_id - 1}")
+        except Exception as e:
+            logger.error(f"Error updating person ID counter: {e}")
     
     def update_tracks(self, detections, frame_number):
         """Update person tracks with new detections"""
@@ -61,12 +117,16 @@ class PersonTracker:
                 # Create new track
                 track_id = self.next_track_id
                 self.next_track_id += 1
+                # Use global person ID instead of track ID
+                person_id = self.next_person_id
+                self.next_person_id += 1
+                
                 self.tracks[track_id] = {
                     'first_frame': frame_number,
                     'last_frame': frame_number,
                     'last_bbox': bbox,
                     'detections': [detection],
-                    'person_id': f"PERSON-{track_id:04d}"
+                    'person_id': f"PERSON-{person_id:04d}"
                 }
             
             detection['track_id'] = track_id
@@ -140,6 +200,9 @@ def detect_and_track_persons(video_path):
             logger.info(f"Processed {frame_number}/{total_frames} frames")
     
     cap.release()
+    
+    # Save the updated person ID counter
+    tracker.save_person_id_counter()
     
     # Organize tracks by person_id
     person_tracks = {}
@@ -299,7 +362,8 @@ def extract_persons_data(video_path, person_tracks, persons_dir):
                 person_img = frame[y1:y2, x1:x2]
                 
                 if person_img.size > 0:
-                    img_filename = f"{person_id}_frame_{frame_number:06d}.jpg"
+                    # Use simple UUID for filename
+                    img_filename = f"{uuid.uuid4()}.jpg"
                     img_path = os.path.join(person_dir, img_filename)
                     cv2.imwrite(img_path, person_img)
                     

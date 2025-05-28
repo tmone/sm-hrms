@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import json
 import glob
+import uuid
 
 # Try to import torch and check CUDA availability
 try:
@@ -996,7 +997,8 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
                 person_img = frame[y1:y2, x1:x2]
                 
                 if person_img.size > 0:
-                    img_filename = f"{person_id_str}_frame_{frame_number:06d}.jpg"
+                    # Use simple UUID for filename
+                    img_filename = f"{uuid.uuid4()}.jpg"
                     img_path = person_dir / img_filename
                     cv2.imwrite(str(img_path), person_img)
                     

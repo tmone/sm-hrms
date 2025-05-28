@@ -288,14 +288,12 @@ def merge_persons(primary_person_id, persons_to_merge):
             for img_data in metadata.get('images', []):
                 src_img = person_dir / img_data['filename']
                 if src_img.exists():
-                    # Rename to avoid conflicts
-                    new_filename = f"{person_id}_{img_data['filename']}"
-                    dst_img = primary_dir / new_filename
+                    # Since we use UUIDs, no need to rename
+                    dst_img = primary_dir / img_data['filename']
                     shutil.copy2(src_img, dst_img)
                     print(f"  📁 Copied: {src_img.name} → {dst_img.name}")
                     
                     # Update image data
-                    img_data['filename'] = new_filename
                     img_data['original_person_id'] = person_id
                     primary_metadata['images'].append(img_data)
                     total_images_added += 1
@@ -662,6 +660,72 @@ def remove_multiple():
         
     except Exception as e:
         print(f"❌ Remove multiple error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@persons_bp.route('/reset-all', methods=['POST'])
+@login_required
+def reset_all_persons():
+    """Reset all person codes and start from PERSON-0001"""
+    try:
+        from flask import current_app
+        db = current_app.db
+        DetectedPerson = current_app.DetectedPerson
+        Video = current_app.Video
+        
+        # 1. Clear all person folders
+        persons_dir = Path('processing/outputs/persons')
+        if persons_dir.exists():
+            # Remove all PERSON-* directories
+            person_folders = list(persons_dir.glob('PERSON-*'))
+            for folder in person_folders:
+                try:
+                    shutil.rmtree(folder)
+                except Exception as e:
+                    print(f"⚠️ Error removing {folder.name}: {e}")
+            
+            # Remove the counter file
+            counter_file = persons_dir / 'person_id_counter.json'
+            if counter_file.exists():
+                counter_file.unlink()
+        else:
+            persons_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 2. Reset the person ID counter to 0
+        counter_file = persons_dir / 'person_id_counter.json'
+        counter_data = {
+            'last_person_id': 0,
+            'updated_at': None,
+            'total_persons': 0
+        }
+        with open(counter_file, 'w') as f:
+            json.dump(counter_data, f, indent=2)
+        
+        # 3. Clear database records
+        person_count = DetectedPerson.query.count()
+        
+        if person_count > 0:
+            # Clear all DetectedPerson records
+            DetectedPerson.query.delete()
+            
+            # Update all videos to have 0 person count
+            videos = Video.query.all()
+            for video in videos:
+                video.person_count = 0
+            
+            # Commit changes
+            db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'All person codes have been reset. Next person will be PERSON-0001',
+            'persons_cleared': person_count
+        })
+        
+    except Exception as e:
+        print(f"❌ Reset all error: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})

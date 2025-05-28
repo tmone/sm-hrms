@@ -286,8 +286,9 @@ class ImprovedPersonExtractor:
             person_img = frame[y1:y2, x1:x2]
             
             if person_img.size > 0:
-                # Save image
-                img_filename = f"{person_id}_frame_{det['frame_number']:06d}.jpg"
+                # Save image with simple UUID filename
+                import uuid
+                img_filename = f"{uuid.uuid4()}.jpg"
                 img_path = person_dir / img_filename
                 
                 # Save with good quality

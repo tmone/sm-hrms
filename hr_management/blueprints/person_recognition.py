@@ -81,13 +81,20 @@ def create_dataset():
         dataset_name = dataset_name.replace(' ', '_').replace('-', '_')
         
         # Import dataset creator
-        try:
-            from hr_management.processing.person_dataset_creator import PersonDatasetCreator
-            creator = PersonDatasetCreator()
-        except ImportError:
-            # Use simple version if face_recognition is not available
-            from hr_management.processing.person_dataset_creator_simple import PersonDatasetCreatorSimple
-            creator = PersonDatasetCreatorSimple()
+        # Always use simple version for better compatibility with person detection (not just faces)
+        from hr_management.processing.person_dataset_creator_simple import PersonDatasetCreatorSimple
+        creator = PersonDatasetCreatorSimple()
+        
+        # Optional: Try to use face recognition version if explicitly requested
+        use_face_recognition = data.get('use_face_recognition', False)
+        if use_face_recognition:
+            try:
+                from hr_management.processing.person_dataset_creator import PersonDatasetCreator
+                creator = PersonDatasetCreator()
+                print("Using face recognition-based feature extraction")
+            except ImportError:
+                print("Face recognition not available, using appearance-based features")
+                pass
         
         # Create dataset
         print(f"🔄 Creating dataset '{dataset_name}' with {len(person_ids)} persons...")
@@ -176,18 +183,17 @@ def train_model():
             return jsonify({'success': False, 'error': 'No dataset specified'})
         
         # Import necessary modules
-        try:
-            from hr_management.processing.person_dataset_creator import PersonDatasetCreator
-            creator = PersonDatasetCreator()
-        except ImportError:
-            # Use simple version if face_recognition is not available
-            from hr_management.processing.person_dataset_creator_simple import PersonDatasetCreatorSimple
-            creator = PersonDatasetCreatorSimple()
+        # Always use simple version for better compatibility with person detection (not just faces)
+        from hr_management.processing.person_dataset_creator_simple import PersonDatasetCreatorSimple
+        creator = PersonDatasetCreatorSimple()
         
         from hr_management.processing.person_recognition_trainer import PersonRecognitionTrainer
         
         # Prepare training data
+        print(f"📊 Loading training data from dataset: {dataset_name}")
         X, y, person_ids = creator.prepare_training_data(dataset_name)
+        
+        print(f"📊 Loaded data: X shape = {np.array(X).shape if len(X) > 0 else 'empty'}, unique persons = {len(set(y)) if len(y) > 0 else 0}")
         
         if len(X) == 0:
             return jsonify({'success': False, 'error': 'No training data found'})

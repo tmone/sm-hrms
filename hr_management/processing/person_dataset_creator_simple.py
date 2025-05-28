@@ -89,9 +89,11 @@ class PersonDatasetCreatorSimple:
         }
         
         # Process each image
+        print(f"Processing {person_id}: {len(metadata.get('images', []))} images in metadata")
         for img_data in metadata.get('images', []):
             img_path = person_dir / img_data['filename']
             if not img_path.exists():
+                print(f"  ⚠️  Image not found: {img_path}")
                 continue
                 
             # Copy original image

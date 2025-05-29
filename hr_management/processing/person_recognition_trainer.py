@@ -77,7 +77,7 @@ class PersonRecognitionTrainer:
                 if len(X_val) > 0:
                     X_test = X_val
                     y_test = y_val
-                    print(f"📊 Using pre-split validation data: {len(X_test)} samples")
+                    print(f"Using pre-split validation data: {len(X_test)} samples")
         except:
             pass
         
@@ -101,7 +101,7 @@ class PersonRecognitionTrainer:
             # Create and train model
             model = self.model_architectures[model_type]()
             
-            print(f"\n🔄 Training iteration {iteration + 1}/{max_iterations} - {model_type} model with {len(X_train)} samples...")
+            print(f"\nTraining iteration {iteration + 1}/{max_iterations} - {model_type} model with {len(X_train)} samples...")
             
             # For neural networks, increase iterations progressively
             if model_type == 'mlp' and iteration > 0:
@@ -145,7 +145,7 @@ class PersonRecognitionTrainer:
             
             # Check if we've reached target accuracy
             if test_score >= target_accuracy:
-                print(f"✅ Target accuracy {target_accuracy} reached!")
+                print(f"Target accuracy {target_accuracy} reached!")
                 best_model = model
                 best_test_score = test_score
                 break
@@ -161,7 +161,7 @@ class PersonRecognitionTrainer:
         model = best_model
         test_score = best_test_score
         
-        print(f"\n📊 Final test accuracy: {test_score:.3f}")
+        print(f"\nFinal test accuracy: {test_score:.3f}")
         
         # Re-calculate final metrics with best model
         y_pred = best_model.predict(X_test_scaled)
@@ -185,13 +185,31 @@ class PersonRecognitionTrainer:
         # Filter target names to only include classes that exist
         filtered_target_names = [person_ids[i] for i in all_labels if i < len(person_ids)]
         
-        report = classification_report(
+        report_dict = classification_report(
             y_test, y_pred, 
             labels=all_labels,
             target_names=filtered_target_names,
             output_dict=True,
             zero_division=0
         )
+        
+        # Convert numpy types to Python types for JSON serialization
+        def convert_numpy_types(obj):
+            if isinstance(obj, np.bool_):
+                return bool(obj)
+            elif isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, dict):
+                return {k: convert_numpy_types(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numpy_types(i) for i in obj]
+            return obj
+        
+        report = convert_numpy_types(report_dict)
         
         # Confusion matrix
         cm = confusion_matrix(y_test, y_pred, labels=all_labels)
@@ -235,11 +253,11 @@ class PersonRecognitionTrainer:
             'num_test_samples': len(X_test),
             'train_score': float(train_score),
             'test_score': float(test_score),
-            'target_accuracy': target_accuracy,
-            'target_reached': test_score >= target_accuracy,
+            'target_accuracy': float(target_accuracy),
+            'target_reached': bool(test_score >= target_accuracy),
             'training_iterations': len(iteration_results),
-            'iteration_results': iteration_results,
-            'final_person_accuracies': final_person_accuracies,
+            'iteration_results': convert_numpy_types(iteration_results),
+            'final_person_accuracies': convert_numpy_types(final_person_accuracies),
             'cv_scores': cv_scores.tolist(),
             'cv_mean': float(cv_scores.mean()),
             'cv_std': float(cv_scores.std()),
@@ -255,7 +273,7 @@ class PersonRecognitionTrainer:
         with open(model_dir / 'person_id_mapping.pkl', 'wb') as f:
             pickle.dump(person_id_mapping, f)
         
-        print(f"✅ Model trained successfully!")
+        print(f"Model trained successfully!")
         print(f"   Train accuracy: {train_score:.3f}")
         print(f"   Test accuracy: {test_score:.3f}")
         print(f"   CV accuracy: {cv_scores.mean():.3f} (+/- {cv_scores.std() * 2:.3f})")
@@ -372,16 +390,21 @@ class PersonRecognitionTrainer:
         
         for model_dir in self.models_dir.iterdir():
             if model_dir.is_dir() and (model_dir / 'metadata.json').exists():
-                with open(model_dir / 'metadata.json') as f:
-                    metadata = json.load(f)
-                
-                models.append({
-                    'name': model_dir.name,
-                    'type': metadata['model_type'],
-                    'created_at': metadata['created_at'],
-                    'num_persons': metadata['num_persons'],
-                    'test_accuracy': metadata['test_score'],
-                    'cv_accuracy': metadata['cv_mean']
-                })
+                try:
+                    with open(model_dir / 'metadata.json') as f:
+                        metadata = json.load(f)
+                    
+                    models.append({
+                        'name': model_dir.name,
+                        'type': metadata.get('model_type', 'unknown'),
+                        'created_at': metadata.get('created_at', 'unknown'),
+                        'num_persons': metadata.get('num_persons', len(metadata.get('person_ids', []))),
+                        'test_accuracy': metadata.get('test_score', 0),
+                        'cv_accuracy': metadata.get('cv_mean', 0),
+                        'test_score': metadata.get('test_score', 0)  # For compatibility
+                    })
+                except (json.JSONDecodeError, Exception) as e:
+                    print(f"Warning: Skipping corrupted model {model_dir.name}: {e}")
+                    continue
         
         return sorted(models, key=lambda x: x['created_at'], reverse=True)

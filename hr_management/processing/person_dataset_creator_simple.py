@@ -122,7 +122,7 @@ class PersonDatasetCreatorSimple:
         for img_data in train_images:
             img_path = person_dir / img_data['filename']
             if not img_path.exists():
-                print(f"  ⚠️  Image not found: {img_path}")
+                print(f"  WARNING: Image not found: {img_path}")
                 continue
                 
             # Copy original image to train directory
@@ -193,7 +193,7 @@ class PersonDatasetCreatorSimple:
         for img_data in val_images:
             img_path = person_dir / img_data['filename']
             if not img_path.exists():
-                print(f"  ⚠️  Image not found: {img_path}")
+                print(f"  WARNING: Image not found: {img_path}")
                 continue
                 
             # Copy original image to validation directory
@@ -335,7 +335,7 @@ class PersonDatasetCreatorSimple:
                 
             person_id = person_dir.name
             if person_sample_count[person_id] == 0:
-                print(f"⚠️  Skipping {person_id} - no valid features")
+                print(f"WARNING: Skipping {person_id} - no valid features")
                 continue
                 
             if person_id not in person_id_map:
@@ -353,11 +353,11 @@ class PersonDatasetCreatorSimple:
                             X.append(feature_data['features'])
                             y.append(person_label)
                 except Exception as e:
-                    print(f"⚠️  Error loading {feature_file}: {e}")
+                    print(f"WARNING: Error loading {feature_file}: {e}")
                     continue
         
         split_type = "validation" if use_validation else "training"
-        print(f"📊 Loaded {len(X)} {split_type} samples for {len(person_ids)} persons")
+        print(f"INFO: Loaded {len(X)} {split_type} samples for {len(person_ids)} persons")
         for i, person_id in enumerate(person_ids):
             count = sum(1 for label in y if label == i)
             print(f"   {person_id}: {count} samples")
@@ -367,7 +367,7 @@ class PersonDatasetCreatorSimple:
         if len(unique_labels) < len(person_ids):
             missing_classes = set(range(len(person_ids))) - set(unique_labels)
             for missing in missing_classes:
-                print(f"⚠️  WARNING: {person_ids[missing]} has no valid features!")
+                print(f"WARNING: {person_ids[missing]} has no valid features!")
         
         return np.array(X), np.array(y), person_ids
     

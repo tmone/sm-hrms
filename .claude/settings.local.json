@@ -39,7 +39,10 @@
       "Bash(cat:*)",
       "Bash(pip install:*)",
       "Bash(.venv/Scripts/python.exe tests/test_dashboard_fix.py:*)",
-      "Bash(.venv/Scripts/python.exe:*)"
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(for:*)",
+      "Bash(do echo \"=== $f ===\")",
+      "Bash(done)"
     ],
     "deny": []
   },

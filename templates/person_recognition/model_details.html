@@ -60,18 +60,94 @@
     </div>
 
     <!-- Actions -->
-    <div class="mb-6 flex gap-3">
+    <div class="mb-6 flex flex-wrap gap-3">
         <button onclick="showTestModal('{{ model_name }}')" 
                 class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
             <i class="fas fa-play mr-2"></i>
             Test Model
         </button>
         
+        <button onclick="autoRefineModel('{{ model_name }}')" 
+                class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+            <i class="fas fa-magic mr-2"></i>
+            Auto Find Best Model
+        </button>
+        
+        <!-- Refinement Actions -->
+        <div class="relative inline-block">
+            <button onclick="toggleRefinementMenu()" 
+                    class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                <i class="fas fa-cogs mr-2"></i>
+                Refine Model
+                <i class="fas fa-chevron-down ml-2"></i>
+            </button>
+            
+            <!-- Dropdown Menu -->
+            <div id="refinementMenu" class="hidden absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg z-50">
+                <div class="py-1">
+                    <button onclick="refineModel('{{ model_name }}', 'quick')" 
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <i class="fas fa-bolt mr-2 text-yellow-500"></i>
+                        Quick Refinement
+                        <span class="text-xs text-gray-500 block">Fast training without hyperparameter tuning</span>
+                    </button>
+                    
+                    <button onclick="refineModel('{{ model_name }}', 'standard')" 
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <i class="fas fa-chart-line mr-2 text-blue-500"></i>
+                        Standard Refinement
+                        <span class="text-xs text-gray-500 block">With hyperparameter optimization</span>
+                    </button>
+                    
+                    <button onclick="refineModel('{{ model_name }}', 'advanced')" 
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <i class="fas fa-brain mr-2 text-purple-500"></i>
+                        Advanced Refinement
+                        <span class="text-xs text-gray-500 block">Advanced features + optimization</span>
+                    </button>
+                    
+                    <div class="border-t dark:border-gray-700 my-1"></div>
+                    
+                    <button onclick="refineModel('{{ model_name }}', 'random_forest')" 
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <i class="fas fa-tree mr-2 text-green-500"></i>
+                        Try Random Forest
+                        <span class="text-xs text-gray-500 block">Alternative model type</span>
+                    </button>
+                    
+                    <button onclick="refineModel('{{ model_name }}', 'mlp')" 
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <i class="fas fa-network-wired mr-2 text-indigo-500"></i>
+                        Try Neural Network
+                        <span class="text-xs text-gray-500 block">MLP classifier</span>
+                    </button>
+                    
+                    <button onclick="refineModel('{{ model_name }}', 'gradient_boost')" 
+                            class="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <i class="fas fa-rocket mr-2 text-red-500"></i>
+                        Try Gradient Boosting
+                        <span class="text-xs text-gray-500 block">Often gives best results</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
         <button onclick="confirmDeleteModel('{{ model_name }}')" 
                 class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
             <i class="fas fa-trash-alt mr-2"></i>
             Delete Model
         </button>
+    </div>
+    
+    <!-- Refinement Status -->
+    <div id="refinementStatus" class="hidden mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+        <div class="flex items-center">
+            <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-3"></div>
+            <div>
+                <h4 class="font-semibold text-blue-800 dark:text-blue-200">Model Refinement in Progress</h4>
+                <p class="text-sm text-blue-600 dark:text-blue-300" id="refinementMessage">Starting refinement process...</p>
+            </div>
+        </div>
     </div>
 
     <!-- Confusion Matrix -->
@@ -94,15 +170,25 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-                        {% for person_id in metadata.person_ids %}
-                        {% set report = metadata.classification_report[person_id] %}
-                        <tr>
-                            <td class="px-4 py-2 text-sm font-medium">{{ person_id }}</td>
-                            <td class="px-4 py-2 text-sm">{{ "%.2f"|format(report.precision) }}</td>
-                            <td class="px-4 py-2 text-sm">{{ "%.2f"|format(report.recall) }}</td>
-                            <td class="px-4 py-2 text-sm">{{ "%.2f"|format(report['f1-score']) }}</td>
-                        </tr>
-                        {% endfor %}
+                        {% if metadata.classification_report %}
+                            {% for person_id in metadata.person_ids %}
+                            {% if person_id in metadata.classification_report %}
+                            {% set report = metadata.classification_report[person_id] %}
+                            <tr>
+                                <td class="px-4 py-2 text-sm font-medium">{{ person_id }}</td>
+                                <td class="px-4 py-2 text-sm">{{ "%.2f"|format(report.precision) }}</td>
+                                <td class="px-4 py-2 text-sm">{{ "%.2f"|format(report.recall) }}</td>
+                                <td class="px-4 py-2 text-sm">{{ "%.2f"|format(report['f1-score']) }}</td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="4" class="px-4 py-2 text-sm text-center text-gray-500">
+                                    Detailed metrics not available for this model
+                                </td>
+                            </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
@@ -113,12 +199,16 @@
     <div class="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h3 class="text-lg font-semibold mb-4">Cross-Validation Scores</h3>
         <div class="flex items-center space-x-4">
-            {% for score in metadata.cv_scores %}
-            <div class="text-center">
-                <div class="text-2xl font-bold text-blue-600">{{ "%.1f%%"|format(score * 100) }}</div>
-                <div class="text-sm text-gray-500">Fold {{ loop.index }}</div>
-            </div>
-            {% endfor %}
+            {% if metadata.cv_scores %}
+                {% for score in metadata.cv_scores %}
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-blue-600">{{ "%.1f%%"|format(score * 100) }}</div>
+                    <div class="text-sm text-gray-500">Fold {{ loop.index }}</div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-sm text-gray-500">Cross-validation scores not available</div>
+            {% endif %}
         </div>
     </div>
     
@@ -203,14 +293,168 @@ function confirmDeleteModel(modelName) {
     }
 }
 
+// Toggle refinement dropdown menu
+function toggleRefinementMenu() {
+    const menu = document.getElementById('refinementMenu');
+    menu.classList.toggle('hidden');
+    
+    // Close menu when clicking outside
+    document.addEventListener('click', function closeMenu(e) {
+        if (!e.target.closest('.relative')) {
+            menu.classList.add('hidden');
+            document.removeEventListener('click', closeMenu);
+        }
+    });
+}
+
+// Refine model function
+function refineModel(modelName, refinementType) {
+    // Hide dropdown
+    document.getElementById('refinementMenu').classList.add('hidden');
+    
+    // Show status
+    const statusDiv = document.getElementById('refinementStatus');
+    const messageSpan = document.getElementById('refinementMessage');
+    statusDiv.classList.remove('hidden');
+    
+    // Update message based on type
+    const messages = {
+        'quick': 'Running quick refinement without hyperparameter tuning...',
+        'standard': 'Running standard refinement with hyperparameter optimization...',
+        'advanced': 'Running advanced refinement with sophisticated features...',
+        'random_forest': 'Training Random Forest model...',
+        'mlp': 'Training Neural Network (MLP) model...',
+        'gradient_boost': 'Training Gradient Boosting model (often gives best results)...',
+        'auto': 'Automatically trying all refinement methods to find the best model. This may take 5-15 minutes...'
+    };
+    messageSpan.textContent = messages[refinementType] || 'Starting refinement...';
+    
+    // Make API call
+    fetch('/person-recognition/models/' + encodeURIComponent(modelName) + '/refine', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || ''
+        },
+        body: JSON.stringify({
+            refinement_type: refinementType
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'started') {
+            // Check progress
+            checkRefinementProgress(data.task_id);
+        } else if (data.error) {
+            throw new Error(data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        statusDiv.innerHTML = `
+            <div class="flex items-center text-red-600">
+                <i class="fas fa-exclamation-circle mr-3"></i>
+                <div>
+                    <h4 class="font-semibold">Refinement Failed</h4>
+                    <p class="text-sm">${error.message || 'An error occurred during refinement'}</p>
+                </div>
+            </div>
+        `;
+        setTimeout(() => statusDiv.classList.add('hidden'), 5000);
+    });
+}
+
+// Auto refine model function
+function autoRefineModel(modelName) {
+    // Show confirmation
+    if (!confirm('This will automatically try multiple refinement methods to find the best model. It may take 5-15 minutes. Continue?')) {
+        return;
+    }
+    
+    // Start auto refinement
+    refineModel(modelName, 'auto');
+}
+
+// Check refinement progress
+function checkRefinementProgress(taskId) {
+    const statusDiv = document.getElementById('refinementStatus');
+    const messageSpan = document.getElementById('refinementMessage');
+    
+    const checkStatus = () => {
+        fetch('/person-recognition/tasks/' + taskId + '/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'completed') {
+                    const modelName = data.result.model_name || 'Unknown';
+                    const accuracy = data.result.test_accuracy ? (data.result.test_accuracy * 100).toFixed(1) + '%' : 'N/A';
+                    const accuracyValue = data.result.test_accuracy || 0;
+                    
+                    statusDiv.innerHTML = `
+                        <div class="flex items-center text-green-600">
+                            <i class="fas fa-check-circle mr-3"></i>
+                            <div>
+                                <h4 class="font-semibold">Refinement Completed!</h4>
+                                <p class="text-sm">New model: ${modelName}</p>
+                                <p class="text-sm">Accuracy: ${accuracy}</p>
+                                <p class="text-sm mt-2">
+                                    <a href="/person-recognition/models/${encodeURIComponent(modelName)}" 
+                                       class="text-blue-600 hover:underline">View new model</a>
+                                </p>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Check if this is the best model
+                    if (data.result.is_best_model) {
+                        showSetDefaultModal(modelName, accuracy);
+                    } else {
+                        // Auto-refresh the page after 3 seconds to show updated data
+                        statusDiv.innerHTML += `
+                            <div class="mt-3 text-gray-600">
+                                <i class="fas fa-sync-alt fa-spin mr-2"></i>
+                                Refreshing page in 3 seconds...
+                            </div>
+                        `;
+                        setTimeout(() => {
+                            location.reload();
+                        }, 3000);
+                    }
+                } else if (data.status === 'failed') {
+                    statusDiv.innerHTML = `
+                        <div class="flex items-center text-red-600">
+                            <i class="fas fa-exclamation-circle mr-3"></i>
+                            <div>
+                                <h4 class="font-semibold">Refinement Failed</h4>
+                                <p class="text-sm">${data.error || 'An error occurred during refinement'}</p>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // Still in progress
+                    messageSpan.textContent = data.message || 'Refinement in progress...';
+                    setTimeout(checkStatus, 2000); // Check again in 2 seconds
+                }
+            })
+            .catch(error => {
+                console.error('Error checking status:', error);
+                messageSpan.textContent = 'Error checking refinement status...';
+                setTimeout(checkStatus, 5000); // Try again in 5 seconds
+            });
+    };
+    
+    checkStatus();
+}
+
 // Draw confusion matrix
 const ctx = document.getElementById('confusionMatrix').getContext('2d');
-const confusionData = {{ metadata.confusion_matrix|tojson }};
-const labels = {{ metadata.person_ids|tojson }};
+const confusionData = {{ metadata.confusion_matrix|default([])|tojson }};
+const labels = {{ metadata.person_ids|default([])|tojson }};
 
-// Create heatmap data
-const data = [];
-const maxValue = Math.max(...confusionData.flat());
+// Only draw if we have data
+if (confusionData.length > 0 && labels.length > 0) {
+    // Create heatmap data
+    const data = [];
+    const maxValue = Math.max(...confusionData.flat());
 
 for (let i = 0; i < confusionData.length; i++) {
     for (let j = 0; j < confusionData[i].length; j++) {
@@ -283,6 +527,14 @@ ctx.translate(15, canvas.height/2);
 ctx.rotate(-Math.PI/2);
 ctx.fillText('Actual', 0, 0);
 ctx.restore();
+} else {
+    // No confusion matrix data available
+    ctx.fillStyle = '#666';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Confusion matrix not available for this model', canvas.width/2, canvas.height/2);
+}
 
 // Draw training progress chart if available
 {% if metadata.iteration_results is defined and metadata.iteration_results|length > 1 %}
@@ -339,5 +591,95 @@ new Chart(progressCtx, {
     }
 });
 {% endif %}
+
+// Show set default modal
+function showSetDefaultModal(modelName, accuracy) {
+    const modal = document.getElementById('setDefaultModal');
+    document.getElementById('modalModelName').textContent = modelName;
+    document.getElementById('modalAccuracy').textContent = accuracy;
+    modal.classList.remove('hidden');
+    
+    // Handle confirm button
+    document.getElementById('confirmSetDefault').onclick = function() {
+        setAsDefaultModel(modelName);
+        modal.classList.add('hidden');
+    };
+    
+    // Handle cancel button
+    document.getElementById('cancelSetDefault').onclick = function() {
+        modal.classList.add('hidden');
+        // Navigate to new model after short delay
+        setTimeout(() => {
+            window.location.href = '/person-recognition/models/' + encodeURIComponent(modelName);
+        }, 500);
+    };
+}
+
+// Set model as default
+function setAsDefaultModel(modelName) {
+    fetch('/person-recognition/models/' + encodeURIComponent(modelName) + '/set-default', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || ''
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            const statusDiv = document.getElementById('refinementStatus');
+            statusDiv.innerHTML = `
+                <div class="flex items-center text-green-600">
+                    <i class="fas fa-check-circle mr-3"></i>
+                    <div>
+                        <h4 class="font-semibold">Default Model Updated!</h4>
+                        <p class="text-sm">${modelName} is now the default model.</p>
+                    </div>
+                </div>
+            `;
+            
+            // Navigate to new model
+            setTimeout(() => {
+                window.location.href = '/person-recognition/models/' + encodeURIComponent(modelName);
+            }, 1500);
+        }
+    })
+    .catch(error => {
+        console.error('Error setting default model:', error);
+    });
+}
 </script>
+
+<!-- Set Default Model Modal -->
+<div id="setDefaultModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white dark:bg-gray-800">
+        <div class="mt-3">
+            <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+                <i class="fas fa-trophy text-green-600"></i>
+            </div>
+            <div class="mt-3 text-center">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white">Best Model Achieved!</h3>
+                <div class="mt-2 px-7 py-3">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                        This model has the highest accuracy among all models.
+                    </p>
+                    <p class="mt-2 text-lg font-semibold text-gray-900 dark:text-white" id="modalModelName"></p>
+                    <p class="text-lg text-green-600 font-bold" id="modalAccuracy"></p>
+                    <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">
+                        Would you like to set it as the default model?
+                    </p>
+                </div>
+                <div class="items-center px-4 py-3">
+                    <button id="confirmSetDefault" class="px-4 py-2 bg-green-600 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+                        Yes, Set as Default
+                    </button>
+                    <button id="cancelSetDefault" class="mt-3 px-4 py-2 bg-gray-300 text-gray-800 text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                        No, Keep Current Default
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

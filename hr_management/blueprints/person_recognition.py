@@ -13,8 +13,14 @@ import tempfile
 import shutil
 import sys
 import numpy as np
+import subprocess
+import uuid
+from threading import Thread
 
 person_recognition_bp = Blueprint('person_recognition', __name__, url_prefix='/person-recognition')
+
+# Store for tracking refinement tasks
+refinement_tasks = {}
 
 
 def get_default_model():
@@ -561,3 +567,8 @@ def delete_model(model_name):
     except Exception as e:
         flash(f'Error deleting model: {str(e)}', 'error')
         return redirect(url_for('person_recognition.model_details', model_name=model_name))
+
+
+# Import and register refinement routes
+from .person_recognition_refinement import register_refinement_routes
+register_refinement_routes(person_recognition_bp, refinement_tasks)

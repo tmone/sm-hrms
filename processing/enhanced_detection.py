@@ -3,6 +3,7 @@ import numpy as np
 import os
 import json
 import uuid
+import tempfile
 from datetime import datetime
 from ultralytics import YOLO
 import logging
@@ -16,13 +17,51 @@ logger = logging.getLogger(__name__)
 class PersonTracker:
     """Track persons across video frames to solve duplicate detection problem"""
     
-    def __init__(self, max_distance=50, min_confidence=0.5):
+    def __init__(self, max_distance=50, min_confidence=0.5, use_recognition=True, recognition_threshold=0.85):
         self.tracks = {}  # track_id -> track_data
         self.next_track_id = 1
         self.max_distance = max_distance
         self.min_confidence = min_confidence
         # Track global person IDs to ensure uniqueness across videos
         self.next_person_id = self._get_next_person_id()
+        self.use_recognition = use_recognition
+        self.recognition_threshold = recognition_threshold
+        self.recognition_model = None
+        self.recognized_persons = {}  # Cache for recognized persons
+        
+        # Try to load default recognition model
+        if self.use_recognition:
+            self._load_default_model()
+    
+    def _load_default_model(self):
+        """Load the default recognition model if available"""
+        try:
+            # Get default model from config
+            config_path = Path('models/person_recognition/config.json')
+            if config_path.exists():
+                with open(config_path) as f:
+                    config = json.load(f)
+                    default_model = config.get('default_model')
+                    
+                    if default_model:
+                        # Check if model exists
+                        model_dir = Path('models/person_recognition') / default_model
+                        if model_dir.exists():
+                            logger.info(f"Loading default recognition model: {default_model}")
+                            # Import inference class
+                            try:
+                                from hr_management.processing.person_recognition_inference_simple import PersonRecognitionInferenceSimple
+                                self.recognition_model = PersonRecognitionInferenceSimple(
+                                    default_model, 
+                                    confidence_threshold=self.recognition_threshold
+                                )
+                                logger.info(f"✅ Default model loaded successfully: {default_model}")
+                            except Exception as e:
+                                logger.error(f"Failed to load recognition model: {e}")
+                                self.recognition_model = None
+        except Exception as e:
+            logger.error(f"Error loading default model config: {e}")
+            self.recognition_model = None
     
     def _get_next_person_id(self):
         """Get the next available person ID by checking existing person folders"""
@@ -68,6 +107,40 @@ class PersonTracker:
         center2 = (box2[0] + box2[2]/2, box2[1] + box2[3]/2)
         return np.sqrt((center1[0] - center2[0])**2 + (center1[1] - center2[1])**2)
     
+    def _recognize_person(self, person_image, frame_number):
+        """Try to recognize a person using the default model"""
+        if not self.recognition_model:
+            return None
+            
+        try:
+            # Save image temporarily
+            import tempfile
+            temp_file = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+            temp_path = temp_file.name
+            temp_file.close()
+            
+            cv2.imwrite(temp_path, person_image)
+            
+            # Process with recognition model
+            result = self.recognition_model.process_cropped_image(temp_path)
+            
+            # Clean up
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+            
+            if result.get('persons') and len(result['persons']) > 0:
+                person = result['persons'][0]
+                if person['confidence'] >= self.recognition_threshold and person['person_id'] != 'unknown':
+                    logger.info(f"🎯 Frame {frame_number}: Recognized {person['person_id']} with confidence {person['confidence']:.2f}")
+                    return person['person_id'], person['confidence']
+            
+            return None
+        except Exception as e:
+            logger.error(f"Error during person recognition: {e}")
+            return None
+    
     def save_person_id_counter(self):
         """Save the updated person ID counter"""
         persons_dir = Path('processing/outputs/persons')
@@ -83,7 +156,7 @@ class PersonTracker:
         except Exception as e:
             logger.error(f"Error updating person ID counter: {e}")
     
-    def update_tracks(self, detections, frame_number):
+    def update_tracks(self, detections, frame_number, frame=None):
         """Update person tracks with new detections"""
         current_frame_tracks = []
         
@@ -117,16 +190,45 @@ class PersonTracker:
                 # Create new track
                 track_id = self.next_track_id
                 self.next_track_id += 1
-                # Use global person ID instead of track ID
-                person_id = self.next_person_id
-                self.next_person_id += 1
+                
+                # Try to recognize person if frame is available
+                recognized_person_id = None
+                recognition_confidence = 0.0
+                
+                if frame is not None and self.recognition_model:
+                    # Extract person region
+                    x, y, w, h = bbox
+                    x1 = max(0, int(x))
+                    y1 = max(0, int(y))
+                    x2 = min(frame.shape[1], int(x + w))
+                    y2 = min(frame.shape[0], int(y + h))
+                    
+                    person_img = frame[y1:y2, x1:x2]
+                    
+                    if person_img.size > 0:
+                        recognition_result = self._recognize_person(person_img, frame_number)
+                        if recognition_result:
+                            recognized_person_id, recognition_confidence = recognition_result
+                
+                # Use recognized person ID or create new one
+                if recognized_person_id:
+                    person_id_str = recognized_person_id
+                    logger.info(f"✅ Using recognized person ID: {person_id_str} (confidence: {recognition_confidence:.2f})")
+                else:
+                    # Use global person ID instead of track ID
+                    person_id = self.next_person_id
+                    self.next_person_id += 1
+                    person_id_str = f"PERSON-{person_id:04d}"
+                    logger.info(f"🆕 Creating new person ID: {person_id_str}")
                 
                 self.tracks[track_id] = {
                     'first_frame': frame_number,
                     'last_frame': frame_number,
                     'last_bbox': bbox,
                     'detections': [detection],
-                    'person_id': f"PERSON-{person_id:04d}"
+                    'person_id': person_id_str,
+                    'is_recognized': recognized_person_id is not None,
+                    'recognition_confidence': recognition_confidence
                 }
             
             detection['track_id'] = track_id
@@ -188,7 +290,7 @@ def detect_and_track_persons(video_path):
                         detections.append(detection)
         
         # Update tracks with current frame detections
-        tracked_detections = tracker.update_tracks(detections, frame_number)
+        tracked_detections = tracker.update_tracks(detections, frame_number, frame)
         
         # Store in all_tracks by frame
         all_tracks[frame_number] = tracked_detections
@@ -214,9 +316,21 @@ def detect_and_track_persons(video_path):
             person_tracks[person_id].append(detection)
     
     logger.info(f"Detected {len(person_tracks)} unique persons across {frame_number} frames")
-    return person_tracks
+    
+    # Include tracker info for recognized persons
+    for person_id in person_tracks:
+        for track_id, track_data in tracker.tracks.items():
+            if track_data['person_id'] == person_id:
+                if track_data.get('is_recognized', False):
+                    # Add recognition info to first detection
+                    if person_tracks[person_id]:
+                        person_tracks[person_id][0]['is_recognized'] = True
+                        person_tracks[person_id][0]['recognition_confidence'] = track_data.get('recognition_confidence', 0.0)
+                break
+    
+    return person_tracks, tracker
 
-def create_annotated_video(video_path, person_tracks, output_dir):
+def create_annotated_video(video_path, person_tracks, output_dir, tracker=None):
     """Create video with bounding boxes drawn directly on frames"""
     logger.info("Creating annotated video with bounding boxes")
     
@@ -271,8 +385,24 @@ def create_annotated_video(video_path, person_tracks, output_dir):
                 # Draw bounding box
                 cv2.rectangle(frame, (int(x), int(y)), (int(x + w), int(y + h)), color, 2)
                 
-                # Draw label
-                label = f"{person_id} ({confidence:.2f})"
+                # Check if this person was recognized
+                is_recognized = False
+                recognition_confidence = 0.0
+                if tracker:
+                    for track_id, track_data in tracker.tracks.items():
+                        if track_data['person_id'] == person_id:
+                            is_recognized = track_data.get('is_recognized', False)
+                            recognition_confidence = track_data.get('recognition_confidence', 0.0)
+                            break
+                
+                # Draw label with recognition indicator
+                if is_recognized:
+                    label = f"{person_id} [R] ({confidence:.2f})"
+                    # Use green for recognized persons
+                    color = (0, 255, 0)
+                else:
+                    label = f"{person_id} ({confidence:.2f})"
+                
                 label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
                 cv2.rectangle(frame, (int(x), int(y) - label_size[1] - 10), 
                              (int(x) + label_size[0], int(y)), color, -1)

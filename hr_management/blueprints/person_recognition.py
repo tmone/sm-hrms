@@ -16,6 +16,24 @@ import numpy as np
 
 person_recognition_bp = Blueprint('person_recognition', __name__, url_prefix='/person-recognition')
 
+
+def get_default_model():
+    """Get the default person recognition model"""
+    config_path = Path('models/person_recognition/config.json')
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                config = json.load(f)
+                default_model = config.get('default_model')
+                if default_model:
+                    # Check if model still exists
+                    model_dir = Path('models/person_recognition') / default_model
+                    if model_dir.exists():
+                        return default_model
+        except Exception as e:
+            print(f"Error reading default model config: {e}")
+    return None
+
 @person_recognition_bp.route('/')
 @login_required
 def index():
@@ -58,8 +76,15 @@ def index():
                         'is_default': dataset_dir.name == default_dataset
                     })
     
+    # Get default model
+    default_model = get_default_model()
+    
+    # Mark default model
+    for model in models:
+        model['is_default'] = model['name'] == default_model
+    
     return render_template('person_recognition/index.html', 
-                         models=models, datasets=datasets)
+                         models=models, datasets=datasets, default_model=default_model)
 
 
 @person_recognition_bp.route('/datasets/create', methods=['POST'])
@@ -465,6 +490,38 @@ def get_available_persons():
     return jsonify({
         'persons': sorted(persons, key=lambda x: x['person_id'])
     })
+
+
+@person_recognition_bp.route('/models/<model_name>/set-default', methods=['POST'])
+@login_required
+def set_default_model(model_name):
+    """Set a model as the default for person recognition"""
+    try:
+        # Path to the model directory
+        model_dir = Path('models/person_recognition') / model_name
+        
+        if not model_dir.exists():
+            return jsonify({'success': False, 'error': f'Model {model_name} not found'})
+        
+        # Update config file
+        config_path = Path('models/person_recognition/config.json')
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        config = {}
+        if config_path.exists():
+            with open(config_path) as f:
+                config = json.load(f)
+        
+        config['default_model'] = model_name
+        config['updated_at'] = datetime.now().isoformat()
+        
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        
+        return jsonify({'success': True, 'message': f'{model_name} set as default model'})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 
 @person_recognition_bp.route('/models/<model_name>/delete', methods=['POST'])

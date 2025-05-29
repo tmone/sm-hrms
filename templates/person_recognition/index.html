@@ -42,6 +42,18 @@
             </div>
         </div>
 
+        {% if default_model %}
+        <div class="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
+            <div class="flex items-center">
+                <i class="fas fa-info-circle text-purple-600 mr-2"></i>
+                <p class="text-sm text-purple-800">
+                    <strong>Default Model Active:</strong> {{ default_model }} will automatically recognize persons in new video uploads.
+                    Recognition threshold: 85%
+                </p>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Info Box -->
         <div class="bg-white rounded-lg shadow-md p-6 mb-6">
             <div class="flex items-start">
@@ -70,10 +82,17 @@
             </div>
             
             {% if datasets %}
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {% for dataset in datasets %}
-                <div class="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow">
-                    <h3 class="font-medium text-gray-800 mb-2">{{ dataset.name }}</h3>
+                <div class="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow {% if dataset.is_default %}ring-2 ring-purple-500{% endif %}">
+                    <h3 class="font-medium text-gray-800 mb-2">
+                        {{ dataset.name }}
+                        {% if dataset.is_default %}
+                        <span class="ml-2 text-purple-600" title="Default dataset for training">
+                            <i class="fas fa-star"></i>
+                        </span>
+                        {% endif %}
+                    </h3>
                     <div class="space-y-1 text-sm text-gray-600">
                         <div class="flex justify-between">
                             <span>Persons:</span>
@@ -92,22 +111,31 @@
                         <div class="flex justify-between items-center">
                             <span class="text-xs text-gray-500">
                                 {{ dataset.created_at[:10] }}
-                                {% if dataset.is_default %}
-                                <span class="ml-1 bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded">Default</span>
-                                {% endif %}
                             </span>
-                            <div class="flex gap-2">
+                            <div class="flex flex-wrap gap-2">
                                 <a href="{{ url_for('person_recognition.dataset_details', dataset_name=dataset.name) }}" 
-                                   class="text-blue-600 hover:text-blue-800 text-sm">View</a>
+                                   class="px-3 py-1 text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 rounded transition-colors">
+                                   <i class="fas fa-eye mr-1"></i>View
+                                </a>
                                 <button onclick="trainFromDataset('{{ dataset.name }}')" 
-                                        class="text-green-600 hover:text-green-800 text-sm">Train</button>
+                                        class="px-3 py-1 text-sm bg-green-50 text-green-600 hover:bg-green-100 rounded transition-colors">
+                                   <i class="fas fa-brain mr-1"></i>Train
+                                </button>
                                 <button onclick="setDefaultDataset('{{ dataset.name }}')" 
-                                        class="text-purple-600 hover:text-purple-800 text-sm" title="Set as default">
-                                        <i class="fas fa-star{% if not dataset.is_default %}-o{% endif %}"></i>
+                                        class="inline-flex items-center px-2 py-1 text-sm rounded
+                                               {% if dataset.is_default %}
+                                               bg-purple-100 text-purple-700 hover:bg-purple-200
+                                               {% else %}
+                                               bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700
+                                               {% endif %}" 
+                                        title="{% if dataset.is_default %}Default dataset{% else %}Set as default dataset{% endif %}">
+                                        <i class="fas fa-star{% if not dataset.is_default %} far fa-star{% endif %}"></i>
+                                        <span class="ml-1">{% if dataset.is_default %}Default{% else %}Set Default{% endif %}</span>
                                 </button>
                                 <button onclick="deleteDataset('{{ dataset.name }}')" 
-                                        class="text-red-600 hover:text-red-800 text-sm" title="Delete dataset">
-                                        <i class="fas fa-trash"></i>
+                                        class="px-3 py-1 text-sm bg-red-50 text-red-600 hover:bg-red-100 rounded transition-colors" 
+                                        title="Delete dataset">
+                                        <i class="fas fa-trash mr-1"></i>Delete
                                 </button>
                             </div>
                         </div>
@@ -135,11 +163,18 @@
             </div>
             
             {% if models %}
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {% for model in models %}
-                <div class="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow">
+                <div class="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow {% if model.is_default %}ring-2 ring-purple-500{% endif %}">
                     <div class="flex justify-between items-start mb-2">
-                        <h3 class="font-medium text-gray-800">{{ model.name }}</h3>
+                        <h3 class="font-medium text-gray-800">
+                            {{ model.name }}
+                            {% if model.is_default %}
+                            <span class="ml-2 text-purple-600" title="Default model for video processing">
+                                <i class="fas fa-star"></i>
+                            </span>
+                            {% endif %}
+                        </h3>
                         <span class="px-2 py-1 text-xs rounded-full 
                               {% if model.test_accuracy > 0.9 %}bg-green-100 text-green-800
                               {% elif model.test_accuracy > 0.8 %}bg-yellow-100 text-yellow-800
@@ -168,13 +203,30 @@
                     <div class="mt-3 pt-3 border-t border-gray-200">
                         <div class="flex justify-between items-center">
                             <span class="text-xs text-gray-500">{{ model.created_at[:10] }}</span>
-                            <div class="flex gap-2">
+                            <div class="flex flex-wrap gap-2">
                                 <a href="{{ url_for('person_recognition.model_details', model_name=model.name) }}" 
-                                   class="text-blue-600 hover:text-blue-800 text-sm">Details</a>
+                                   class="px-3 py-1 text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 rounded transition-colors">
+                                   <i class="fas fa-chart-line mr-1"></i>Details
+                                </a>
                                 <button onclick="showTestModal('{{ model.name }}')" 
-                                        class="text-green-600 hover:text-green-800 text-sm">Test</button>
+                                        class="px-3 py-1 text-sm bg-green-50 text-green-600 hover:bg-green-100 rounded transition-colors">
+                                   <i class="fas fa-play mr-1"></i>Test
+                                </button>
+                                <button onclick="setDefaultModel('{{ model.name }}')" 
+                                        class="inline-flex items-center px-2 py-1 text-sm rounded
+                                               {% if model.is_default %}
+                                               bg-purple-100 text-purple-700 hover:bg-purple-200
+                                               {% else %}
+                                               bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700
+                                               {% endif %}" 
+                                        title="{% if model.is_default %}Default model{% else %}Set as default model{% endif %}">
+                                        <i class="fas fa-star{% if not model.is_default %} far fa-star{% endif %}"></i>
+                                        <span class="ml-1">{% if model.is_default %}Default{% else %}Set Default{% endif %}</span>
+                                </button>
                                 <button onclick="confirmDeleteModel('{{ model.name }}')" 
-                                        class="text-red-600 hover:text-red-800 text-sm">Delete</button>
+                                        class="px-3 py-1 text-sm bg-red-50 text-red-600 hover:bg-red-100 rounded transition-colors">
+                                        <i class="fas fa-trash mr-1"></i>Delete
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -633,6 +685,28 @@ function setDefaultDataset(datasetName) {
     .catch(error => {
         console.error('Error:', error);
         alert('Failed to set default dataset');
+    });
+}
+
+// Model management functions
+function setDefaultModel(modelName) {
+    fetch('/person-recognition/models/' + encodeURIComponent(modelName) + '/set-default', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert('Failed to set default model: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to set default model');
     });
 }
 

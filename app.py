@@ -488,6 +488,10 @@ def create_app(config_name=None):
         from hr_management.blueprints.person_recognition import person_recognition_bp
         app.register_blueprint(person_recognition_bp, url_prefix='/person-recognition')
         
+        # Attendance blueprint
+        from hr_management.blueprints.attendance import attendance_bp
+        app.register_blueprint(attendance_bp, url_prefix='/attendance')
+        
         print("All blueprints registered successfully")
         
     except ImportError as e:

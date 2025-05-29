@@ -112,7 +112,9 @@
             </li>
             
             <li>
-                <a href="#" class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors">
+                <a href="{{ url_for('attendance.index') }}" 
+                   class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors
+                          {% if request.endpoint and request.endpoint.startswith('attendance') %}bg-blue-700{% endif %}">
                     <i class="fas fa-chart-bar mr-3"></i>
                     Attendance Reports
                 </a>

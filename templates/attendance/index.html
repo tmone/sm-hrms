@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance Reports{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">Attendance Reports</h1>
+        <p class="text-gray-600">Track employee attendance using OCR-extracted timestamps and locations from surveillance videos</p>
+    </div>
+
+    <!-- Quick Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <!-- Today's Attendance -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <p class="text-sm text-gray-600">Today's Attendance</p>
+                    <p class="text-2xl font-bold text-gray-800" id="todayCount">-</p>
+                </div>
+                <svg class="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </svg>
+            </div>
+        </div>
+
+        <!-- Active Locations -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <p class="text-sm text-gray-600">Active Locations</p>
+                    <p class="text-2xl font-bold text-gray-800" id="locationCount">-</p>
+                </div>
+                <svg class="w-12 h-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+            </div>
+        </div>
+
+        <!-- This Week -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <p class="text-sm text-gray-600">This Week</p>
+                    <p class="text-2xl font-bold text-gray-800" id="weekCount">-</p>
+                </div>
+                <svg class="w-12 h-12 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+            </div>
+        </div>
+
+        <!-- OCR Processed Videos -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <p class="text-sm text-gray-600">OCR Processed</p>
+                    <p class="text-2xl font-bold text-gray-800" id="ocrCount">-</p>
+                </div>
+                <svg class="w-12 h-12 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+        <h2 class="text-xl font-semibold mb-4">Quick Actions</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Daily Report -->
+            <a href="{{ url_for('attendance.daily_report') }}" class="block">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 hover:bg-blue-100 transition">
+                    <h3 class="font-semibold text-blue-800 mb-2">Daily Attendance Report</h3>
+                    <p class="text-sm text-blue-600">View today's attendance with location breakdown</p>
+                </div>
+            </a>
+
+            <!-- Export Report -->
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4 cursor-pointer hover:bg-green-100 transition" onclick="showExportModal()">
+                <h3 class="font-semibold text-green-800 mb-2">Export Attendance Data</h3>
+                <p class="text-sm text-green-600">Download attendance reports in Excel or CSV format</p>
+            </div>
+
+            <!-- Process Videos -->
+            <a href="{{ url_for('videos.index') }}" class="block">
+                <div class="bg-purple-50 border border-purple-200 rounded-lg p-4 hover:bg-purple-100 transition">
+                    <h3 class="font-semibold text-purple-800 mb-2">Process New Videos</h3>
+                    <p class="text-sm text-purple-600">Upload and process videos with OCR extraction</p>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- Recent Attendance -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-xl font-semibold mb-4">Recent Attendance Records</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead>
+                    <tr>
+                        <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Person ID</th>
+                        <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                        <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">First Seen</th>
+                        <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Seen</th>
+                        <th class="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200" id="recentAttendance">
+                    <tr>
+                        <td colspan="6" class="px-6 py-4 text-center text-gray-500">Loading attendance data...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Export Modal -->
+<div id="exportModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">Export Attendance Report</h3>
+        
+        <form id="exportForm" action="{{ url_for('attendance.export_report') }}" method="get">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
+                <input type="date" name="start_date" id="startDate" class="w-full px-3 py-2 border border-gray-300 rounded-md mb-2" required>
+                <input type="date" name="end_date" id="endDate" class="w-full px-3 py-2 border border-gray-300 rounded-md" required>
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Location (optional)</label>
+                <select name="location" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <option value="">All Locations</option>
+                </select>
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Format</label>
+                <select name="format" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <option value="excel">Excel (.xlsx)</option>
+                    <option value="csv">CSV (.csv)</option>
+                </select>
+            </div>
+            
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="hideExportModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Export</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Load attendance summary
+async function loadAttendanceSummary() {
+    try {
+        const response = await fetch('/attendance/summary?days=7');
+        const data = await response.json();
+        
+        // Update stats
+        document.getElementById('locationCount').textContent = Object.keys(data.locations).length;
+        document.getElementById('ocrCount').textContent = data.total_videos;
+        
+        // Calculate today's count
+        const today = new Date().toISOString().split('T')[0];
+        const todayStats = data.daily_stats[today];
+        document.getElementById('todayCount').textContent = todayStats ? todayStats.total_persons : 0;
+        
+        // Calculate week count
+        let weekTotal = 0;
+        for (const stats of Object.values(data.daily_stats)) {
+            weekTotal += stats.total_persons;
+        }
+        document.getElementById('weekCount').textContent = weekTotal;
+        
+        // Load recent attendance
+        loadRecentAttendance();
+    } catch (error) {
+        console.error('Error loading attendance summary:', error);
+    }
+}
+
+// Load recent attendance records
+async function loadRecentAttendance() {
+    try {
+        const response = await fetch('/attendance/daily?format=json');
+        const data = await response.json();
+        
+        const tbody = document.getElementById('recentAttendance');
+        
+        if (data.attendance_data && data.attendance_data.length > 0) {
+            tbody.innerHTML = data.attendance_data.slice(0, 10).map(record => `
+                <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${formatDate(record.date)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${record.person_id}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${record.location || 'Unknown'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formatTime(record.first_seen)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formatTime(record.last_seen)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${record.duration_minutes} min</td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">No attendance records found</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error loading recent attendance:', error);
+    }
+}
+
+// Format date
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString();
+}
+
+// Format time
+function formatTime(timeStr) {
+    if (!timeStr) return '-';
+    const date = new Date(timeStr);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// Export modal functions
+function showExportModal() {
+    document.getElementById('exportModal').classList.remove('hidden');
+    
+    // Set default dates
+    const today = new Date();
+    const lastWeek = new Date(today);
+    lastWeek.setDate(today.getDate() - 7);
+    
+    document.getElementById('startDate').value = lastWeek.toISOString().split('T')[0];
+    document.getElementById('endDate').value = today.toISOString().split('T')[0];
+}
+
+function hideExportModal() {
+    document.getElementById('exportModal').classList.add('hidden');
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', function() {
+    loadAttendanceSummary();
+    
+    // Refresh every 30 seconds
+    setInterval(loadAttendanceSummary, 30000);
+});
+</script>
+{% endblock %}

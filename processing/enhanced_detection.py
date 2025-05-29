@@ -10,6 +10,13 @@ import logging
 from typing import List, Dict, Tuple, Any
 from pathlib import Path
 
+# Import OCR extractor
+try:
+    from hr_management.processing.ocr_extractor import VideoOCRExtractor, OCR_AVAILABLE
+except ImportError:
+    OCR_AVAILABLE = False
+    VideoOCRExtractor = None
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -514,7 +521,7 @@ def extract_persons_data(video_path, person_tracks, persons_dir):
     
     cap.release()
 
-def process_video_with_enhanced_detection(video_path, output_base_dir="static/uploads"):
+def process_video_with_enhanced_detection(video_path, output_base_dir="static/uploads", extract_ocr=True):
     """Main function to process video with enhanced person detection and tracking"""
     logger.info(f"Starting enhanced video processing: {video_path}")
     
@@ -524,7 +531,21 @@ def process_video_with_enhanced_detection(video_path, output_base_dir="static/up
     # Keep persons in a separate directory for organization
     persons_dir = "processing/outputs/persons"
     
+    # Initialize OCR data
+    ocr_data = None
+    
     try:
+        # Step 0: Extract OCR data (timestamp and location)
+        if extract_ocr and OCR_AVAILABLE:
+            logger.info("Step 0: Extracting OCR data from video...")
+            try:
+                ocr_extractor = VideoOCRExtractor(ocr_engine='easyocr')
+                ocr_data = ocr_extractor.extract_video_info(video_path, sample_interval=300)  # Sample every 10 seconds
+                logger.info(f"OCR extraction complete. Location: {ocr_data.get('location')}, Date: {ocr_data.get('video_date')}")
+            except Exception as e:
+                logger.error(f"OCR extraction failed: {e}")
+                ocr_data = None
+        
         # Step 1: Detect and track persons across frames
         logger.info("Step 1: Detecting and tracking persons...")
         person_tracks = detect_and_track_persons(video_path)
@@ -549,6 +570,7 @@ def process_video_with_enhanced_detection(video_path, output_base_dir="static/up
             'persons_directory': persons_dir,
             'total_persons': len(person_tracks),
             'processing_completed': datetime.now().isoformat(),
+            'ocr_data': ocr_data,  # Add OCR extracted data
             'person_summary': {
                 person_id: {
                     'total_detections': len(detections),

@@ -47,9 +47,15 @@
 
         <!-- GPU Status Section -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6">
-            <h2 class="text-xl font-semibold text-gray-800 dark:text-white mb-4">
-                <i class="fas fa-tachometer-alt mr-2"></i>GPU Status
-            </h2>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800 dark:text-white">
+                    <i class="fas fa-tachometer-alt mr-2"></i>GPU Status
+                </h2>
+                <button onclick="runDiagnostics()" 
+                        class="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors">
+                    <i class="fas fa-stethoscope mr-2"></i>Run Diagnostics
+                </button>
+            </div>
             
             <div id="gpu-status-loading" class="text-center py-8">
                 <div class="inline-flex items-center">
@@ -62,6 +68,9 @@
             </div>
             
             <div id="gpu-status-content" style="display: none;"></div>
+            
+            <!-- Diagnostics Results -->
+            <div id="diagnostics-results" style="display: none;" class="mt-4"></div>
         </div>
 
         <!-- Video Codec Information -->
@@ -246,13 +255,27 @@ function installGPUSupport() {
     document.getElementById('install-progress').style.display = 'block';
     document.getElementById('install-results').innerHTML = '';
     
+    // Get CSRF token if it exists
+    const csrfToken = document.querySelector('meta[name="csrf-token"]');
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    
+    if (csrfToken) {
+        headers['X-CSRFToken'] = csrfToken.content;
+    }
+    
     fetch('/gpu/install', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
+        headers: headers,
+        credentials: 'same-origin'
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
         document.getElementById('install-progress').style.display = 'none';
         document.getElementById('install-gpu-btn').disabled = false;
@@ -263,8 +286,26 @@ function installGPUSupport() {
             resultsHtml += '<div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-4">';
             resultsHtml += '<div class="flex items-center">';
             resultsHtml += '<i class="fas fa-check-circle text-green-600 dark:text-green-400 mr-2"></i>';
-            resultsHtml += '<span class="text-green-800 dark:text-green-300">GPU support installed successfully!</span>';
+            resultsHtml += '<span class="text-green-800 dark:text-green-300">';
+            resultsHtml += data.message || 'GPU support installed successfully!';
+            resultsHtml += '</span>';
             resultsHtml += '</div></div>';
+            
+            // If restart is scheduled, show countdown
+            if (data.restart_scheduled) {
+                resultsHtml += '<div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">';
+                resultsHtml += '<div class="flex items-center">';
+                resultsHtml += '<i class="fas fa-sync-alt fa-spin text-blue-600 dark:text-blue-400 mr-2"></i>';
+                resultsHtml += '<span class="text-blue-800 dark:text-blue-300">';
+                resultsHtml += 'Application is restarting... Page will reload automatically.';
+                resultsHtml += '</span>';
+                resultsHtml += '</div></div>';
+                
+                // Auto reload page after 5 seconds
+                setTimeout(() => {
+                    window.location.reload();
+                }, 5000);
+            }
         } else {
             resultsHtml += '<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">';
             resultsHtml += '<div class="flex items-center">';
@@ -325,13 +366,27 @@ function testGPUPerformance() {
     document.getElementById('test-progress').style.display = 'block';
     document.getElementById('test-results').innerHTML = '';
     
+    // Get CSRF token if it exists
+    const csrfToken = document.querySelector('meta[name="csrf-token"]');
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    
+    if (csrfToken) {
+        headers['X-CSRFToken'] = csrfToken.content;
+    }
+    
     fetch('/gpu/test', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
+        headers: headers,
+        credentials: 'same-origin'
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
         document.getElementById('test-progress').style.display = 'none';
         document.getElementById('test-performance-btn').disabled = false;
@@ -470,6 +525,106 @@ function toggleAccordion(id) {
         content.classList.add('hidden');
         icon.classList.remove('rotate-180');
     }
+}
+
+// Run GPU diagnostics
+function runDiagnostics() {
+    const resultsDiv = document.getElementById('diagnostics-results');
+    resultsDiv.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin text-2xl text-blue-600"></i><p class="mt-2 text-gray-600">Running diagnostics...</p></div>';
+    resultsDiv.style.display = 'block';
+    
+    fetch('/gpu/diagnose')
+        .then(response => response.json())
+        .then(data => {
+            let html = '<div class="border-t border-gray-200 dark:border-gray-700 pt-4">';
+            html += '<h3 class="text-lg font-semibold text-gray-800 dark:text-white mb-4"><i class="fas fa-clipboard-check mr-2"></i>GPU Diagnostics Report</h3>';
+            
+            // Primary Issue
+            if (data.primary_issue) {
+                html += '<div class="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">';
+                html += '<h4 class="font-medium text-yellow-800 dark:text-yellow-300 mb-2">Primary Issue Detected:</h4>';
+                html += `<p class="text-yellow-700 dark:text-yellow-400">${data.primary_issue}</p>`;
+                html += `<p class="mt-2 font-medium text-yellow-800 dark:text-yellow-300">Solution: ${data.solution}</p>`;
+                html += '</div>';
+            }
+            
+            // System Checks
+            html += '<div class="mb-4">';
+            html += '<h4 class="font-medium text-gray-700 dark:text-gray-300 mb-2">System Checks:</h4>';
+            html += '<div class="space-y-2">';
+            
+            // NVIDIA GPU Check
+            const hasGpu = data.checks.has_nvidia_gpu;
+            html += '<div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900 rounded">';
+            html += '<span class="text-sm">NVIDIA GPU Detected</span>';
+            html += `<span class="text-sm font-medium ${hasGpu ? 'text-green-600' : 'text-red-600'}">${hasGpu ? 'Yes' : 'No'}</span>`;
+            html += '</div>';
+            
+            // PyTorch CUDA Build
+            if (data.checks.torch_version) {
+                const hasCudaBuild = data.checks.torch_cuda_build;
+                html += '<div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900 rounded">';
+                html += '<span class="text-sm">PyTorch with CUDA</span>';
+                html += `<span class="text-sm font-medium ${hasCudaBuild ? 'text-green-600' : 'text-red-600'}">${hasCudaBuild ? 'Yes' : 'No'}</span>`;
+                html += '</div>';
+                
+                // CUDA Available
+                const cudaAvailable = data.checks.torch_cuda_available;
+                html += '<div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900 rounded">';
+                html += '<span class="text-sm">CUDA Runtime Available</span>';
+                html += `<span class="text-sm font-medium ${cudaAvailable ? 'text-green-600' : 'text-red-600'}">${cudaAvailable ? 'Yes' : 'No'}</span>`;
+                html += '</div>';
+            }
+            
+            // CUDA Toolkit
+            if (data.checks.cuda_toolkit_installations) {
+                html += '<div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900 rounded">';
+                html += '<span class="text-sm">CUDA Toolkit</span>';
+                html += `<span class="text-sm font-medium text-green-600">${data.checks.cuda_toolkit_installations.join(', ')}</span>`;
+                html += '</div>';
+            }
+            
+            html += '</div></div>';
+            
+            // Issues and Recommendations
+            if (data.issues.length > 0) {
+                html += '<div class="mb-4">';
+                html += '<h4 class="font-medium text-red-700 dark:text-red-300 mb-2">Issues Found:</h4>';
+                html += '<ul class="list-disc list-inside space-y-1">';
+                data.issues.forEach(issue => {
+                    html += `<li class="text-sm text-red-600 dark:text-red-400">${issue}</li>`;
+                });
+                html += '</ul></div>';
+            }
+            
+            if (data.recommendations.length > 0) {
+                html += '<div class="mb-4">';
+                html += '<h4 class="font-medium text-blue-700 dark:text-blue-300 mb-2">Recommendations:</h4>';
+                html += '<ul class="list-disc list-inside space-y-1">';
+                data.recommendations.forEach(rec => {
+                    html += `<li class="text-sm text-blue-600 dark:text-blue-400">${rec}</li>`;
+                });
+                html += '</ul></div>';
+            }
+            
+            // Technical Details (Collapsible)
+            html += '<div class="mt-4">';
+            html += '<button onclick="toggleAccordion(\'tech-details\')" class="flex items-center justify-between w-full p-3 bg-gray-100 dark:bg-gray-900 rounded hover:bg-gray-200 dark:hover:bg-gray-800">';
+            html += '<span class="font-medium text-gray-700 dark:text-gray-300">Technical Details</span>';
+            html += '<i class="fas fa-chevron-down text-gray-400" id="tech-details-icon"></i>';
+            html += '</button>';
+            html += '<div id="tech-details" class="hidden mt-2 p-3 bg-gray-50 dark:bg-gray-900 rounded">';
+            html += '<pre class="text-xs overflow-x-auto">' + JSON.stringify(data.checks, null, 2) + '</pre>';
+            html += '</div></div>';
+            
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+        })
+        .catch(error => {
+            resultsDiv.innerHTML = '<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">' +
+                '<i class="fas fa-times-circle text-red-600 dark:text-red-400 mr-2"></i>' +
+                '<span class="text-red-800 dark:text-red-300">Error running diagnostics: ' + error + '</span></div>';
+        });
 }
 </script>
 {% endblock %}

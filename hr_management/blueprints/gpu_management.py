@@ -93,7 +93,135 @@ def index():
 @login_required
 def status():
     """Get current GPU status"""
-    return jsonify(check_gpu_status())
+    status_data = check_gpu_status()
+    
+    # Add NVIDIA driver info
+    try:
+        if platform.system() == 'Windows':
+            result = subprocess.run(['nvidia-smi', '--query-gpu=driver_version', '--format=csv,noheader'], 
+                                  capture_output=True, text=True, shell=True)
+        else:
+            result = subprocess.run(['nvidia-smi'], capture_output=True, text=True)
+            
+        if result.returncode == 0:
+            status_data['nvidia_driver'] = result.stdout.strip()
+        else:
+            status_data['nvidia_driver'] = 'Not found'
+    except:
+        status_data['nvidia_driver'] = 'Not found'
+    
+    return jsonify(status_data)
+
+@gpu_management_bp.route('/diagnose')
+@login_required
+def diagnose_gpu():
+    """Run comprehensive GPU diagnostics"""
+    diagnostics = {
+        'timestamp': datetime.now().isoformat(),
+        'platform': platform.system(),
+        'python_version': sys.version,
+        'issues': [],
+        'recommendations': [],
+        'checks': {}
+    }
+    
+    # 1. Check if NVIDIA GPU exists
+    try:
+        nvidia_result = subprocess.run(['nvidia-smi', '-L'], capture_output=True, text=True, shell=True)
+        if nvidia_result.returncode == 0:
+            diagnostics['checks']['nvidia_gpus'] = nvidia_result.stdout.strip().split('\n')
+            diagnostics['checks']['has_nvidia_gpu'] = True
+        else:
+            diagnostics['checks']['nvidia_gpus'] = []
+            diagnostics['checks']['has_nvidia_gpu'] = False
+            diagnostics['issues'].append("No NVIDIA GPU detected by nvidia-smi")
+            diagnostics['recommendations'].append("Ensure NVIDIA drivers are installed")
+    except Exception as e:
+        diagnostics['checks']['nvidia_gpus'] = []
+        diagnostics['checks']['has_nvidia_gpu'] = False
+        diagnostics['issues'].append(f"nvidia-smi not found: {str(e)}")
+        diagnostics['recommendations'].append("Install NVIDIA drivers from https://www.nvidia.com/drivers")
+    
+    # 2. Check PyTorch installation
+    try:
+        import torch
+        diagnostics['checks']['torch_version'] = torch.__version__
+        diagnostics['checks']['torch_cuda_available'] = torch.cuda.is_available()
+        diagnostics['checks']['torch_cuda_version'] = torch.version.cuda if hasattr(torch.version, 'cuda') else None
+        
+        # Check if PyTorch was built with CUDA
+        if 'cu' in torch.__version__ or '+cu' in torch.__version__:
+            diagnostics['checks']['torch_cuda_build'] = True
+            if '+' in torch.__version__:
+                cuda_version = torch.__version__.split('+')[1]
+                diagnostics['checks']['torch_cuda_build_version'] = cuda_version
+        else:
+            diagnostics['checks']['torch_cuda_build'] = False
+            diagnostics['issues'].append("PyTorch installed without CUDA support")
+            diagnostics['recommendations'].append("Run 'Install GPU Support' to reinstall PyTorch with CUDA")
+            
+        # Check CUDA runtime
+        if torch.cuda.is_available():
+            diagnostics['checks']['cuda_device_count'] = torch.cuda.device_count()
+            diagnostics['checks']['cuda_current_device'] = torch.cuda.current_device()
+            diagnostics['checks']['cuda_device_name'] = torch.cuda.get_device_name(0)
+        else:
+            # Detailed CUDA unavailability check
+            diagnostics['checks']['cuda_is_available'] = False
+            diagnostics['issues'].append("CUDA not available to PyTorch")
+            
+            # Check environment variables
+            cuda_path = os.environ.get('CUDA_PATH')
+            cuda_home = os.environ.get('CUDA_HOME')
+            diagnostics['checks']['cuda_path_env'] = cuda_path
+            diagnostics['checks']['cuda_home_env'] = cuda_home
+            
+            if not cuda_path and not cuda_home:
+                diagnostics['issues'].append("CUDA_PATH/CUDA_HOME environment variables not set")
+                diagnostics['recommendations'].append("Install CUDA Toolkit or set CUDA environment variables")
+                
+    except ImportError:
+        diagnostics['checks']['torch_version'] = 'Not installed'
+        diagnostics['issues'].append("PyTorch not installed")
+        diagnostics['recommendations'].append("Run 'Install GPU Support' to install PyTorch")
+    except Exception as e:
+        diagnostics['checks']['torch_error'] = str(e)
+        diagnostics['issues'].append(f"Error checking PyTorch: {str(e)}")
+    
+    # 3. Check CUDA Toolkit installation
+    if platform.system() == 'Windows':
+        # Windows CUDA paths
+        cuda_paths = [
+            r'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA',
+            r'C:\Program Files\NVIDIA Corporation\CUDA'
+        ]
+        found_cuda = False
+        for base_path in cuda_paths:
+            if os.path.exists(base_path):
+                cuda_versions = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d)) and 'v' in d]
+                if cuda_versions:
+                    diagnostics['checks']['cuda_toolkit_installations'] = cuda_versions
+                    diagnostics['checks']['cuda_toolkit_path'] = base_path
+                    found_cuda = True
+                    break
+        
+        if not found_cuda:
+            diagnostics['issues'].append("CUDA Toolkit not found in standard Windows locations")
+            diagnostics['recommendations'].append("Download and install CUDA Toolkit from NVIDIA website")
+    
+    # 4. Final diagnosis
+    if diagnostics['checks'].get('has_nvidia_gpu') and not diagnostics['checks'].get('torch_cuda_available'):
+        if not diagnostics['checks'].get('torch_cuda_build'):
+            diagnostics['primary_issue'] = "PyTorch installed without CUDA support"
+            diagnostics['solution'] = "Click 'Install GPU Support' button to reinstall PyTorch with CUDA"
+        else:
+            diagnostics['primary_issue'] = "CUDA runtime not accessible despite CUDA-enabled PyTorch"
+            diagnostics['solution'] = "Install CUDA Toolkit and ensure environment variables are set"
+    elif not diagnostics['checks'].get('has_nvidia_gpu'):
+        diagnostics['primary_issue'] = "No NVIDIA GPU detected"
+        diagnostics['solution'] = "CUDA requires an NVIDIA GPU. Use CPU processing instead."
+    
+    return jsonify(diagnostics)
 
 @gpu_management_bp.route('/install', methods=['POST'])
 @login_required
@@ -172,11 +300,37 @@ def install_gpu_support():
         # Check new status
         new_status = check_gpu_status()
         
+        # Schedule restart if installation was successful
+        restart_scheduled = False
+        if all(r['success'] for r in results):
+            # Import here to avoid circular imports
+            import threading
+            import time
+            
+            def restart_app():
+                time.sleep(2)  # Give time for response to be sent
+                try:
+                    if platform.system() == 'Windows':
+                        # Windows restart
+                        subprocess.Popen([sys.executable] + sys.argv)
+                    else:
+                        # Linux/Mac restart
+                        os.execv(sys.executable, [sys.executable] + sys.argv)
+                except Exception as e:
+                    print(f"Error restarting application: {e}")
+            
+            # Start restart in background thread
+            restart_thread = threading.Thread(target=restart_app)
+            restart_thread.daemon = True
+            restart_thread.start()
+            restart_scheduled = True
+        
         return jsonify({
             'success': all(r['success'] for r in results),
             'results': results,
             'new_status': new_status,
-            'message': 'GPU support installation completed. Please restart the application for changes to take effect.'
+            'restart_scheduled': restart_scheduled,
+            'message': 'GPU support installation completed. Application will restart automatically...' if restart_scheduled else 'GPU support installation completed. Please restart the application for changes to take effect.'
         })
         
     except Exception as e:

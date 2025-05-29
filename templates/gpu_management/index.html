@@ -1,83 +1,148 @@
 {% extends "base.html" %}
 
-{% block title %}GPU Management - HR Management System{% endblock %}
+{% block title %}GPU Management - {{ super() }}{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+.status-card {
+    transition: all 0.3s ease;
+}
+
+.status-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.accordion-button {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0.75rem 1rem;
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.accordion-button:focus {
+    box-shadow: none;
+}
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-md-12">
-            <h1 class="h2 mb-4">GPU Management & Configuration</h1>
+<div class="container mx-auto px-4">
+    <div class="max-w-7xl mx-auto">
+        <!-- Page Header -->
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 dark:text-white mb-2">
+                <i class="fas fa-microchip mr-2"></i>GPU Management
+            </h1>
+            <p class="text-gray-600 dark:text-gray-400">
+                Configure and monitor GPU acceleration for video processing
+            </p>
+        </div>
+
+        <!-- GPU Status Section -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 dark:text-white mb-4">
+                <i class="fas fa-tachometer-alt mr-2"></i>GPU Status
+            </h2>
             
-            <!-- GPU Status Card -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0">GPU Status</h5>
-                </div>
-                <div class="card-body">
-                    <div id="gpu-status-loading" class="text-center py-3">
-                        <div class="spinner-border" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="mt-2">Checking GPU status...</p>
-                    </div>
-                    <div id="gpu-status-content" style="display: none;"></div>
+            <div id="gpu-status-loading" class="text-center py-8">
+                <div class="inline-flex items-center">
+                    <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="ml-3 text-gray-600 dark:text-gray-400">Checking GPU status...</span>
                 </div>
             </div>
             
-            <!-- Video Codec Information -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0">Video Codec Support</h5>
-                </div>
-                <div class="card-body">
-                    <button id="check-codecs-btn" class="btn btn-info mb-3">Check Available Codecs</button>
-                    <div id="codec-info" style="display: none;"></div>
-                </div>
+            <div id="gpu-status-content" style="display: none;"></div>
+        </div>
+
+        <!-- Video Codec Information -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800 dark:text-white">
+                    <i class="fas fa-film mr-2"></i>Video Codec Support
+                </h2>
+                <button id="check-codecs-btn" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-search mr-2"></i>Check Codecs
+                </button>
             </div>
             
-            <!-- GPU Setup -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0">GPU Setup & Installation</h5>
-                </div>
-                <div class="card-body">
-                    <p>Install GPU acceleration libraries for faster video processing.</p>
-                    <button id="install-gpu-btn" class="btn btn-primary" onclick="installGPUSupport()">
-                        Install GPU Support
-                    </button>
-                    <div id="install-progress" class="mt-3" style="display: none;">
-                        <div class="alert alert-info">
-                            <div class="spinner-border spinner-border-sm me-2" role="status">
-                                <span class="visually-hidden">Installing...</span>
-                            </div>
+            <div id="codec-info" style="display: none;"></div>
+        </div>
+
+        <!-- GPU Setup -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 dark:text-white mb-4">
+                <i class="fas fa-download mr-2"></i>GPU Setup & Installation
+            </h2>
+            
+            <p class="text-gray-600 dark:text-gray-400 mb-4">
+                Install GPU acceleration libraries for faster video processing.
+            </p>
+            
+            <button id="install-gpu-btn" 
+                    class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                    onclick="installGPUSupport()">
+                <i class="fas fa-cog mr-2"></i>Install GPU Support
+            </button>
+            
+            <div id="install-progress" class="mt-4" style="display: none;">
+                <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div class="flex items-center">
+                        <svg class="animate-spin h-5 w-5 text-blue-600 dark:text-blue-400 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="text-blue-800 dark:text-blue-300">
                             Installing GPU libraries... This may take several minutes.
-                        </div>
+                        </span>
                     </div>
-                    <div id="install-results" class="mt-3"></div>
                 </div>
             </div>
             
-            <!-- Performance Testing -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0">Performance Testing</h5>
-                </div>
-                <div class="card-body">
-                    <p>Run performance tests to compare CPU vs GPU processing speed.</p>
-                    <button id="test-performance-btn" class="btn btn-success" onclick="testGPUPerformance()">
-                        Run Performance Tests
-                    </button>
-                    <div id="test-progress" class="mt-3" style="display: none;">
-                        <div class="alert alert-info">
-                            <div class="spinner-border spinner-border-sm me-2" role="status">
-                                <span class="visually-hidden">Testing...</span>
-                            </div>
+            <div id="install-results" class="mt-4"></div>
+        </div>
+
+        <!-- Performance Testing -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
+            <h2 class="text-xl font-semibold text-gray-800 dark:text-white mb-4">
+                <i class="fas fa-chart-line mr-2"></i>Performance Testing
+            </h2>
+            
+            <p class="text-gray-600 dark:text-gray-400 mb-4">
+                Run performance tests to compare CPU vs GPU processing speed.
+            </p>
+            
+            <button id="test-performance-btn" 
+                    class="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+                    onclick="testGPUPerformance()">
+                <i class="fas fa-play mr-2"></i>Run Performance Tests
+            </button>
+            
+            <div id="test-progress" class="mt-4" style="display: none;">
+                <div class="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                    <div class="flex items-center">
+                        <svg class="animate-spin h-5 w-5 text-purple-600 dark:text-purple-400 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="text-purple-800 dark:text-purple-300">
                             Running performance tests...
-                        </div>
+                        </span>
                     </div>
-                    <div id="test-results" class="mt-3"></div>
                 </div>
             </div>
+            
+            <div id="test-results" class="mt-4"></div>
         </div>
     </div>
 </div>
@@ -95,56 +160,71 @@ function checkGPUStatus() {
             document.getElementById('gpu-status-loading').style.display = 'none';
             document.getElementById('gpu-status-content').style.display = 'block';
             
-            let statusHtml = '<div class="row">';
+            let statusHtml = '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">';
             
             // System Information
-            statusHtml += '<div class="col-md-6"><h6>System Information</h6><ul class="list-unstyled">';
-            statusHtml += `<li><strong>Platform:</strong> ${data.platform}</li>`;
-            statusHtml += `<li><strong>Python:</strong> ${data.python_version.split(' ')[0]}</li>`;
-            statusHtml += `<li><strong>OpenCV:</strong> ${data.opencv_version}</li>`;
+            statusHtml += '<div>';
+            statusHtml += '<h3 class="text-lg font-medium text-gray-800 dark:text-white mb-3">System Information</h3>';
+            statusHtml += '<div class="space-y-2">';
+            statusHtml += `<div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Platform:</span><span class="font-medium text-gray-800 dark:text-white">${data.platform}</span></div>`;
+            statusHtml += `<div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Python:</span><span class="font-medium text-gray-800 dark:text-white">${data.python_version.split(' ')[0]}</span></div>`;
+            statusHtml += `<div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">OpenCV:</span><span class="font-medium text-gray-800 dark:text-white">${data.opencv_version}</span></div>`;
             if (data.torch_version) {
-                statusHtml += `<li><strong>PyTorch:</strong> ${data.torch_version}</li>`;
+                statusHtml += `<div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">PyTorch:</span><span class="font-medium text-gray-800 dark:text-white">${data.torch_version}</span></div>`;
             }
-            statusHtml += '</ul></div>';
+            statusHtml += '</div></div>';
             
             // GPU Information
-            statusHtml += '<div class="col-md-6"><h6>GPU Information</h6>';
+            statusHtml += '<div>';
+            statusHtml += '<h3 class="text-lg font-medium text-gray-800 dark:text-white mb-3">GPU Information</h3>';
             
             if (data.cuda_available) {
-                statusHtml += '<div class="alert alert-success">';
-                statusHtml += '<i class="fas fa-check-circle"></i> CUDA is available!';
-                statusHtml += `<br>CUDA Version: ${data.cuda_version}`;
-                statusHtml += '</div>';
+                statusHtml += '<div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-4">';
+                statusHtml += '<div class="flex items-start">';
+                statusHtml += '<i class="fas fa-check-circle text-green-600 dark:text-green-400 mt-0.5 mr-2"></i>';
+                statusHtml += '<div>';
+                statusHtml += '<p class="font-medium text-green-800 dark:text-green-300">CUDA is available!</p>';
+                statusHtml += `<p class="text-sm text-green-700 dark:text-green-400 mt-1">CUDA Version: ${data.cuda_version}</p>`;
+                statusHtml += '</div></div></div>';
                 
-                if (data.gpu_devices.length > 0) {
-                    statusHtml += '<h6>GPU Devices:</h6><ul>';
-                    data.gpu_devices.forEach(device => {
-                        statusHtml += `<li><strong>${device.name}</strong>`;
-                        statusHtml += `<ul>`;
-                        statusHtml += `<li>Memory: ${device.memory_total}</li>`;
-                        statusHtml += `<li>Compute Capability: ${device.compute_capability}</li>`;
-                        statusHtml += `</ul></li>`;
+                if (data.gpu_devices && data.gpu_devices.length > 0) {
+                    statusHtml += '<div class="space-y-3">';
+                    data.gpu_devices.forEach((device, index) => {
+                        statusHtml += '<div class="border border-gray-200 dark:border-gray-700 rounded-lg p-3">';
+                        statusHtml += `<h4 class="font-medium text-gray-800 dark:text-white mb-2">${device.name}</h4>`;
+                        statusHtml += '<div class="text-sm space-y-1">';
+                        statusHtml += `<div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Memory:</span><span class="text-gray-800 dark:text-white">${device.memory_total}</span></div>`;
+                        statusHtml += `<div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Compute Capability:</span><span class="text-gray-800 dark:text-white">${device.compute_capability}</span></div>`;
+                        statusHtml += '</div></div>';
                     });
-                    statusHtml += '</ul>';
+                    statusHtml += '</div>';
                 }
             } else {
-                statusHtml += '<div class="alert alert-warning">';
-                statusHtml += '<i class="fas fa-exclamation-triangle"></i> CUDA is not available';
-                statusHtml += '<br>GPU acceleration is disabled. Install GPU support below.';
-                statusHtml += '</div>';
+                statusHtml += '<div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">';
+                statusHtml += '<div class="flex items-start">';
+                statusHtml += '<i class="fas fa-exclamation-triangle text-yellow-600 dark:text-yellow-400 mt-0.5 mr-2"></i>';
+                statusHtml += '<div>';
+                statusHtml += '<p class="font-medium text-yellow-800 dark:text-yellow-300">CUDA is not available</p>';
+                statusHtml += '<p class="text-sm text-yellow-700 dark:text-yellow-400 mt-1">GPU acceleration is disabled. Install GPU support below.</p>';
+                statusHtml += '</div></div></div>';
             }
             
             if (data.nvidia_driver && data.nvidia_driver !== 'Not found') {
-                statusHtml += `<p><strong>NVIDIA Driver:</strong><br>${data.nvidia_driver}</p>`;
+                statusHtml += '<div class="mt-4">';
+                statusHtml += '<h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">NVIDIA Driver:</h4>';
+                statusHtml += `<pre class="bg-gray-100 dark:bg-gray-900 p-3 rounded text-sm overflow-x-auto">${data.nvidia_driver}</pre>`;
+                statusHtml += '</div>';
             }
             
             statusHtml += '</div></div>';
             
             // OpenCV CUDA Support
             if (data.opencv_cuda) {
-                statusHtml += '<div class="alert alert-info mt-3">';
-                statusHtml += '<i class="fas fa-info-circle"></i> OpenCV is compiled with CUDA support';
-                statusHtml += '</div>';
+                statusHtml += '<div class="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">';
+                statusHtml += '<div class="flex items-center">';
+                statusHtml += '<i class="fas fa-info-circle text-blue-600 dark:text-blue-400 mr-2"></i>';
+                statusHtml += '<span class="text-blue-800 dark:text-blue-300">OpenCV is compiled with CUDA support</span>';
+                statusHtml += '</div></div>';
             }
             
             document.getElementById('gpu-status-content').innerHTML = statusHtml;
@@ -153,7 +233,11 @@ function checkGPUStatus() {
             document.getElementById('gpu-status-loading').style.display = 'none';
             document.getElementById('gpu-status-content').style.display = 'block';
             document.getElementById('gpu-status-content').innerHTML = 
-                '<div class="alert alert-danger">Error checking GPU status: ' + error + '</div>';
+                '<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">' +
+                '<div class="flex items-center">' +
+                '<i class="fas fa-times-circle text-red-600 dark:text-red-400 mr-2"></i>' +
+                '<span class="text-red-800 dark:text-red-300">Error checking GPU status: ' + error + '</span>' +
+                '</div></div>';
         });
 }
 
@@ -176,36 +260,40 @@ function installGPUSupport() {
         let resultsHtml = '';
         
         if (data.success) {
-            resultsHtml += '<div class="alert alert-success">';
-            resultsHtml += '<i class="fas fa-check-circle"></i> GPU support installed successfully!';
-            resultsHtml += '</div>';
+            resultsHtml += '<div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-4">';
+            resultsHtml += '<div class="flex items-center">';
+            resultsHtml += '<i class="fas fa-check-circle text-green-600 dark:text-green-400 mr-2"></i>';
+            resultsHtml += '<span class="text-green-800 dark:text-green-300">GPU support installed successfully!</span>';
+            resultsHtml += '</div></div>';
         } else {
-            resultsHtml += '<div class="alert alert-danger">';
-            resultsHtml += '<i class="fas fa-times-circle"></i> Some installations failed';
-            resultsHtml += '</div>';
+            resultsHtml += '<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">';
+            resultsHtml += '<div class="flex items-center">';
+            resultsHtml += '<i class="fas fa-times-circle text-red-600 dark:text-red-400 mr-2"></i>';
+            resultsHtml += '<span class="text-red-800 dark:text-red-300">Some installations failed</span>';
+            resultsHtml += '</div></div>';
         }
         
         if (data.results) {
-            resultsHtml += '<h6>Installation Details:</h6>';
-            resultsHtml += '<div class="accordion" id="installAccordion">';
+            resultsHtml += '<h3 class="text-lg font-medium text-gray-800 dark:text-white mb-3">Installation Details:</h3>';
+            resultsHtml += '<div class="space-y-2">';
             
             data.results.forEach((result, index) => {
-                const statusClass = result.success ? 'success' : 'danger';
+                const statusClass = result.success ? 'green' : 'red';
                 const statusIcon = result.success ? 'check' : 'times';
                 
                 resultsHtml += `
-                    <div class="accordion-item">
-                        <h2 class="accordion-header" id="heading${index}">
-                            <button class="accordion-button collapsed" type="button" 
-                                    data-bs-toggle="collapse" data-bs-target="#collapse${index}">
-                                <i class="fas fa-${statusIcon}-circle text-${statusClass} me-2"></i>
-                                ${result.command.split(' ').slice(-1)[0]}
-                            </button>
-                        </h2>
-                        <div id="collapse${index}" class="accordion-collapse collapse" 
-                             data-bs-parent="#installAccordion">
-                            <div class="accordion-body">
-                                <pre class="bg-light p-2"><code>${result.output}</code></pre>
+                    <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                        <button class="w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
+                                onclick="toggleAccordion('install-${index}')">
+                            <div class="flex items-center">
+                                <i class="fas fa-${statusIcon}-circle text-${statusClass}-600 dark:text-${statusClass}-400 mr-3"></i>
+                                <span class="font-medium text-gray-800 dark:text-white">${result.command.split(' ').slice(-1)[0]}</span>
+                            </div>
+                            <i class="fas fa-chevron-down text-gray-400 transition-transform" id="install-${index}-icon"></i>
+                        </button>
+                        <div id="install-${index}" class="hidden">
+                            <div class="p-4 bg-gray-100 dark:bg-gray-900">
+                                <pre class="text-sm overflow-x-auto whitespace-pre-wrap">${result.output}</pre>
                             </div>
                         </div>
                     </div>
@@ -224,7 +312,11 @@ function installGPUSupport() {
         document.getElementById('install-progress').style.display = 'none';
         document.getElementById('install-gpu-btn').disabled = false;
         document.getElementById('install-results').innerHTML = 
-            '<div class="alert alert-danger">Error installing GPU support: ' + error + '</div>';
+            '<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">' +
+            '<div class="flex items-center">' +
+            '<i class="fas fa-times-circle text-red-600 dark:text-red-400 mr-2"></i>' +
+            '<span class="text-red-800 dark:text-red-300">Error installing GPU support: ' + error + '</span>' +
+            '</div></div>';
     });
 }
 
@@ -247,38 +339,50 @@ function testGPUPerformance() {
         let resultsHtml = '';
         
         if (data.success) {
-            resultsHtml += '<div class="alert alert-success mb-3">';
-            resultsHtml += '<i class="fas fa-check-circle"></i> Performance tests completed!';
-            resultsHtml += '</div>';
+            resultsHtml += '<div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-4">';
+            resultsHtml += '<div class="flex items-center">';
+            resultsHtml += '<i class="fas fa-check-circle text-green-600 dark:text-green-400 mr-2"></i>';
+            resultsHtml += '<span class="text-green-800 dark:text-green-300">Performance tests completed!</span>';
+            resultsHtml += '</div></div>';
             
-            resultsHtml += '<table class="table table-striped">';
-            resultsHtml += '<thead><tr><th>Test</th><th>CPU Time</th><th>GPU Time</th><th>Speedup</th></tr></thead>';
-            resultsHtml += '<tbody>';
+            resultsHtml += '<div class="overflow-x-auto">';
+            resultsHtml += '<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">';
+            resultsHtml += '<thead class="bg-gray-50 dark:bg-gray-800">';
+            resultsHtml += '<tr>';
+            resultsHtml += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Test</th>';
+            resultsHtml += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">CPU Time</th>';
+            resultsHtml += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">GPU Time</th>';
+            resultsHtml += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Speedup</th>';
+            resultsHtml += '</tr>';
+            resultsHtml += '</thead>';
+            resultsHtml += '<tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">';
             
             data.tests.forEach(test => {
                 if (test.error) {
-                    resultsHtml += `<tr>`;
-                    resultsHtml += `<td>${test.name}</td>`;
-                    resultsHtml += `<td colspan="3" class="text-danger">Error: ${test.error}</td>`;
-                    resultsHtml += `</tr>`;
+                    resultsHtml += '<tr>';
+                    resultsHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">${test.name}</td>`;
+                    resultsHtml += `<td colspan="3" class="px-6 py-4 whitespace-nowrap text-sm text-red-600 dark:text-red-400">Error: ${test.error}</td>`;
+                    resultsHtml += '</tr>';
                 } else {
                     const speedupClass = test.speedup && test.speedup !== 'N/A' && parseFloat(test.speedup) > 1 
-                        ? 'text-success' : '';
-                    resultsHtml += `<tr>`;
-                    resultsHtml += `<td>${test.name}</td>`;
-                    resultsHtml += `<td>${test.cpu_time}</td>`;
-                    resultsHtml += `<td>${test.gpu_time}</td>`;
-                    resultsHtml += `<td class="${speedupClass}"><strong>${test.speedup}</strong></td>`;
-                    resultsHtml += `</tr>`;
+                        ? 'text-green-600 dark:text-green-400' : 'text-gray-900 dark:text-white';
+                    resultsHtml += '<tr>';
+                    resultsHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">${test.name}</td>`;
+                    resultsHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">${test.cpu_time}</td>`;
+                    resultsHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">${test.gpu_time}</td>`;
+                    resultsHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm font-medium ${speedupClass}">${test.speedup}</td>`;
+                    resultsHtml += '</tr>';
                 }
             });
             
-            resultsHtml += '</tbody></table>';
-            resultsHtml += `<p class="text-muted">Test completed at: ${new Date(data.timestamp).toLocaleString()}</p>`;
+            resultsHtml += '</tbody></table></div>';
+            resultsHtml += `<p class="text-sm text-gray-500 dark:text-gray-400 mt-4">Test completed at: ${new Date(data.timestamp).toLocaleString()}</p>`;
         } else {
-            resultsHtml += '<div class="alert alert-danger">';
-            resultsHtml += '<i class="fas fa-times-circle"></i> Error running performance tests: ' + data.error;
-            resultsHtml += '</div>';
+            resultsHtml += '<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">';
+            resultsHtml += '<div class="flex items-center">';
+            resultsHtml += '<i class="fas fa-times-circle text-red-600 dark:text-red-400 mr-2"></i>';
+            resultsHtml += '<span class="text-red-800 dark:text-red-300">Error running performance tests: ' + data.error + '</span>';
+            resultsHtml += '</div></div>';
         }
         
         document.getElementById('test-results').innerHTML = resultsHtml;
@@ -287,7 +391,11 @@ function testGPUPerformance() {
         document.getElementById('test-progress').style.display = 'none';
         document.getElementById('test-performance-btn').disabled = false;
         document.getElementById('test-results').innerHTML = 
-            '<div class="alert alert-danger">Error running tests: ' + error + '</div>';
+            '<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">' +
+            '<div class="flex items-center">' +
+            '<i class="fas fa-times-circle text-red-600 dark:text-red-400 mr-2"></i>' +
+            '<span class="text-red-800 dark:text-red-300">Error running tests: ' + error + '</span>' +
+            '</div></div>';
     });
 }
 
@@ -298,31 +406,40 @@ document.getElementById('check-codecs-btn').addEventListener('click', function()
     fetch('/gpu/codec-info')
         .then(response => response.json())
         .then(data => {
-            let codecHtml = '<h6>Available Video Codecs:</h6>';
-            codecHtml += '<table class="table table-sm">';
-            codecHtml += '<thead><tr><th>Codec</th><th>Name</th><th>Status</th></tr></thead>';
-            codecHtml += '<tbody>';
+            let codecHtml = '<h3 class="text-lg font-medium text-gray-800 dark:text-white mb-3">Available Video Codecs:</h3>';
+            codecHtml += '<div class="overflow-x-auto">';
+            codecHtml += '<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">';
+            codecHtml += '<thead class="bg-gray-50 dark:bg-gray-800">';
+            codecHtml += '<tr>';
+            codecHtml += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Codec</th>';
+            codecHtml += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>';
+            codecHtml += '<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>';
+            codecHtml += '</tr>';
+            codecHtml += '</thead>';
+            codecHtml += '<tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">';
             
             data.codecs.forEach(codec => {
-                const statusClass = codec.available ? 'success' : 'danger';
+                const statusClass = codec.available ? 'green' : 'red';
                 const statusIcon = codec.available ? 'check' : 'times';
                 const statusText = codec.available ? 'Available' : 'Not Available';
                 
-                codecHtml += `<tr>`;
-                codecHtml += `<td><code>${codec.fourcc}</code></td>`;
-                codecHtml += `<td>${codec.name}</td>`;
-                codecHtml += `<td><span class="badge bg-${statusClass}">`;
-                codecHtml += `<i class="fas fa-${statusIcon}"></i> ${statusText}</span></td>`;
-                codecHtml += `</tr>`;
+                codecHtml += '<tr>';
+                codecHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white">${codec.fourcc}</td>`;
+                codecHtml += `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">${codec.name}</td>`;
+                codecHtml += `<td class="px-6 py-4 whitespace-nowrap">`;
+                codecHtml += `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${statusClass}-100 text-${statusClass}-800 dark:bg-${statusClass}-900/20 dark:text-${statusClass}-400">`;
+                codecHtml += `<i class="fas fa-${statusIcon} mr-1"></i> ${statusText}`;
+                codecHtml += `</span></td>`;
+                codecHtml += '</tr>';
             });
             
-            codecHtml += '</tbody></table>';
+            codecHtml += '</tbody></table></div>';
             
             if (data.video_io_info && data.video_io_info.length > 0) {
-                codecHtml += '<h6 class="mt-3">OpenCV Video I/O Configuration:</h6>';
-                codecHtml += '<pre class="bg-light p-2"><code>';
+                codecHtml += '<h3 class="text-lg font-medium text-gray-800 dark:text-white mb-3 mt-6">OpenCV Video I/O Configuration:</h3>';
+                codecHtml += '<pre class="bg-gray-100 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-sm">';
                 codecHtml += data.video_io_info.join('\n');
-                codecHtml += '</code></pre>';
+                codecHtml += '</pre>';
             }
             
             document.getElementById('codec-info').innerHTML = codecHtml;
@@ -331,10 +448,28 @@ document.getElementById('check-codecs-btn').addEventListener('click', function()
         })
         .catch(error => {
             document.getElementById('codec-info').innerHTML = 
-                '<div class="alert alert-danger">Error checking codecs: ' + error + '</div>';
+                '<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">' +
+                '<div class="flex items-center">' +
+                '<i class="fas fa-times-circle text-red-600 dark:text-red-400 mr-2"></i>' +
+                '<span class="text-red-800 dark:text-red-300">Error checking codecs: ' + error + '</span>' +
+                '</div></div>';
             document.getElementById('codec-info').style.display = 'block';
             document.getElementById('check-codecs-btn').disabled = false;
         });
 });
+
+// Simple accordion toggle function
+function toggleAccordion(id) {
+    const content = document.getElementById(id);
+    const icon = document.getElementById(id + '-icon');
+    
+    if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        icon.classList.add('rotate-180');
+    } else {
+        content.classList.add('hidden');
+        icon.classList.remove('rotate-180');
+    }
+}
 </script>
 {% endblock %}

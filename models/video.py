@@ -18,6 +18,12 @@ class Video(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # OCR extracted fields
+    ocr_location = db.Column(db.String(100))
+    ocr_video_date = db.Column(db.Date)
+    ocr_extraction_done = db.Column(db.Boolean, default=False)
+    ocr_extraction_confidence = db.Column(db.Float)
+    
     # Relationships
     detected_persons = db.relationship('DetectedPerson', backref='video', lazy=True, cascade='all, delete-orphan')
     
@@ -58,6 +64,13 @@ class DetectedPerson(db.Model):
     employee_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=True)
     is_identified = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # OCR-based attendance fields
+    attendance_date = db.Column(db.Date)
+    attendance_time = db.Column(db.Time)
+    attendance_location = db.Column(db.String(100))
+    check_in_time = db.Column(db.DateTime)
+    check_out_time = db.Column(db.DateTime)
     
     __table_args__ = (db.Index('idx_video_person', 'video_id', 'person_code'),)
     

@@ -182,6 +182,13 @@ def create_app(config_name=None):
         frame_count = db.Column(db.Integer)
         processed_frames = db.Column(db.Integer)
         
+        # OCR extracted fields
+        ocr_location = db.Column(db.String(100))
+        ocr_video_date = db.Column(db.Date)
+        ocr_video_time = db.Column(db.Time)
+        ocr_extraction_done = db.Column(db.Boolean, default=False)
+        ocr_extraction_confidence = db.Column(db.Float)
+        
         # Metadata
         created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
         updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -241,6 +248,13 @@ def create_app(config_name=None):
         
         # Face encoding (for face recognition)
         face_encoding = db.Column(db.Text)
+        
+        # OCR-based attendance fields
+        attendance_date = db.Column(db.Date)
+        attendance_time = db.Column(db.Time)
+        attendance_location = db.Column(db.String(100))
+        check_in_time = db.Column(db.DateTime)
+        check_out_time = db.Column(db.DateTime)
         
         created_at = db.Column(db.DateTime, default=datetime.utcnow)
         

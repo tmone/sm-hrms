@@ -34,6 +34,17 @@ try:
 except ImportError as e:
     print(f"⚠️ GPU Appearance Tracker not available: {e}")
 
+# Try to import OCR extractor
+OCR_AVAILABLE = False
+try:
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from hr_management.processing.ocr_extractor import VideoOCRExtractor
+    OCR_AVAILABLE = True
+    print("✅ OCR Extractor available")
+except ImportError as e:
+    print(f"⚠️ OCR Extractor not available: {e}")
+
 def get_next_person_id():
     """
     Get the next available person ID by checking existing person folders
@@ -198,6 +209,30 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         # Update progress: Video loaded
         if video_id:
             update_video_progress(video_id, 10, f"Video loaded: {total_frames} frames, {duration:.1f}s", app)
+        
+        # Extract OCR data (timestamp and location) from video
+        ocr_data = None
+        if OCR_AVAILABLE:
+            print("\n🔤 Extracting OCR data from video...")
+            if video_id:
+                update_video_progress(video_id, 12, "Extracting timestamps and location...", app)
+            
+            try:
+                ocr_extractor = VideoOCRExtractor(ocr_engine='easyocr')
+                # Sample every 10 seconds for OCR (300 frames at 30fps)
+                sample_interval = int(fps * 10) if fps > 0 else 300
+                ocr_data = ocr_extractor.extract_video_info(video_path, sample_interval=sample_interval)
+                
+                if ocr_data:
+                    print(f"✅ OCR extraction complete:")
+                    print(f"   - Location: {ocr_data.get('location', 'Not found')}")
+                    print(f"   - Video Date: {ocr_data.get('video_date', 'Not found')}")
+                    print(f"   - Confidence: {ocr_data.get('confidence', 0):.2%}")
+                else:
+                    print("⚠️ No OCR data extracted")
+            except Exception as e:
+                print(f"⚠️ OCR extraction failed: {e}")
+                ocr_data = None
         
         # Create output directory for annotated video
         # Use the same folder as uploads for consistency
@@ -534,6 +569,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             'detections': detections,
             'annotated_video_path': annotated_filename,
             'persons_dir': str(persons_dir) if persons_dir.exists() else None,
+            'ocr_data': ocr_data,  # Include OCR extracted data
             'processing_summary': {
                 'total_frames': total_frames,
                 'processed_frames': processed_frames,
@@ -546,7 +582,10 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 'gpu_used': gpu_config['use_gpu'],
                 'batch_size': batch_size,
                 'skip_frames': skip_frames,
-                'persons_extracted': extracted_count if 'extracted_count' in locals() else 0
+                'persons_extracted': extracted_count if 'extracted_count' in locals() else 0,
+                'ocr_location': ocr_data.get('location') if ocr_data else None,
+                'ocr_video_date': ocr_data.get('video_date') if ocr_data else None,
+                'ocr_confidence': ocr_data.get('confidence') if ocr_data else None
             }
         }
         

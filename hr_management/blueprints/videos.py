@@ -447,6 +447,236 @@ def retry_processing(id):
     
     return redirect(url_for('videos.detail', id=id))
 
+@videos_bp.route('/<int:id>/extract-ocr', methods=['POST'])
+@login_required
+def extract_ocr(id):
+    """Extract OCR data from an existing video without reprocessing persons"""
+    try:
+        Video = current_app.Video
+        DetectedPerson = current_app.DetectedPerson
+        db = current_app.db
+        
+        video = Video.query.get_or_404(id)
+        
+        # Check if video is completed
+        if video.status != 'completed':
+            flash('OCR extraction is only available for completed videos', 'warning')
+            return redirect(url_for('videos.detail', id=id))
+        
+        # Check if OCR already extracted
+        if video.ocr_extraction_done and video.ocr_location:
+            flash('OCR data has already been extracted for this video', 'info')
+            return redirect(url_for('videos.detail', id=id))
+        
+        # Get video path
+        video_path = None
+        from pathlib import Path
+        
+        # Try the stored file_path first
+        if hasattr(video, 'file_path') and video.file_path and os.path.exists(video.file_path):
+            video_path = video.file_path
+        else:
+            # Search for the video file in uploads directory
+            uploads_dir = Path('static/uploads')
+            if uploads_dir.exists():
+                # Look for files that contain the video filename (without extension)
+                base_name = Path(video.filename).stem
+                
+                # Try exact match first
+                exact_match = uploads_dir / video.filename
+                if exact_match.exists():
+                    video_path = str(exact_match)
+                else:
+                    # Search for files containing the base filename
+                    for video_file in uploads_dir.glob('*.mp4'):
+                        if base_name in video_file.name:
+                            # Prefer original files over annotated ones
+                            if 'annotated' not in video_file.name:
+                                video_path = str(video_file)
+                                break
+                    
+                    # If no original found, use any matching file (including annotated)
+                    if not video_path:
+                        for video_file in uploads_dir.glob('*.mp4'):
+                            if base_name in video_file.name:
+                                video_path = str(video_file)
+                                break
+        
+        if not video_path:
+            flash('Video file not found', 'error')
+            return redirect(url_for('videos.detail', id=id))
+        
+        # Extract OCR data
+        try:
+            from hr_management.processing.ocr_extractor import VideoOCRExtractor
+            
+            # Use the improved extraction method directly
+            import cv2
+            import re
+            
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                raise Exception("Could not open video file")
+            
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            sample_frames = min(5, total_frames // 10)
+            
+            timestamps = []
+            times = []
+            locations = []
+            
+            for i in range(sample_frames):
+                frame_num = i * (total_frames // sample_frames) if sample_frames > 0 else 0
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+                ret, frame = cap.read()
+                
+                if not ret:
+                    continue
+                
+                height, width = frame.shape[:2]
+                
+                # Initialize OCR reader
+                from easyocr import Reader
+                reader = Reader(['en'], gpu=False, verbose=False)
+                
+                # Extract timestamp and time (top region)
+                timestamp_region = frame[0:int(height*0.1), 0:width]
+                timestamp_results = reader.readtext(timestamp_region)
+                
+                for result in timestamp_results:
+                    text = result[1].strip()
+                    if re.search(r'\d{2}[-/]\d{2}[-/]\d{4}', text):
+                        timestamps.append(text)
+                    time_match = re.search(r'\d{1,2}:\d{2}(:\d{2})?', text)
+                    if time_match:
+                        times.append(time_match.group())
+                
+                # Extract location (center-bottom to right-bottom)
+                location_region = frame[int(height*0.85):height, int(width*0.3):width]
+                location_results = reader.readtext(location_region)
+                
+                location_texts = []
+                for result in location_results:
+                    text = result[1].strip()
+                    confidence = result[2] if len(result) > 2 else 0
+                    
+                    if (len(text) > 1 and 
+                        confidence > 0.5 and
+                        not re.match(r'^\d+$', text) and
+                        not re.search(r'\d{1,2}:\d{2}', text) and
+                        not re.search(r'\d{2}[-/]\d{2}', text)):
+                        
+                        # OCR corrections
+                        if text.upper() == 'IRET':
+                            text = 'TRET'
+                        
+                        location_texts.append(text)
+                
+                if location_texts:
+                    locations.append(' '.join(location_texts))
+            
+            cap.release()
+            
+            # Process results
+            video_date = None
+            video_time = None
+            location = None
+            
+            if timestamps:
+                timestamp_text = max(set(timestamps), key=timestamps.count)
+                try:
+                    for fmt in ['%d-%m-%Y', '%m-%d-%Y', '%Y-%m-%d']:
+                        try:
+                            date_part = re.search(r'\d{2}[-/]\d{2}[-/]\d{4}', timestamp_text).group()
+                            date_part = date_part.replace('/', '-')
+                            video_date = datetime.strptime(date_part, fmt).date()
+                            break
+                        except:
+                            continue
+                except:
+                    pass
+            
+            if times:
+                time_text = max(set(times), key=times.count).replace(' ', '')
+                try:
+                    if ':' in time_text:
+                        parts = time_text.split(':')
+                        if len(parts) == 3:
+                            hour, minute, second = parts
+                            video_time = datetime.strptime(f"{hour.zfill(2)}:{minute.zfill(2)}:{second.zfill(2)}", '%H:%M:%S').time()
+                        elif len(parts) == 2:
+                            hour, minute = parts
+                            video_time = datetime.strptime(f"{hour.zfill(2)}:{minute.zfill(2)}", '%H:%M').time()
+                except:
+                    pass
+            
+            if locations:
+                location = max(set(locations), key=locations.count)
+            
+            ocr_data = {
+                'location': location,
+                'video_date': video_date,
+                'video_time': video_time,
+                'confidence': 0.8 if location else 0.0
+            }
+            
+            if ocr_data:
+                # Update video record
+                video.ocr_location = ocr_data.get('location')
+                video.ocr_video_date = ocr_data.get('video_date')
+                video.ocr_video_time = ocr_data.get('video_time')
+                video.ocr_extraction_done = True
+                video.ocr_extraction_confidence = ocr_data.get('confidence', 0.0)
+                
+                # Update existing person detections
+                detections = DetectedPerson.query.filter_by(video_id=video.id).all()
+                updated_count = 0
+                
+                for detection in detections:
+                    if not detection.attendance_location:
+                        detection.attendance_location = video.ocr_location
+                    
+                    if not detection.attendance_date and video.ocr_video_date:
+                        detection.attendance_date = video.ocr_video_date
+                        
+                        # Calculate attendance time
+                        if detection.timestamp is not None:
+                            from datetime import timedelta
+                            time_in_video = timedelta(seconds=float(detection.timestamp))
+                            detection.attendance_time = (datetime.min + time_in_video).time()
+                        
+                        updated_count += 1
+                
+                db.session.commit()
+                
+                # Build success message
+                parts = []
+                if video.ocr_location:
+                    parts.append(f'Location: {video.ocr_location}')
+                if video.ocr_video_date:
+                    parts.append(f'Date: {video.ocr_video_date}')
+                if video.ocr_video_time:
+                    parts.append(f'Time: {video.ocr_video_time}')
+                
+                if parts:
+                    flash(f'OCR extraction successful! {", ".join(parts)}', 'success')
+                else:
+                    flash('OCR extraction completed but no text was detected', 'warning')
+            else:
+                video.ocr_extraction_done = True
+                video.ocr_extraction_confidence = 0.0
+                db.session.commit()
+                flash('No OCR data could be extracted from the video', 'warning')
+                
+        except Exception as e:
+            db.session.rollback()
+            flash(f'OCR extraction failed: {str(e)}', 'error')
+            
+    except Exception as e:
+        flash(f'Error: {str(e)}', 'error')
+    
+    return redirect(url_for('videos.detail', id=id))
+
 @videos_bp.route('/<int:id>/process', methods=['POST'])
 @login_required
 def process_video(id):
@@ -2154,6 +2384,13 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                 video_obj.processing_progress = 75
                 db.session.commit()
                 
+                # Get OCR data for detections
+                ocr_location = None
+                ocr_video_date = None
+                if result.get('ocr_data'):
+                    ocr_location = result['ocr_data'].get('location')
+                    ocr_video_date = result['ocr_data'].get('video_date')
+                
                 for detection_data in result['detections']:
                     detection = DetectedPerson(
                         video_id=video_obj.id,
@@ -2167,6 +2404,19 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                         person_id=detection_data.get('person_id'),
                         track_id=detection_data.get('track_id')
                     )
+                    
+                    # Add OCR-based attendance data if available
+                    if ocr_location:
+                        detection.attendance_location = ocr_location
+                    if ocr_video_date:
+                        detection.attendance_date = ocr_video_date
+                        # Calculate attendance time from video timestamp
+                        if detection_data.get('timestamp'):
+                            from datetime import timedelta
+                            time_in_video = timedelta(seconds=detection_data['timestamp'])
+                            # This gives us the time offset in the video
+                            detection.attendance_time = (datetime.min + time_in_video).time()
+                    
                     db.session.add(detection)
                 
                 db.session.commit()
@@ -2196,6 +2446,15 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                         video_obj.annotated_video_path = relative_path
                         video_obj.processed_path = relative_path  # Use annotated video as processed video
                         print(f"📁 Stored annotated video path: {relative_path}")
+                
+                # Save OCR data if available
+                if result.get('ocr_data'):
+                    ocr_data = result['ocr_data']
+                    video_obj.ocr_location = ocr_data.get('location')
+                    video_obj.ocr_video_date = ocr_data.get('video_date')
+                    video_obj.ocr_extraction_done = True
+                    video_obj.ocr_extraction_confidence = ocr_data.get('confidence', 0.0)
+                    print(f"🔤 Saved OCR data - Location: {video_obj.ocr_location}, Date: {video_obj.ocr_video_date}")
                 
                 db.session.commit()
                 

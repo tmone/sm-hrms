@@ -47,9 +47,14 @@ Flask-Babel>=3.0.0
 celery>=5.3.0
 redis>=5.0.0
 
+# OCR Text Extraction
+easyocr>=1.7.0
+pytesseract>=0.3.10
+
 # Utilities
 python-dotenv>=1.0.0
 Werkzeug>=2.0.0
+pandas>=2.0.0
 
 # Production server (optional)
 gunicorn>=20.0.0

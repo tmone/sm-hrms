@@ -208,6 +208,15 @@
     color: white;
 }
 
+.action-button.warning {
+    background-color: #f59e0b;
+    color: white;
+}
+
+.action-button.warning:hover {
+    background-color: #d97706;
+}
+
 .action-button.danger:hover {
     background-color: #dc2626;
 }

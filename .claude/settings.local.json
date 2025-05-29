@@ -42,7 +42,8 @@
       "Bash(.venv/Scripts/python.exe:*)",
       "Bash(for:*)",
       "Bash(do echo \"=== $f ===\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(.venv/bin/python:*)"
     ],
     "deny": []
   },

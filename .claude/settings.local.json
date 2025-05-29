@@ -37,7 +37,8 @@
       "Bash(sqlite3:*)",
       "Bash(sed:*)",
       "Bash(cat:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(.venv/Scripts/python.exe tests/test_dashboard_fix.py:*)"
     ],
     "deny": []
   }

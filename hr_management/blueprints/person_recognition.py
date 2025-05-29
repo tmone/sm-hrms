@@ -293,7 +293,8 @@ def test_video():
         inference = inference_class(model_name, confidence_threshold)
         
         # Process without output video for speed
-        results = inference.process_video(str(video_path), skip_frames=10)
+        # Use skip_frames=5 for better detection coverage
+        results = inference.process_video(str(video_path), skip_frames=5)
         
         # Clean up
         shutil.rmtree(temp_dir)

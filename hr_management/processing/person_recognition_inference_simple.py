@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 import json
+import os
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 import time
@@ -82,34 +83,77 @@ class PersonRecognitionInferenceSimple:
             
             # Process frame if not skipping
             if frame_count % skip_frames == 0:
-                # Extract features from frame
-                features = self._extract_frame_features(frame)
+                # Detect persons in the frame first
+                detected_persons = self._detect_persons_in_image(frame)
                 
-                if features is not None:
-                    # Predict person
-                    result = self._predict_person(features)
-                    
-                    person_id = result['person_id']
-                    confidence = result['confidence']
-                    
-                    # Update tracking
-                    if person_id != 'unknown':
-                        detection = {
-                            'frame': frame_count,
-                            'time': current_time,
-                            'confidence': confidence
-                        }
+                if detected_persons:
+                    if processed_frames == 0:
+                        print(f"✅ Detected {len(detected_persons)} persons in first processed frame")
+                    # Process each detected person
+                    for x1, y1, x2, y2, detection_confidence in detected_persons:
+                        # Crop the person from the frame
+                        person_crop = frame[int(y1):int(y2), int(x1):int(x2)]
                         
-                        person_tracks[person_id]['detections'].append(detection)
-                        person_tracks[person_id]['confidence_scores'].append(confidence)
+                        # Skip if crop is too small
+                        if person_crop.shape[0] < 50 or person_crop.shape[1] < 20:
+                            continue
                         
-                        if person_tracks[person_id]['first_seen'] is None:
-                            person_tracks[person_id]['first_seen'] = current_time
-                        person_tracks[person_id]['last_seen'] = current_time
-                    
-                    # Draw on frame
-                    if output_path or show_preview:
-                        self._draw_recognition(frame, person_id, confidence)
+                        # Save cropped image temporarily
+                        import tempfile
+                        temp_file = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+                        temp_path = temp_file.name
+                        temp_file.close()  # Close the file handle immediately
+                        
+                        cv2.imwrite(temp_path, person_crop)
+                        
+                        try:
+                            # Extract features from cropped person
+                            features = self.feature_extractor._extract_simple_features(
+                                temp_path, 'temp', f'frame_{frame_count}.jpg'
+                            )
+                            
+                            if features is not None:
+                                # Predict person
+                                result = self._predict_person(features)
+                                
+                                person_id = result['person_id']
+                                confidence = result['confidence']
+                                
+                                # Update tracking only if confidence is high enough
+                                if confidence >= self.confidence_threshold:
+                                    detection = {
+                                        'frame': frame_count,
+                                        'time': current_time,
+                                        'confidence': confidence,
+                                        'bbox': [int(x1), int(y1), int(x2-x1), int(y2-y1)],
+                                        'detection_confidence': detection_confidence
+                                    }
+                                    
+                                    person_tracks[person_id]['detections'].append(detection)
+                                    person_tracks[person_id]['confidence_scores'].append(confidence)
+                                    
+                                    if person_tracks[person_id]['first_seen'] is None:
+                                        person_tracks[person_id]['first_seen'] = current_time
+                                    person_tracks[person_id]['last_seen'] = current_time
+                                    
+                                    # Draw on frame
+                                    if output_path or show_preview:
+                                        self._draw_recognition_box(frame, x1, y1, x2, y2, person_id, confidence)
+                        finally:
+                            # Clean up temp file with retry for Windows
+                            try:
+                                os.unlink(temp_path)
+                            except PermissionError:
+                                # Windows sometimes holds file locks, ignore cleanup
+                                # Temp files will be cleaned up by OS
+                                pass
+                            except Exception:
+                                # Ignore any other cleanup errors
+                                pass
+                else:
+                    # No persons detected in this frame
+                    if processed_frames == 0:
+                        print(f"⚠️  No persons detected in first processed frame")
                 
                 processed_frames += 1
                 
@@ -180,15 +224,21 @@ class PersonRecognitionInferenceSimple:
             # Save frame temporarily
             import tempfile
             temp_file = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
-            cv2.imwrite(temp_file.name, frame)
+            temp_path = temp_file.name
+            temp_file.close()  # Close file handle immediately
+            
+            cv2.imwrite(temp_path, frame)
             
             # Extract features
             features = self.feature_extractor._extract_simple_features(
-                temp_file.name, 'temp', 'temp.jpg'
+                temp_path, 'temp', 'temp.jpg'
             )
             
-            # Clean up
-            Path(temp_file.name).unlink()
+            # Clean up with Windows-friendly approach
+            try:
+                os.unlink(temp_path)
+            except:
+                pass  # Ignore cleanup errors
             
             return features
         except Exception as e:
@@ -252,6 +302,36 @@ class PersonRecognitionInferenceSimple:
         # Draw text
         cv2.putText(frame, label, (20, 30), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+    
+    def _draw_recognition_box(self, frame: np.ndarray, x1: float, y1: float, x2: float, y2: float,
+                              person_id: str, confidence: float):
+        """Draw recognition bounding box and label on frame"""
+        # Choose color based on confidence
+        if person_id == 'unknown':
+            color = (128, 128, 128)  # Gray for unknown
+        elif confidence > 0.8:
+            color = (0, 255, 0)  # Green for high confidence
+        elif confidence > 0.6:
+            color = (0, 165, 255)  # Orange for medium confidence
+        else:
+            color = (0, 0, 255)  # Red for low confidence
+        
+        # Draw bounding box
+        cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+        
+        # Prepare label
+        label = f"{person_id} ({confidence:.2f})"
+        
+        # Get label size
+        (label_w, label_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+        
+        # Draw label background
+        cv2.rectangle(frame, (int(x1), int(y1) - label_h - 10), 
+                     (int(x1) + label_w, int(y1)), color, -1)
+        
+        # Draw label text
+        cv2.putText(frame, label, (int(x1), int(y1) - 5), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     
     def process_image(self, image_path: str) -> Dict:
         """Process a single image for person recognition"""
@@ -384,7 +464,7 @@ class PersonRecognitionInferenceSimple:
                         confidence = float(box.conf[0])
                         
                         # Filter by confidence
-                        if confidence > 0.3:  # Lower threshold for detection
+                        if confidence > 0.2:  # Lower threshold for detection in videos
                             persons.append((x1, y1, x2, y2, confidence))
         
         return persons

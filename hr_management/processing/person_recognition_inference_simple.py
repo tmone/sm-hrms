@@ -10,6 +10,7 @@ import json
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 import time
+from ultralytics import YOLO
 from .person_recognition_trainer import PersonRecognitionTrainer
 from .person_dataset_creator_simple import PersonDatasetCreatorSimple
 
@@ -28,6 +29,12 @@ class PersonRecognitionInferenceSimple:
         
         # Track recognition results
         self.recognition_results = defaultdict(list)
+        
+        # Load YOLO for person detection
+        try:
+            self.yolo_model = YOLO('yolov8n.pt')
+        except Exception as e:
+            print(f"Warning: Failed to load YOLO model: {e}")
         
     def process_video(self, video_path: str, output_path: str = None,
                      skip_frames: int = 5, show_preview: bool = False) -> Dict:
@@ -253,21 +260,131 @@ class PersonRecognitionInferenceSimple:
         if image is None:
             return {'error': 'Failed to load image'}
         
-        # Extract features
+        # Check if this might be a pre-cropped person image
+        h, w = image.shape[:2]
+        aspect_ratio = h / w if w > 0 else 0
+        
+        # Heuristic: If image has person-like aspect ratio and reasonable size,
+        # it might be pre-cropped
+        is_likely_cropped = (
+            1.5 <= aspect_ratio <= 3.0 and  # Person images are typically taller
+            100 <= w <= 500 and             # Reasonable width for cropped person
+            150 <= h <= 800                 # Reasonable height for cropped person
+        )
+        
+        # Detect persons in the image first
+        detected_persons = self._detect_persons_in_image(image)
+        
+        if not detected_persons:
+            # If no persons detected but image looks like it might be pre-cropped,
+            # try processing it as a cropped image
+            if is_likely_cropped:
+                print(f"No persons detected, but image appears to be pre-cropped (size: {w}x{h}, aspect: {aspect_ratio:.2f})")
+                return self.process_cropped_image(image_path)
+            else:
+                return {'persons': [], 'message': 'No persons detected in the image'}
+        
+        # Process each detected person
+        recognized_persons = []
+        
+        for i, (x1, y1, x2, y2, detection_confidence) in enumerate(detected_persons):
+            # Crop the person from the image
+            person_crop = image[int(y1):int(y2), int(x1):int(x2)]
+            
+            # Save cropped image temporarily
+            import tempfile
+            temp_file = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+            temp_path = temp_file.name
+            cv2.imwrite(temp_path, person_crop)
+            
+            try:
+                # Extract features from cropped person
+                features = self.feature_extractor._extract_simple_features(
+                    temp_path, 'temp', f'person_{i}.jpg'
+                )
+                
+                if features is not None:
+                    # Predict person
+                    prediction = self._predict_person(features)
+                    
+                    recognized_persons.append({
+                        'person_id': prediction['person_id'],
+                        'confidence': prediction['confidence'],
+                        'detection_confidence': float(detection_confidence),
+                        'bbox': [int(x1), int(y1), int(x2-x1), int(y2-y1)],
+                        'all_probabilities': prediction['all_probabilities']
+                    })
+            finally:
+                # Clean up temp file
+                Path(temp_path).unlink(missing_ok=True)
+        
+        return {
+            'persons': recognized_persons,
+            'total_detections': len(detected_persons)
+        }
+    
+    def process_cropped_image(self, image_path: str) -> Dict:
+        """Process a pre-cropped person image for recognition"""
+        print(f"🔍 process_cropped_image called with: {image_path}")
+        
+        # Load image
+        image = cv2.imread(image_path)
+        if image is None:
+            print(f"❌ Failed to load image: {image_path}")
+            return {'error': 'Failed to load image'}
+        
+        print(f"✅ Image loaded successfully: {image.shape}")
+        
+        # Since this is already a cropped person image, process it directly
         features = self.feature_extractor._extract_simple_features(
             image_path, 'temp', Path(image_path).name
         )
         
         if features is None:
-            return {'persons': [], 'message': 'Failed to extract features'}
+            print(f"❌ Failed to extract features from image")
+            return {'persons': [], 'message': 'Failed to extract features from image'}
+        
+        print(f"✅ Features extracted: shape {features.shape}")
         
         # Predict person
         prediction = self._predict_person(features)
+        print(f"🎯 Prediction: {prediction}")
+        
+        # Get image dimensions for bbox
+        h, w = image.shape[:2]
         
         return {
             'persons': [{
                 'person_id': prediction['person_id'],
                 'confidence': prediction['confidence'],
+                'detection_confidence': 1.0,  # Already cropped, so detection confidence is 1.0
+                'bbox': [0, 0, w, h],
                 'all_probabilities': prediction['all_probabilities']
-            }]
+            }],
+            'total_detections': 1,
+            'is_cropped': True
         }
+    
+    def _detect_persons_in_image(self, image: np.ndarray) -> List[Tuple[float, float, float, float, float]]:
+        """Detect persons in image using YOLO"""
+        if not hasattr(self, 'yolo_model'):
+            return []
+        
+        # Run YOLO detection
+        results = self.yolo_model(image, verbose=False)
+        
+        persons = []
+        for r in results:
+            boxes = r.boxes
+            if boxes is not None:
+                for box in boxes:
+                    # Check if it's a person (class 0 in COCO)
+                    if int(box.cls[0]) == 0:
+                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                        confidence = float(box.conf[0])
+                        
+                        # Filter by confidence
+                        if confidence > 0.3:  # Lower threshold for detection
+                            persons.append((x1, y1, x2, y2, confidence))
+        
+        return persons

@@ -29,6 +29,15 @@
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <h3 class="text-lg font-semibold mb-2">Test Accuracy</h3>
             <p class="text-3xl font-bold text-green-600">{{ "%.1f%%"|format(metadata.test_score * 100) }}</p>
+            {% if metadata.target_accuracy is defined %}
+            <p class="text-sm text-gray-500">Target: {{ "%.1f%%"|format(metadata.target_accuracy * 100) }}
+                {% if metadata.target_reached %}
+                <i class="fas fa-check text-green-500 ml-1"></i>
+                {% else %}
+                <i class="fas fa-times text-red-500 ml-1"></i>
+                {% endif %}
+            </p>
+            {% endif %}
         </div>
         
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -43,6 +52,9 @@
                 <p><span class="text-gray-600">Persons:</span> {{ metadata.num_persons }}</p>
                 <p><span class="text-gray-600">Samples:</span> {{ metadata.num_samples }}</p>
                 <p><span class="text-gray-600">Train/Test:</span> {{ metadata.num_train_samples }}/{{ metadata.num_test_samples }}</p>
+                {% if metadata.training_iterations is defined %}
+                <p><span class="text-gray-600">Iterations:</span> {{ metadata.training_iterations }}</p>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -109,6 +121,55 @@
             {% endfor %}
         </div>
     </div>
+    
+    <!-- Per-Person Validation Accuracy -->
+    {% if metadata.final_person_accuracies is defined %}
+    <div class="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold mb-4">Per-Person Validation Accuracy</h3>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead>
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Person ID</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Accuracy</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Correct/Total</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for person_id, stats in metadata.final_person_accuracies.items() %}
+                    <tr>
+                        <td class="px-4 py-2 text-sm font-medium">{{ person_id }}</td>
+                        <td class="px-4 py-2 text-sm">
+                            <span class="font-semibold {% if stats.accuracy >= 0.9 %}text-green-600{% elif stats.accuracy >= 0.7 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                                {{ "%.1f%%"|format(stats.accuracy * 100) }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 text-sm">{{ stats.correct }}/{{ stats.num_samples }}</td>
+                        <td class="px-4 py-2 text-sm">
+                            {% if stats.accuracy >= 0.9 %}
+                            <span class="text-green-600"><i class="fas fa-check-circle"></i> Excellent</span>
+                            {% elif stats.accuracy >= 0.7 %}
+                            <span class="text-yellow-600"><i class="fas fa-exclamation-circle"></i> Good</span>
+                            {% else %}
+                            <span class="text-red-600"><i class="fas fa-times-circle"></i> Needs Improvement</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Training Progress -->
+    {% if metadata.iteration_results is defined and metadata.iteration_results|length > 1 %}
+    <div class="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold mb-4">Training Progress</h3>
+        <canvas id="trainingProgress" height="100"></canvas>
+    </div>
+    {% endif %}
 </div>
 
 <!-- Include test modal from parent template -->
@@ -222,5 +283,61 @@ ctx.translate(15, canvas.height/2);
 ctx.rotate(-Math.PI/2);
 ctx.fillText('Actual', 0, 0);
 ctx.restore();
+
+// Draw training progress chart if available
+{% if metadata.iteration_results is defined and metadata.iteration_results|length > 1 %}
+const progressCtx = document.getElementById('trainingProgress').getContext('2d');
+const iterations = {{ metadata.iteration_results|tojson }};
+
+new Chart(progressCtx, {
+    type: 'line',
+    data: {
+        labels: iterations.map(item => 'Iteration ' + item.iteration),
+        datasets: [{
+            label: 'Train Accuracy',
+            data: iterations.map(item => item.train_score * 100),
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.1
+        }, {
+            label: 'Test Accuracy',
+            data: iterations.map(item => item.test_score * 100),
+            borderColor: 'rgb(34, 197, 94)',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            tension: 0.1
+        }, {
+            label: 'Target',
+            data: iterations.map(() => {{ metadata.target_accuracy * 100 }}),
+            borderColor: 'rgb(239, 68, 68)',
+            borderDash: [5, 5],
+            pointRadius: 0,
+            fill: false
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'top',
+            },
+            title: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: 100,
+                ticks: {
+                    callback: function(value) {
+                        return value + '%';
+                    }
+                }
+            }
+        }
+    }
+});
+{% endif %}
 </script>
 {% endblock %}

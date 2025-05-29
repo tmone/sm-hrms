@@ -38,8 +38,14 @@ class PersonDatasetCreatorSimple:
             'created_at': datetime.now().isoformat(),
             'persons': {},
             'total_images': 0,
+            'total_train_images': 0,
+            'total_val_images': 0,
             'total_features': 0,
-            'total_faces': 0  # For compatibility with the template
+            'total_train_features': 0,
+            'total_val_features': 0,
+            'total_faces': 0,  # For compatibility with the template
+            'split_ratio': '80-20 (with augmentation)',
+            'augmentation_factor': 4
         }
         
         # Process each person
@@ -48,7 +54,11 @@ class PersonDatasetCreatorSimple:
             if person_results['success']:
                 dataset_info['persons'][person_id] = person_results
                 dataset_info['total_images'] += person_results['images_count']
+                dataset_info['total_train_images'] += person_results['train_images_count']
+                dataset_info['total_val_images'] += person_results['val_images_count']
                 dataset_info['total_features'] += person_results['features_count']
+                dataset_info['total_train_features'] += person_results['train_features_count']
+                dataset_info['total_val_features'] += person_results['val_features_count']
                 dataset_info['total_faces'] += person_results['features_count']  # Same as features for simple version
         
         # Save dataset info
@@ -58,7 +68,7 @@ class PersonDatasetCreatorSimple:
         return dataset_info
     
     def _process_person(self, person_id: str, dataset_path: Path) -> Dict:
-        """Process a single person's images for the dataset"""
+        """Process a single person's images for the dataset with train/val split"""
         person_dir = self.persons_dir / person_id
         if not person_dir.exists():
             return {'success': False, 'error': f'Person directory not found: {person_id}'}
@@ -71,57 +81,150 @@ class PersonDatasetCreatorSimple:
         with open(metadata_path) as f:
             metadata = json.load(f)
         
-        # Create person subdirectories
-        person_images_dir = dataset_path / "images" / person_id
-        person_features_dir = dataset_path / "features" / person_id
+        # Create person subdirectories for train and validation
+        person_train_images_dir = dataset_path / "images_train" / person_id
+        person_val_images_dir = dataset_path / "images_val" / person_id
+        person_train_features_dir = dataset_path / "features_train" / person_id
+        person_val_features_dir = dataset_path / "features_val" / person_id
         
-        person_images_dir.mkdir(exist_ok=True)
-        person_features_dir.mkdir(exist_ok=True)
+        person_train_images_dir.mkdir(parents=True, exist_ok=True)
+        person_val_images_dir.mkdir(parents=True, exist_ok=True)
+        person_train_features_dir.mkdir(parents=True, exist_ok=True)
+        person_val_features_dir.mkdir(parents=True, exist_ok=True)
         
         results = {
             'success': True,
             'person_id': person_id,
             'images_count': 0,
+            'train_images_count': 0,
+            'val_images_count': 0,
             'features_count': 0,
+            'train_features_count': 0,
+            'val_features_count': 0,
             'faces_count': 0,  # For compatibility
             'embeddings_count': 0,  # For compatibility
             'features': []
         }
         
-        # Process each image
-        print(f"Processing {person_id}: {len(metadata.get('images', []))} images in metadata")
-        for img_data in metadata.get('images', []):
+        # Get all images and shuffle for random split
+        all_images = metadata.get('images', [])
+        np.random.seed(42)  # For reproducible splits
+        np.random.shuffle(all_images)
+        
+        # Split 50-50 for train and validation
+        split_idx = len(all_images) // 2
+        train_images = all_images[:split_idx]
+        val_images = all_images[split_idx:]
+        
+        print(f"Processing {person_id}: {len(all_images)} images (train: {len(train_images)}, val: {len(val_images)})")
+        
+        # Process training images
+        for img_data in train_images:
             img_path = person_dir / img_data['filename']
             if not img_path.exists():
                 print(f"  ⚠️  Image not found: {img_path}")
                 continue
                 
-            # Copy original image
-            dest_img_path = person_images_dir / img_data['filename']
+            # Copy original image to train directory
+            dest_img_path = person_train_images_dir / img_data['filename']
             shutil.copy2(img_path, dest_img_path)
+            results['train_images_count'] += 1
             results['images_count'] += 1
             
-            # Extract simple features (color histogram, HOG, etc.)
+            # Extract simple features
             features = self._extract_simple_features(str(img_path), person_id, img_data['filename'])
             if features is not None:
-                # Save features
+                # Save features to train directory
                 feature_filename = f"{person_id}_features_{img_data['filename'].split('.')[0]}.pkl"
-                feature_path = person_features_dir / feature_filename
+                feature_path = person_train_features_dir / feature_filename
                 
                 feature_data = {
                     'person_id': person_id,
                     'source_image': img_data['filename'],
                     'features': features,
                     'bbox': img_data.get('bbox', None),
-                    'confidence': img_data.get('confidence', 0.9)
+                    'confidence': img_data.get('confidence', 0.9),
+                    'split': 'train'
                 }
                 
                 with open(feature_path, 'wb') as f:
                     pickle.dump(feature_data, f)
                 
+                results['train_features_count'] += 1
                 results['features_count'] += 1
-                results['faces_count'] += 1  # Same as features for simple version
-                results['embeddings_count'] += 1  # Same as features for simple version
+                results['faces_count'] += 1
+                results['embeddings_count'] += 1
+                results['features'].append(feature_filename)
+                
+            # Create augmented versions (4 additional copies for 80-20 final ratio)
+            for aug_idx in range(4):
+                aug_img = cv2.imread(str(img_path))
+                if aug_img is None:
+                    continue
+                    
+                aug_img = self._augment_image(aug_img)
+                aug_filename = f"{img_data['filename'].split('.')[0]}_aug{aug_idx}.jpg"
+                aug_path = person_train_images_dir / aug_filename
+                cv2.imwrite(str(aug_path), aug_img)
+                
+                # Extract features from augmented image
+                aug_features = self._extract_simple_features(str(aug_path), person_id, aug_filename)
+                if aug_features is not None:
+                    aug_feature_filename = f"{person_id}_features_{aug_filename.split('.')[0]}.pkl"
+                    aug_feature_path = person_train_features_dir / aug_feature_filename
+                    
+                    aug_feature_data = {
+                        'person_id': person_id,
+                        'source_image': aug_filename,
+                        'features': aug_features,
+                        'bbox': img_data.get('bbox', None),
+                        'confidence': img_data.get('confidence', 0.9),
+                        'split': 'train',
+                        'augmented': True
+                    }
+                    
+                    with open(aug_feature_path, 'wb') as f:
+                        pickle.dump(aug_feature_data, f)
+                    
+                    results['train_features_count'] += 1
+                    results['train_images_count'] += 1
+        
+        # Process validation images (no augmentation)
+        for img_data in val_images:
+            img_path = person_dir / img_data['filename']
+            if not img_path.exists():
+                print(f"  ⚠️  Image not found: {img_path}")
+                continue
+                
+            # Copy original image to validation directory
+            dest_img_path = person_val_images_dir / img_data['filename']
+            shutil.copy2(img_path, dest_img_path)
+            results['val_images_count'] += 1
+            results['images_count'] += 1
+            
+            # Extract simple features
+            features = self._extract_simple_features(str(img_path), person_id, img_data['filename'])
+            if features is not None:
+                # Save features to validation directory
+                feature_filename = f"{person_id}_features_{img_data['filename'].split('.')[0]}.pkl"
+                feature_path = person_val_features_dir / feature_filename
+                
+                feature_data = {
+                    'person_id': person_id,
+                    'source_image': img_data['filename'],
+                    'features': features,
+                    'bbox': img_data.get('bbox', None),
+                    'confidence': img_data.get('confidence', 0.9),
+                    'split': 'val'
+                }
+                
+                with open(feature_path, 'wb') as f:
+                    pickle.dump(feature_data, f)
+                
+                results['val_features_count'] += 1
+                results['features_count'] += 1
+                results['faces_count'] += 1
+                results['embeddings_count'] += 1
                 results['features'].append(feature_filename)
         
         return results
@@ -185,9 +288,13 @@ class PersonDatasetCreatorSimple:
             print(f"Error extracting features from {image_path}: {e}")
             return None
     
-    def prepare_training_data(self, dataset_name: str) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    def prepare_training_data(self, dataset_name: str, use_validation: bool = False) -> Tuple[np.ndarray, np.ndarray, List[str]]:
         """
         Prepare training data from dataset
+        
+        Args:
+            dataset_name: Name of the dataset
+            use_validation: If True, load validation data; if False, load training data
         
         Returns:
             X: Feature vectors array
@@ -195,7 +302,16 @@ class PersonDatasetCreatorSimple:
             person_ids: List of unique person IDs
         """
         dataset_path = self.dataset_dir / dataset_name
-        features_dir = dataset_path / "features"
+        
+        # Choose appropriate directory based on split
+        if use_validation:
+            features_dir = dataset_path / "features_val"
+        else:
+            features_dir = dataset_path / "features_train"
+            
+        # Also check for old format (backward compatibility)
+        if not features_dir.exists():
+            features_dir = dataset_path / "features"
         
         X = []
         y = []
@@ -240,7 +356,8 @@ class PersonDatasetCreatorSimple:
                     print(f"⚠️  Error loading {feature_file}: {e}")
                     continue
         
-        print(f"📊 Loaded {len(X)} samples for {len(person_ids)} persons")
+        split_type = "validation" if use_validation else "training"
+        print(f"📊 Loaded {len(X)} {split_type} samples for {len(person_ids)} persons")
         for i, person_id in enumerate(person_ids):
             count = sum(1 for label in y if label == i)
             print(f"   {person_id}: {count} samples")

@@ -62,11 +62,20 @@
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-center">
                 <div class="p-3 bg-purple-100 dark:bg-purple-900 rounded-full">
-                    <i class="fas fa-portrait text-purple-600 dark:text-purple-400 text-xl"></i>
+                    <i class="fas fa-chart-pie text-purple-600 dark:text-purple-400 text-xl"></i>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Face Images</p>
-                    <p class="text-2xl font-semibold">{{ dataset_info.total_faces }}</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Train/Val Split</p>
+                    <p class="text-lg font-semibold">
+                        {% if dataset_info.total_train_images is defined %}
+                            {{ dataset_info.total_train_images }}/{{ dataset_info.total_val_images }}
+                        {% else %}
+                            {{ dataset_info.total_images }}
+                        {% endif %}
+                    </p>
+                    {% if dataset_info.split_ratio is defined %}
+                    <p class="text-xs text-gray-500">{{ dataset_info.split_ratio }}</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -74,11 +83,17 @@
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div class="flex items-center">
                 <div class="p-3 bg-yellow-100 dark:bg-yellow-900 rounded-full">
-                    <i class="fas fa-fingerprint text-yellow-600 dark:text-yellow-400 text-xl"></i>
+                    <i class="fas fa-magic text-yellow-600 dark:text-yellow-400 text-xl"></i>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Embeddings</p>
-                    <p class="text-2xl font-semibold">{{ dataset_info.total_embeddings }}</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Augmentation</p>
+                    <p class="text-2xl font-semibold">
+                        {% if dataset_info.augmentation_factor is defined %}
+                            {{ dataset_info.augmentation_factor }}x
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </p>
                 </div>
             </div>
         </div>
@@ -110,13 +125,16 @@
                                 Person ID
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Images
+                                Total Images
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Faces
+                                Train Images
                             </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Embeddings
+                                Val Images
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Features
                             </th>
                         </tr>
                     </thead>
@@ -132,10 +150,21 @@
                                 {{ person.images_count }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                {{ person.faces_count }}
+                                {% if person.train_images_count is defined %}
+                                    {{ person.train_images_count }}
+                                {% else %}
+                                    -
+                                {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                {{ person.embeddings_count }}
+                                {% if person.val_images_count is defined %}
+                                    {{ person.val_images_count }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                {{ person.features_count|default(person.embeddings_count) }}
                             </td>
                         </tr>
                         {% endfor %}

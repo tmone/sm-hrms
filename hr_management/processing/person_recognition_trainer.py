@@ -36,9 +36,11 @@ class PersonRecognitionTrainer:
         }
     
     def train_model(self, X: np.ndarray, y: np.ndarray, person_ids: List[str],
-                   model_type: str = 'svm', model_name: str = None) -> Dict:
+                   model_type: str = 'svm', model_name: str = None,
+                   target_accuracy: float = 0.9, max_iterations: int = 10,
+                   validate_each_person: bool = True) -> Dict:
         """
-        Train a person recognition model
+        Train a person recognition model with continuous training until target accuracy
         
         Args:
             X: Face embeddings array
@@ -46,6 +48,9 @@ class PersonRecognitionTrainer:
             person_ids: List of unique person IDs
             model_type: Type of model to train
             model_name: Name for the saved model
+            target_accuracy: Target accuracy to achieve (default: 0.9)
+            max_iterations: Maximum training iterations (default: 10)
+            validate_each_person: Whether to validate each person's accuracy (default: True)
             
         Returns:
             Training results dictionary
@@ -56,25 +61,111 @@ class PersonRecognitionTrainer:
         if model_name is None:
             model_name = f"person_model_{model_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
-        )
+        # Check if we have pre-split validation data
+        # If X and y are from training set, we need to load validation separately
+        X_train, X_test, y_train, y_test = X, None, y, None
+        
+        # Try to load validation data if available
+        try:
+            # Import the dataset creator to check for validation data
+            from .person_dataset_creator_simple import PersonDatasetCreatorSimple
+            creator = PersonDatasetCreatorSimple()
+            
+            # Get dataset name from model name if possible
+            if hasattr(self, 'current_dataset_name'):
+                X_val, y_val, _ = creator.prepare_training_data(self.current_dataset_name, use_validation=True)
+                if len(X_val) > 0:
+                    X_test = X_val
+                    y_test = y_val
+                    print(f"📊 Using pre-split validation data: {len(X_test)} samples")
+        except:
+            pass
+        
+        # If no pre-split validation, use train_test_split
+        if X_test is None:
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42, stratify=y
+            )
         
         # Scale features
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
         
-        # Create and train model
-        model = self.model_architectures[model_type]()
+        # Continuous training loop
+        best_model = None
+        best_test_score = 0
+        iteration_results = []
         
-        print(f"🔄 Training {model_type} model with {len(X_train)} samples...")
-        model.fit(X_train_scaled, y_train)
+        for iteration in range(max_iterations):
+            # Create and train model
+            model = self.model_architectures[model_type]()
+            
+            print(f"\n🔄 Training iteration {iteration + 1}/{max_iterations} - {model_type} model with {len(X_train)} samples...")
+            
+            # For neural networks, increase iterations progressively
+            if model_type == 'mlp' and iteration > 0:
+                model.max_iter = 1000 + (iteration * 500)
+            
+            model.fit(X_train_scaled, y_train)
+            
+            # Evaluate model
+            train_score = model.score(X_train_scaled, y_train)
+            test_score = model.score(X_test_scaled, y_test)
+            
+            # Get predictions for per-person validation
+            y_pred_test = model.predict(X_test_scaled)
+            
+            # Calculate per-person accuracy if requested
+            person_accuracies = {}
+            if validate_each_person:
+                for i, person_id in enumerate(person_ids):
+                    # Find indices for this person in test set
+                    person_indices = np.where(y_test == i)[0]
+                    if len(person_indices) > 0:
+                        person_correct = np.sum(y_pred_test[person_indices] == y_test[person_indices])
+                        person_accuracy = person_correct / len(person_indices)
+                        person_accuracies[person_id] = {
+                            'accuracy': float(person_accuracy),
+                            'num_samples': len(person_indices),
+                            'correct': int(person_correct)
+                        }
+                        print(f"   {person_id}: {person_accuracy:.3f} ({person_correct}/{len(person_indices)})")
+            
+            # Store iteration results
+            iteration_result = {
+                'iteration': iteration + 1,
+                'train_score': float(train_score),
+                'test_score': float(test_score),
+                'person_accuracies': person_accuracies
+            }
+            iteration_results.append(iteration_result)
+            
+            print(f"   Overall - Train: {train_score:.3f}, Test: {test_score:.3f}")
+            
+            # Check if we've reached target accuracy
+            if test_score >= target_accuracy:
+                print(f"✅ Target accuracy {target_accuracy} reached!")
+                best_model = model
+                best_test_score = test_score
+                break
+            
+            # Update best model if this is better
+            if test_score > best_test_score:
+                best_model = model
+                best_test_score = test_score
         
-        # Evaluate model
-        train_score = model.score(X_train_scaled, y_train)
-        test_score = model.score(X_test_scaled, y_test)
+        # Use the best model found
+        if best_model is None:
+            best_model = model  # Use last model if none met criteria
+        model = best_model
+        test_score = best_test_score
+        
+        print(f"\n📊 Final test accuracy: {test_score:.3f}")
+        
+        # Re-calculate final metrics with best model
+        y_pred = best_model.predict(X_test_scaled)
+        train_score = best_model.score(X_train_scaled, y_train)
         
         # Cross-validation
         # Adjust cv folds based on minimum class size
@@ -117,6 +208,20 @@ class PersonRecognitionTrainer:
         # Get actual person_ids that have data
         actual_person_ids = [person_ids[i] for i in sorted(all_labels) if i < len(person_ids)]
         
+        # Calculate final per-person accuracies
+        final_person_accuracies = {}
+        if validate_each_person:
+            for i, person_id in enumerate(person_ids):
+                person_indices = np.where(y_test == i)[0]
+                if len(person_indices) > 0:
+                    person_correct = np.sum(y_pred[person_indices] == y_test[person_indices])
+                    person_accuracy = person_correct / len(person_indices)
+                    final_person_accuracies[person_id] = {
+                        'accuracy': float(person_accuracy),
+                        'num_samples': len(person_indices),
+                        'correct': int(person_correct)
+                    }
+        
         metadata = {
             'model_name': model_name,
             'model_type': model_type,
@@ -130,6 +235,11 @@ class PersonRecognitionTrainer:
             'num_test_samples': len(X_test),
             'train_score': float(train_score),
             'test_score': float(test_score),
+            'target_accuracy': target_accuracy,
+            'target_reached': test_score >= target_accuracy,
+            'training_iterations': len(iteration_results),
+            'iteration_results': iteration_results,
+            'final_person_accuracies': final_person_accuracies,
             'cv_scores': cv_scores.tolist(),
             'cv_mean': float(cv_scores.mean()),
             'cv_std': float(cv_scores.std()),

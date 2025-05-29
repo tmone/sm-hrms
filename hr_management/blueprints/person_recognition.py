@@ -156,12 +156,20 @@ def dataset_details(dataset_name):
     person_stats = []
     for person_id, person_data in dataset_info['persons'].items():
         if person_data.get('success'):
-            person_stats.append({
+            stats = {
                 'person_id': person_id,
                 'images_count': person_data['images_count'],
-                'faces_count': person_data['faces_count'],
-                'embeddings_count': person_data['embeddings_count']
-            })
+                'faces_count': person_data.get('faces_count', 0),
+                'embeddings_count': person_data.get('embeddings_count', 0),
+                'features_count': person_data.get('features_count', 0)
+            }
+            # Add train/val stats if available
+            if 'train_images_count' in person_data:
+                stats['train_images_count'] = person_data['train_images_count']
+                stats['val_images_count'] = person_data['val_images_count']
+                stats['train_features_count'] = person_data.get('train_features_count', 0)
+                stats['val_features_count'] = person_data.get('val_features_count', 0)
+            person_stats.append(stats)
     
     return render_template('person_recognition/dataset_details.html',
                          dataset_name=dataset_name,
@@ -178,6 +186,9 @@ def train_model():
         dataset_name = data.get('dataset_name')
         model_type = data.get('model_type', 'svm')
         model_name = data.get('model_name', None)
+        target_accuracy = data.get('target_accuracy', 0.9)
+        max_iterations = data.get('max_iterations', 10)
+        validate_each_person = data.get('validate_each_person', True)
         
         if not dataset_name:
             return jsonify({'success': False, 'error': 'No dataset specified'})
@@ -207,9 +218,18 @@ def train_model():
         if unique_classes < len(person_ids):
             print(f"⚠️  Warning: {len(person_ids) - unique_classes} person(s) have no valid training data")
         
-        # Train model
+        # Train model with continuous training parameters
         trainer = PersonRecognitionTrainer()
-        results = trainer.train_model(X, y, person_ids, model_type, model_name)
+        # Store dataset name for validation data loading
+        trainer.current_dataset_name = dataset_name
+        results = trainer.train_model(
+            X, y, person_ids, 
+            model_type=model_type, 
+            model_name=model_name,
+            target_accuracy=target_accuracy,
+            max_iterations=max_iterations,
+            validate_each_person=validate_each_person
+        )
         
         return jsonify({
             'success': True,
@@ -265,13 +285,9 @@ def test_video():
         video_file.save(str(video_path))
         
         # Process video
-        try:
-            from hr_management.processing.person_recognition_inference import PersonRecognitionInference
-            inference_class = PersonRecognitionInference
-        except ImportError:
-            # Use simple version if face_recognition is not available
-            from hr_management.processing.person_recognition_inference_simple import PersonRecognitionInferenceSimple
-            inference_class = PersonRecognitionInferenceSimple
+        # Always use simple version for consistency with training
+        from hr_management.processing.person_recognition_inference_simple import PersonRecognitionInferenceSimple
+        inference_class = PersonRecognitionInferenceSimple
         
         confidence_threshold = float(request.form.get('confidence_threshold', 0.6))
         inference = inference_class(model_name, confidence_threshold)
@@ -316,18 +332,26 @@ def test_image():
         image_file.save(str(image_path))
         
         # Process image
-        try:
-            from hr_management.processing.person_recognition_inference import PersonRecognitionInference
-            inference_class = PersonRecognitionInference
-        except ImportError:
-            # Use simple version if face_recognition is not available
-            from hr_management.processing.person_recognition_inference_simple import PersonRecognitionInferenceSimple
-            inference_class = PersonRecognitionInferenceSimple
+        # Always use simple version for consistency with training
+        from hr_management.processing.person_recognition_inference_simple import PersonRecognitionInferenceSimple
+        inference_class = PersonRecognitionInferenceSimple
         
         confidence_threshold = float(request.form.get('confidence_threshold', 0.6))
+        is_pre_cropped = request.form.get('is_pre_cropped', 'false').lower() == 'true'
+        
+        print(f"🔍 Test image request - Model: {model_name}, Threshold: {confidence_threshold}, Pre-cropped: {is_pre_cropped}")
+        
         inference = inference_class(model_name, confidence_threshold)
         
-        results = inference.process_image(str(image_path))
+        # Use appropriate method based on whether image is pre-cropped
+        if is_pre_cropped and hasattr(inference, 'process_cropped_image'):
+            print(f"📸 Processing as pre-cropped image: {image_path}")
+            results = inference.process_cropped_image(str(image_path))
+        else:
+            print(f"📸 Processing as full image: {image_path}")
+            results = inference.process_image(str(image_path))
+        
+        print(f"📊 Results: {results}")
         
         # Clean up
         shutil.rmtree(temp_dir)

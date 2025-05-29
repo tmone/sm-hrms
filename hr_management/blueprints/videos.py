@@ -463,10 +463,9 @@ def extract_ocr(id):
             flash('OCR extraction is only available for completed videos', 'warning')
             return redirect(url_for('videos.detail', id=id))
         
-        # Check if OCR already extracted
-        if video.ocr_extraction_done and video.ocr_location:
-            flash('OCR data has already been extracted for this video', 'info')
-            return redirect(url_for('videos.detail', id=id))
+        # Allow re-extraction if requested
+        if video.ocr_extraction_done:
+            flash('Re-extracting OCR data...', 'info')
         
         # Get video path
         video_path = None

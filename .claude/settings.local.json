@@ -38,8 +38,10 @@
       "Bash(sed:*)",
       "Bash(cat:*)",
       "Bash(pip install:*)",
-      "Bash(.venv/Scripts/python.exe tests/test_dashboard_fix.py:*)"
+      "Bash(.venv/Scripts/python.exe tests/test_dashboard_fix.py:*)",
+      "Bash(.venv/Scripts/python.exe:*)"
     ],
     "deny": []
-  }
+  },
+  "enableAllProjectMcpServers": false
 }

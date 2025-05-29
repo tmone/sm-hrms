@@ -53,7 +53,17 @@ def get_dashboard_stats():
     # Detection statistics
     total_detections = DetectedPerson.query.count()
     identified_persons = DetectedPerson.query.filter_by(is_identified=True).count()
-    unique_persons = DetectedPerson.query.with_entities(func.count(func.distinct(DetectedPerson.person_id))).scalar() or 0
+    
+    # Count persons from filesystem (reviewed persons with images)
+    persons_dir = os.path.join(current_app.root_path, 'processing', 'outputs', 'persons')
+    unique_persons = 0
+    
+    if os.path.exists(persons_dir):
+        for person_dir in os.listdir(persons_dir):
+            if os.path.isdir(os.path.join(persons_dir, person_dir)) and person_dir.startswith('PERSON-'):
+                metadata_path = os.path.join(persons_dir, person_dir, 'metadata.json')
+                if os.path.exists(metadata_path):
+                    unique_persons += 1
     
     # Person recognition model statistics
     models_path = os.path.join(current_app.root_path, 'models', 'person_recognition')

@@ -186,6 +186,11 @@
                         <div class="p-4 border-b border-gray-200 dark:border-gray-600">
                             <h3 class="font-semibold text-lg text-gray-800 dark:text-white">
                                 {{ person.person_id }}
+                                {% if person.missing_filesystem %}
+                                <span class="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded" title="Person data missing from filesystem">
+                                    <i class="fas fa-exclamation-triangle"></i> Missing Files
+                                </span>
+                                {% endif %}
                             </h3>
                             <p class="text-sm text-gray-500 dark:text-gray-400 truncate" title="{{ person.video_filename }}">
                                 <i class="fas fa-video mr-1"></i>{{ person.video_filename }}
@@ -236,10 +241,18 @@
                         <!-- Action Buttons -->
                         <div class="p-4 bg-gray-100 dark:bg-gray-800 rounded-b-lg">
                             <div class="grid grid-cols-2 gap-2">
+                                {% if person.missing_filesystem %}
+                                <button disabled 
+                                        class="bg-gray-300 text-gray-500 py-2 px-3 rounded text-sm cursor-not-allowed"
+                                        title="Person files missing from filesystem">
+                                    <i class="fas fa-images mr-1"></i>View All
+                                </button>
+                                {% else %}
                                 <button onclick="viewPersonImages('{{ person.person_id }}')" 
                                         class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded text-sm transition duration-150 ease-in-out">
                                     <i class="fas fa-images mr-1"></i>View All
                                 </button>
+                                {% endif %}
                                 {% if person.video_id %}
                                 <a href="{{ url_for('videos.detail', id=person.video_id) }}" 
                                    class="bg-gray-500 hover:bg-gray-600 text-white py-2 px-3 rounded text-sm transition duration-150 ease-in-out text-center">

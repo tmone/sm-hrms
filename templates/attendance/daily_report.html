@@ -80,8 +80,49 @@
         </div>
     </div>
 
-    <!-- Attendance Table -->
-    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+    <!-- Toggle View Buttons -->
+    <div class="flex justify-end mb-4 space-x-2">
+        <button onclick="toggleView('narrative')" id="narrativeBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Narrative View</button>
+        <button onclick="toggleView('table')" id="tableBtn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">Table View</button>
+    </div>
+
+    <!-- Narrative View -->
+    <div id="narrativeView" class="space-y-4 mb-8">
+        {% set grouped_data = {} %}
+        {% for record in attendance_data %}
+            {% set key = record.location ~ '_' ~ record.video_filename %}
+            {% if key not in grouped_data %}
+                {% set _ = grouped_data.update({key: {'location': record.location, 'date': record.date, 'video_filename': record.video_filename, 'persons': []}}) %}
+            {% endif %}
+            {% set _ = grouped_data[key]['persons'].append(record) %}
+        {% endfor %}
+        
+        {% for key, group in grouped_data.items() %}
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="font-semibold text-gray-800 text-lg mb-3">From the {{ group.location }} video on {{ group.date.strftime('%B %d, %Y') }}:</h3>
+            <ul class="space-y-2 text-gray-700">
+                {% for person in group.persons %}
+                <li class="ml-4 flex items-start">
+                    <span class="text-blue-600 mr-2">•</span>
+                    <span>
+                        Person {{ person.person_id.replace('PERSON-', '').lstrip('0') }} was present from 
+                        <span class="font-medium">{{ person.clock_in.strftime('%H:%M:%S') if person.clock_in else person.first_seen.strftime('%H:%M:%S') }}</span> to 
+                        <span class="font-medium">{{ person.clock_out.strftime('%H:%M:%S') if person.clock_out else person.last_seen.strftime('%H:%M:%S') }}</span>
+                        <span class="text-gray-600">({{ format_duration(person.duration_seconds) }})</span>
+                    </span>
+                </li>
+                {% endfor %}
+                <li class="ml-4 text-gray-600 mt-3">
+                    <span class="font-medium">Location:</span> {{ group.location }}<br>
+                    <span class="font-medium">Date:</span> {{ group.date.strftime('%A, %B %d, %Y') }}
+                </li>
+            </ul>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Table View (Hidden by default) -->
+    <div id="tableView" class="bg-white rounded-lg shadow-md overflow-hidden hidden">
         <div class="px-6 py-4 border-b border-gray-200">
             <h3 class="text-lg font-semibold text-gray-800">Attendance Details</h3>
         </div>
@@ -190,7 +231,28 @@
     {% endif %}
 </div>
 
-<!-- Import datetime for template -->
-{% import 'datetime' as datetime %}
-{% set timedelta = datetime.timedelta %}
+<script>
+function toggleView(viewType) {
+    const narrativeView = document.getElementById('narrativeView');
+    const tableView = document.getElementById('tableView');
+    const narrativeBtn = document.getElementById('narrativeBtn');
+    const tableBtn = document.getElementById('tableBtn');
+    
+    if (viewType === 'narrative') {
+        narrativeView.classList.remove('hidden');
+        tableView.classList.add('hidden');
+        narrativeBtn.classList.remove('bg-gray-300', 'text-gray-700');
+        narrativeBtn.classList.add('bg-blue-600', 'text-white');
+        tableBtn.classList.remove('bg-blue-600', 'text-white');
+        tableBtn.classList.add('bg-gray-300', 'text-gray-700');
+    } else {
+        narrativeView.classList.add('hidden');
+        tableView.classList.remove('hidden');
+        tableBtn.classList.remove('bg-gray-300', 'text-gray-700');
+        tableBtn.classList.add('bg-blue-600', 'text-white');
+        narrativeBtn.classList.remove('bg-blue-600', 'text-white');
+        narrativeBtn.classList.add('bg-gray-300', 'text-gray-700');
+    }
+}
+</script>
 {% endblock %}

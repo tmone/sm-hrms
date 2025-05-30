@@ -43,7 +43,9 @@
       "Bash(for:*)",
       "Bash(do echo \"=== $f ===\")",
       "Bash(done)",
-      "Bash(.venv/bin/python:*)"
+      "Bash(.venv/bin/python:*)",
+      "Bash(curl:*)",
+      "Bash(timeout:*)"
     ],
     "deny": []
   },

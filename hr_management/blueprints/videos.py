@@ -877,6 +877,24 @@ def api_detections(id):
     
     return jsonify(response)
 
+@videos_bp.route('/batch-ocr')
+@login_required
+def batch_ocr():
+    """Show batch OCR extraction page"""
+    Video = current_app.Video
+    db = current_app.db
+    
+    # Get all videos
+    all_videos = Video.query.filter_by(status='completed').all()
+    videos_with_ocr = [v for v in all_videos if v.ocr_extraction_done]
+    videos_without_ocr = [v for v in all_videos if not v.ocr_extraction_done]
+    
+    return render_template('videos/batch_ocr.html',
+                         total_videos=len(all_videos),
+                         with_ocr=len(videos_with_ocr),
+                         without_ocr=len(videos_without_ocr),
+                         videos_without_ocr=videos_without_ocr)
+
 @videos_bp.route('/debug/<int:id>')
 @login_required
 def debug_video(id):

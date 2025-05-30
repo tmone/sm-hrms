@@ -147,6 +147,22 @@
                 </a>
             </li>
             
+            <!-- Settings Section -->
+            <li class="mt-6">
+                <div class="px-4 py-2 text-blue-200 text-sm font-semibold uppercase tracking-wide">
+                    System
+                </div>
+            </li>
+            
+            <li>
+                <a href="{{ url_for('settings.index') }}" 
+                   class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors
+                          {% if request.endpoint and request.endpoint.startswith('settings') %}bg-blue-700{% endif %}">
+                    <i class="fas fa-cog mr-3"></i>
+                    Settings
+                </a>
+            </li>
+            
             <!-- System Status -->
             <li class="mt-6 border-t border-blue-600 pt-4">
                 <div class="px-4 py-2">

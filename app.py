@@ -43,7 +43,12 @@ def create_app(config_name=None):
     
     # Configuration
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///stepmedia_hrm.db')
+    # Use instance folder for database
+    instance_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance')
+    if not os.path.exists(instance_path):
+        os.makedirs(instance_path)
+    db_path = os.path.join(instance_path, 'stepmedia_hrm.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', f'sqlite:///{db_path}')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB file upload limit
     
@@ -422,6 +427,106 @@ def create_app(config_name=None):
                 'model_name': self.model.name if self.model else None
             }
 
+    # System Settings Model
+    class SystemSettings(db.Model):
+        """System-wide configuration settings"""
+        __tablename__ = 'system_settings'
+        
+        id = db.Column(db.Integer, primary_key=True)
+        key = db.Column(db.String(100), unique=True, nullable=False)
+        value = db.Column(db.Text)
+        value_type = db.Column(db.String(20), default='string')
+        category = db.Column(db.String(50), default='general')
+        description = db.Column(db.Text)
+        is_sensitive = db.Column(db.Boolean, default=False)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow)
+        updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        
+        # Default settings
+        DEFAULT_SETTINGS = {
+            'general': {
+                'app_name': {'value': 'StepMedia HRM', 'type': 'string', 'description': 'Application name'},
+                'timezone': {'value': 'Asia/Bangkok', 'type': 'string', 'description': 'Default timezone'},
+                'language': {'value': 'en', 'type': 'string', 'description': 'Default language'}
+            },
+            'date_time': {
+                'date_format': {'value': 'DD-MM-YYYY', 'type': 'string', 'description': 'Date format for display'},
+                'time_format': {'value': '24h', 'type': 'string', 'description': 'Time format (12h or 24h)'},
+                'ocr_date_format': {'value': 'DD-MM-YYYY', 'type': 'string', 'description': 'Expected date format in OCR'}
+            },
+            'video_processing': {
+                'max_upload_size_mb': {'value': '2048', 'type': 'integer', 'description': 'Max video size in MB'},
+                'auto_process_on_upload': {'value': 'true', 'type': 'boolean', 'description': 'Auto process videos'},
+                'default_fps': {'value': '30', 'type': 'integer', 'description': 'Default FPS'},
+                'ocr_sample_interval': {'value': '10', 'type': 'integer', 'description': 'OCR sampling interval (seconds)'}
+            },
+            'attendance': {
+                'work_start_time': {'value': '08:00', 'type': 'string', 'description': 'Work start time'},
+                'work_end_time': {'value': '17:00', 'type': 'string', 'description': 'Work end time'},
+                'late_threshold_minutes': {'value': '15', 'type': 'integer', 'description': 'Late threshold (minutes)'},
+                'minimum_presence_seconds': {'value': '5', 'type': 'integer', 'description': 'Min presence time'}
+            }
+        }
+        
+        def get_typed_value(self):
+            """Get value converted to its proper type"""
+            if self.value_type == 'integer':
+                return int(self.value) if self.value else 0
+            elif self.value_type == 'boolean':
+                return self.value.lower() in ('true', '1', 'yes', 'on')
+            else:
+                return self.value
+        
+        @classmethod
+        def get_setting(cls, key, default=None):
+            """Get a setting value by key"""
+            setting = cls.query.filter_by(key=key).first()
+            return setting.get_typed_value() if setting else default
+        
+        @classmethod
+        def set_setting(cls, key, value, value_type='string', category='general', description=None):
+            """Set a setting value"""
+            setting = cls.query.filter_by(key=key).first()
+            if not setting:
+                setting = cls(key=key, value_type=value_type, category=category, description=description)
+                db.session.add(setting)
+            
+            if value_type == 'boolean':
+                setting.value = 'true' if value else 'false'
+            else:
+                setting.value = str(value)
+            
+            setting.value_type = value_type
+            if category:
+                setting.category = category
+            if description:
+                setting.description = description
+            
+            db.session.commit()
+            return setting
+        
+        @classmethod
+        def initialize_defaults(cls):
+            """Initialize default settings if they don't exist"""
+            for category, settings in cls.DEFAULT_SETTINGS.items():
+                for key, config in settings.items():
+                    existing = cls.query.filter_by(key=key).first()
+                    if not existing:
+                        cls.set_setting(key=key, value=config['value'], value_type=config['type'],
+                                      category=category, description=config['description'])
+            db.session.commit()
+        
+        @classmethod
+        def get_all_by_category(cls):
+            """Get all settings grouped by category"""
+            settings = cls.query.order_by(cls.category, cls.key).all()
+            grouped = {}
+            for setting in settings:
+                if setting.category not in grouped:
+                    grouped[setting.category] = []
+                grouped[setting.category].append(setting)
+            return grouped
+    
     # Store model and db references in app for blueprints to access
     app.db = db
     app.Employee = Employee
@@ -431,6 +536,7 @@ def create_app(config_name=None):
     app.FaceDataset = FaceDataset
     app.TrainedModel = TrainedModel
     app.RecognitionResult = RecognitionResult
+    app.SystemSettings = SystemSettings
     
     # Set up user loader now that Employee model is defined
     @login_manager.user_loader
@@ -440,6 +546,10 @@ def create_app(config_name=None):
     # Initialize database and create tables
     with app.app_context():
         db.create_all()
+        
+        # Initialize default settings
+        SystemSettings.initialize_defaults()
+        print("✅ System settings initialized")
         
         # Create demo admin user if it doesn't exist
         admin = Employee.query.filter_by(email='admin@stepmedia.com').first()
@@ -505,6 +615,10 @@ def create_app(config_name=None):
         # Attendance blueprint
         from hr_management.blueprints.attendance import attendance_bp
         app.register_blueprint(attendance_bp, url_prefix='/attendance')
+        
+        # Settings blueprint
+        from hr_management.blueprints.settings import settings_bp
+        app.register_blueprint(settings_bp, url_prefix='/settings')
         
         print("All blueprints registered successfully")
         

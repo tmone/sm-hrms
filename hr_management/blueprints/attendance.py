@@ -3,10 +3,10 @@ Attendance Reports Blueprint
 Generate attendance reports based on OCR extracted timestamps and locations
 """
 
-from flask import Blueprint, render_template, request, jsonify, current_app, send_file
+from flask import Blueprint, render_template, request, jsonify, current_app, send_file, flash
 from flask_login import login_required
 from datetime import datetime, timedelta, date
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, distinct
 import pandas as pd
 import io
 
@@ -17,6 +17,70 @@ attendance_bp = Blueprint('attendance', __name__, url_prefix='/attendance')
 def index():
     """Display attendance reports dashboard"""
     return render_template('attendance/index.html')
+
+@attendance_bp.route('/test')
+def test():
+    """Test page for attendance UI (no login required)"""
+    return render_template('attendance/test.html')
+
+@attendance_bp.route('/demo')
+def demo():
+    """Demo page showing what attendance should look like (no login required)"""
+    return render_template('attendance/demo.html')
+
+@attendance_bp.route('/summary')
+@login_required
+def summary():
+    """Get attendance summary statistics"""
+    db = current_app.db
+    Video = current_app.Video
+    DetectedPerson = current_app.DetectedPerson
+    
+    # Get days parameter (default 7 days)
+    days = request.args.get('days', 7, type=int)
+    end_date = date.today()
+    start_date = end_date - timedelta(days=days)
+    
+    # Get videos with OCR data
+    total_videos = Video.query.filter(
+        Video.ocr_extraction_done == True
+    ).count()
+    
+    # Get unique locations
+    locations_query = db.session.query(
+        Video.ocr_location,
+        func.count(Video.id).label('count')
+    ).filter(
+        Video.ocr_location.isnot(None)
+    ).group_by(Video.ocr_location).all()
+    
+    locations = {loc: count for loc, count in locations_query}
+    
+    # Get daily statistics
+    daily_stats = {}
+    current_date = start_date
+    while current_date <= end_date:
+        # Count unique persons for this date
+        person_count = db.session.query(
+            func.count(func.distinct(DetectedPerson.person_id))
+        ).filter(
+            DetectedPerson.attendance_date == current_date
+        ).scalar() or 0
+        
+        daily_stats[current_date.isoformat()] = {
+            'total_persons': person_count,
+            'date': current_date.isoformat()
+        }
+        
+        current_date += timedelta(days=1)
+    
+    return jsonify({
+        'total_videos': total_videos,
+        'locations': locations,
+        'daily_stats': daily_stats,
+        'start_date': start_date.isoformat(),
+        'end_date': end_date.isoformat()
+    })
 
 @attendance_bp.route('/daily')
 @login_required
@@ -65,7 +129,18 @@ def daily_report():
         person_attendance = {}
         
         for detection in detections:
-            person_id = f"PERSON-{detection.person_id:04d}" if detection.person_id else f"UNKNOWN-{detection.id}"
+            # Use person_code if available, otherwise use person_id
+            if hasattr(detection, 'person_code') and detection.person_code:
+                person_id = detection.person_code
+            elif detection.person_id:
+                # person_id might be a string, so convert to int first
+                try:
+                    person_id = f"PERSON-{int(detection.person_id):04d}"
+                except (ValueError, TypeError):
+                    # If conversion fails, use as-is
+                    person_id = f"PERSON-{detection.person_id}"
+            else:
+                person_id = f"UNKNOWN-{detection.id}"
             
             if person_id not in person_attendance:
                 person_attendance[person_id] = {
@@ -78,41 +153,98 @@ def daily_report():
                     'detections': []
                 }
             
-            # Calculate time from video timestamp and detection frame time
-            if video.ocr_video_date and detection.start_time is not None:
-                detection_time = datetime.combine(video.ocr_video_date, datetime.min.time()) + timedelta(seconds=detection.start_time)
+            # Calculate time from video timestamp and detection timestamp
+            if video.ocr_video_date and detection.timestamp is not None:
+                # If we have OCR time, use it as base
+                if video.ocr_video_time:
+                    base_time = datetime.combine(video.ocr_video_date, video.ocr_video_time)
+                else:
+                    base_time = datetime.combine(video.ocr_video_date, datetime.min.time())
+                
+                detection_time = base_time + timedelta(seconds=detection.timestamp)
                 
                 if not person_attendance[person_id]['first_seen'] or detection_time < person_attendance[person_id]['first_seen']:
                     person_attendance[person_id]['first_seen'] = detection_time
-                    
-                if detection.end_time:
-                    end_time = datetime.combine(video.ocr_video_date, datetime.min.time()) + timedelta(seconds=detection.end_time)
-                    if not person_attendance[person_id]['last_seen'] or end_time > person_attendance[person_id]['last_seen']:
-                        person_attendance[person_id]['last_seen'] = end_time
+                
+                # For last seen, use the same timestamp (we'll update this for each detection)
+                if not person_attendance[person_id]['last_seen'] or detection_time > person_attendance[person_id]['last_seen']:
+                    person_attendance[person_id]['last_seen'] = detection_time
             
             person_attendance[person_id]['detections'].append({
-                'start_time': detection.start_time,
-                'end_time': detection.end_time,
+                'timestamp': detection.timestamp,
                 'confidence': detection.confidence
             })
         
-        # Add to attendance data
+        # Add video info and attendance data
         for person_data in person_attendance.values():
             if person_data['first_seen'] and person_data['last_seen']:
-                duration = (person_data['last_seen'] - person_data['first_seen']).total_seconds() / 60  # in minutes
-                person_data['duration_minutes'] = round(duration, 2)
+                duration = (person_data['last_seen'] - person_data['first_seen']).total_seconds()
+                person_data['duration_seconds'] = int(duration)
+                person_data['duration_minutes'] = round(duration / 60, 2)
                 person_data['detection_count'] = len(person_data['detections'])
                 person_data['avg_confidence'] = sum(d['confidence'] for d in person_data['detections']) / len(person_data['detections'])
+                person_data['video_filename'] = video.filename
+                person_data['ocr_time'] = video.ocr_video_time
+                # Calculate actual clock times if OCR time is available
+                if video.ocr_video_time and person_data['detections']:
+                    first_detection = min(person_data['detections'], key=lambda x: x['timestamp'])
+                    last_detection = max(person_data['detections'], key=lambda x: x['timestamp'])
+                    
+                    # Convert OCR time to datetime and add seconds
+                    base_datetime = datetime.combine(video.ocr_video_date, video.ocr_video_time)
+                    person_data['clock_in'] = (base_datetime + timedelta(seconds=first_detection['timestamp'])).time()
+                    person_data['clock_out'] = (base_datetime + timedelta(seconds=last_detection['timestamp'])).time()
                 attendance_data.append(person_data)
     
     # Sort by location and first seen time
     attendance_data.sort(key=lambda x: (x['location'] or '', x['first_seen'] or datetime.min))
     
+    # Check if JSON format requested
+    if request.args.get('format') == 'json':
+        # Convert datetime objects to strings for JSON serialization
+        for record in attendance_data:
+            if record['first_seen']:
+                record['first_seen'] = record['first_seen'].isoformat()
+            if record['last_seen']:
+                record['last_seen'] = record['last_seen'].isoformat()
+            if record['date']:
+                record['date'] = record['date'].isoformat()
+            # Remove detections array from JSON response
+            record.pop('detections', None)
+        
+        return jsonify({
+            'report_date': report_date.isoformat(),
+            'locations': locations,
+            'location_filter': location_filter,
+            'attendance_data': attendance_data
+        })
+    
+    def format_duration(seconds):
+        """Format duration in seconds to human readable format"""
+        if not seconds:
+            return "0 seconds"
+        
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        
+        parts = []
+        if hours > 0:
+            parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+        if minutes > 0:
+            parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+        if secs > 0 or not parts:
+            parts.append(f"{secs} second{'s' if secs != 1 else ''}")
+        
+        return " ".join(parts)
+    
     return render_template('attendance/daily_report.html',
                          report_date=report_date,
                          locations=locations,
                          location_filter=location_filter,
-                         attendance_data=attendance_data)
+                         attendance_data=attendance_data,
+                         timedelta=timedelta,
+                         format_duration=format_duration)
 
 @attendance_bp.route('/export')
 @login_required
@@ -152,17 +284,51 @@ def export_report():
     for video in videos:
         detections = DetectedPerson.query.filter_by(video_id=video.id).all()
         
+        # Group detections by person_id to get first/last seen times
+        person_detections = {}
         for detection in detections:
-            if video.ocr_video_date and detection.start_time is not None:
+            if detection.person_id:
+                if detection.person_id not in person_detections:
+                    person_detections[detection.person_id] = []
+                person_detections[detection.person_id].append(detection)
+        
+        # Process each person's detections
+        for person_id, person_dets in person_detections.items():
+            if video.ocr_video_date and len(person_dets) > 0:
+                # Get timestamps
+                timestamps = [d.timestamp for d in person_dets if d.timestamp is not None]
+                if not timestamps:
+                    continue
+                
+                first_timestamp = min(timestamps)
+                last_timestamp = max(timestamps)
+                
+                # Calculate actual times
+                base_time = datetime.combine(video.ocr_video_date, video.ocr_video_time) if video.ocr_video_time else datetime.combine(video.ocr_video_date, datetime.min.time())
+                first_seen = base_time + timedelta(seconds=first_timestamp)
+                last_seen = base_time + timedelta(seconds=last_timestamp)
+                duration_minutes = round((last_timestamp - first_timestamp) / 60, 2)
+                
+                # Format person ID
+                try:
+                    person_id_str = f"PERSON-{int(person_id):04d}"
+                except (ValueError, TypeError):
+                    person_id_str = f"PERSON-{person_id}"
+                
+                # Get average confidence
+                confidences = [d.confidence for d in person_dets if d.confidence is not None]
+                avg_confidence = round(sum(confidences) / len(confidences), 2) if confidences else 0
+                
                 record = {
                     'Date': video.ocr_video_date.strftime('%Y-%m-%d'),
                     'Location': video.ocr_location or 'Unknown',
-                    'Person ID': f"PERSON-{detection.person_id:04d}" if detection.person_id else f"UNKNOWN-{detection.id}",
-                    'Employee ID': detection.employee_id or 'Not Assigned',
-                    'First Seen': datetime.combine(video.ocr_video_date, datetime.min.time()) + timedelta(seconds=detection.start_time),
-                    'Last Seen': datetime.combine(video.ocr_video_date, datetime.min.time()) + timedelta(seconds=detection.end_time) if detection.end_time else None,
-                    'Duration (minutes)': round((detection.end_time - detection.start_time) / 60, 2) if detection.end_time else 0,
-                    'Confidence': round(detection.confidence, 2) if detection.confidence else 0,
+                    'Person ID': person_id_str,
+                    'Employee ID': person_dets[0].employee_id or 'Not Assigned',
+                    'First Seen': first_seen,
+                    'Last Seen': last_seen,
+                    'Duration (minutes)': duration_minutes,
+                    'Detections': len(person_dets),
+                    'Avg Confidence': avg_confidence,
                     'Video': video.filename
                 }
                 all_attendance.append(record)
@@ -178,33 +344,39 @@ def export_report():
     
     # Generate file
     if format == 'excel':
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name='Attendance Report', index=False)
+        try:
+            # Try to use openpyxl for Excel export
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='Attendance Report', index=False)
+                
+                # Auto-adjust column widths
+                worksheet = writer.sheets['Attendance Report']
+                for column in worksheet.columns:
+                    max_length = 0
+                    column = [cell for cell in column]
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = min(max_length + 2, 50)
+                    worksheet.column_dimensions[column[0].column_letter].width = adjusted_width
             
-            # Auto-adjust column widths
-            worksheet = writer.sheets['Attendance Report']
-            for column in worksheet.columns:
-                max_length = 0
-                column = [cell for cell in column]
-                for cell in column:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                adjusted_width = min(max_length + 2, 50)
-                worksheet.column_dimensions[column[0].column_letter].width = adjusted_width
-        
-        output.seek(0)
-        
-        filename = f"attendance_report_{start_date}_{end_date}.xlsx"
-        return send_file(output, 
-                        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        as_attachment=True,
-                        download_name=filename)
+            output.seek(0)
+            
+            filename = f"attendance_report_{start_date}_{end_date}.xlsx"
+            return send_file(output, 
+                            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            as_attachment=True,
+                            download_name=filename)
+        except ImportError:
+            # If openpyxl is not installed, fall back to CSV
+            flash('Excel export requires openpyxl. Exporting as CSV instead.', 'warning')
+            format = 'csv'
     
-    elif format == 'csv':
+    if format == 'csv' or format == 'excel':  # Excel falls through to here if openpyxl missing
         output = io.StringIO()
         df.to_csv(output, index=False)
         output.seek(0)
@@ -217,79 +389,3 @@ def export_report():
     
     else:
         return jsonify({'error': 'Invalid format. Use excel or csv'}), 400
-
-@attendance_bp.route('/summary')
-@login_required
-def attendance_summary():
-    """Get attendance summary statistics"""
-    db = current_app.db
-    Video = current_app.Video
-    DetectedPerson = current_app.DetectedPerson
-    
-    # Get date range
-    days = int(request.args.get('days', 7))
-    end_date = date.today()
-    start_date = end_date - timedelta(days=days-1)
-    
-    # Get videos with OCR data
-    videos = Video.query.filter(
-        Video.ocr_video_date >= start_date,
-        Video.ocr_video_date <= end_date,
-        Video.ocr_extraction_done == True
-    ).all()
-    
-    # Calculate statistics
-    stats = {
-        'total_days': days,
-        'total_videos': len(videos),
-        'locations': {},
-        'daily_stats': {},
-        'unique_persons': set()
-    }
-    
-    for video in videos:
-        date_str = video.ocr_video_date.strftime('%Y-%m-%d')
-        location = video.ocr_location or 'Unknown'
-        
-        # Initialize daily stats
-        if date_str not in stats['daily_stats']:
-            stats['daily_stats'][date_str] = {
-                'total_persons': 0,
-                'total_detections': 0,
-                'locations': set()
-            }
-        
-        # Initialize location stats
-        if location not in stats['locations']:
-            stats['locations'][location] = {
-                'total_days': 0,
-                'total_persons': 0,
-                'total_detections': 0
-            }
-        
-        # Get detections
-        detections = DetectedPerson.query.filter_by(video_id=video.id).all()
-        unique_persons_in_video = set()
-        
-        for detection in detections:
-            person_id = f"PERSON-{detection.person_id:04d}" if detection.person_id else f"UNKNOWN-{detection.id}"
-            unique_persons_in_video.add(person_id)
-            stats['unique_persons'].add(person_id)
-        
-        # Update stats
-        stats['daily_stats'][date_str]['total_persons'] += len(unique_persons_in_video)
-        stats['daily_stats'][date_str]['total_detections'] += len(detections)
-        stats['daily_stats'][date_str]['locations'].add(location)
-        
-        stats['locations'][location]['total_persons'] += len(unique_persons_in_video)
-        stats['locations'][location]['total_detections'] += len(detections)
-    
-    # Convert sets to counts
-    stats['total_unique_persons'] = len(stats['unique_persons'])
-    stats['unique_persons'] = None  # Remove the set from response
-    
-    # Convert location sets to lists
-    for date_str in stats['daily_stats']:
-        stats['daily_stats'][date_str]['locations'] = list(stats['daily_stats'][date_str]['locations'])
-    
-    return jsonify(stats)

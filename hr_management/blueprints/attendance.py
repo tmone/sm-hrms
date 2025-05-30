@@ -184,11 +184,15 @@ def daily_report():
                 person_data['detection_count'] = len(person_data['detections'])
                 person_data['avg_confidence'] = sum(d['confidence'] for d in person_data['detections']) / len(person_data['detections'])
                 person_data['video_filename'] = video.filename
+                person_data['video_id'] = video.id
                 person_data['ocr_time'] = video.ocr_video_time
                 # Calculate actual clock times if OCR time is available
                 if video.ocr_video_time and person_data['detections']:
                     first_detection = min(person_data['detections'], key=lambda x: x['timestamp'])
                     last_detection = max(person_data['detections'], key=lambda x: x['timestamp'])
+                    
+                    # Store first timestamp for video navigation
+                    person_data['first_timestamp'] = first_detection['timestamp']
                     
                     # Convert OCR time to datetime and add seconds
                     base_datetime = datetime.combine(video.ocr_video_date, video.ocr_video_time)

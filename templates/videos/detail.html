@@ -482,10 +482,17 @@
 <script>
 // Initialize page functionality
 window.addEventListener('load', function() {
+    // Get URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const timestampParam = urlParams.get('t');
+    const personParam = urlParams.get('person');
+    
     // Initialize video detail functionality
     initializeVideoDetail({
         videoId: {{ video.id }},
-        videoStatus: '{{ video.status }}'
+        videoStatus: '{{ video.status }}',
+        seekToTime: timestampParam ? parseFloat(timestampParam) : null,
+        highlightPerson: personParam
     });
     
     // Browser diagnostic information

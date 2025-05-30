@@ -13,6 +13,31 @@ function initializeVideoDetail(config) {
     // Set up event listeners
     setupEventListeners();
     
+    // Handle seekToTime and highlightPerson if provided
+    if (config.seekToTime !== null && config.seekToTime !== undefined) {
+        console.log(`🎯 URL parameters detected - seekToTime: ${config.seekToTime}s, person: ${config.highlightPerson}`);
+        
+        // Wait for video to load then seek to timestamp
+        const video = document.getElementById('videoPlayer');
+        if (video) {
+            const seekToTimestamp = () => {
+                console.log(`⏱️ Seeking video to ${config.seekToTime} seconds`);
+                video.currentTime = config.seekToTime;
+                
+                // If person ID is provided, highlight it in the detection navigator
+                if (config.highlightPerson) {
+                    highlightPersonInNavigator(config.highlightPerson);
+                }
+            };
+            
+            if (video.readyState >= 1) {
+                seekToTimestamp();
+            } else {
+                video.addEventListener('loadedmetadata', seekToTimestamp, { once: true });
+            }
+        }
+    }
+    
     // Initialize progress tracking based on video status
     if (videoStatus === 'converting') {
         console.log('🔄 Video is converting, setting up real-time progress tracking...');
@@ -547,6 +572,36 @@ function highlightDetectionInNavigator(detectionId) {
     if (detectionItem) {
         detectionItem.classList.add('active');
     }
+}
+
+function highlightPersonInNavigator(personId) {
+    console.log(`🔍 Highlighting person ${personId} in navigator`);
+    
+    // Find the person group for this person ID
+    const personGroups = document.querySelectorAll('.person-group');
+    personGroups.forEach(group => {
+        // Check if this group contains the person ID
+        const groupHeader = group.querySelector('.font-medium');
+        if (groupHeader && groupHeader.textContent.includes(personId)) {
+            // Expand this person's detections
+            const detectionsDiv = group.querySelector(`[id^="detections-"]`);
+            const toggleSpan = group.querySelector(`[id^="toggle-"]`);
+            
+            if (detectionsDiv && detectionsDiv.classList.contains('hidden')) {
+                detectionsDiv.classList.remove('hidden');
+                if (toggleSpan) toggleSpan.textContent = '▲';
+            }
+            
+            // Highlight the person group
+            group.style.border = '2px solid #2563eb';
+            group.style.backgroundColor = '#eff6ff';
+            
+            // Scroll the group into view
+            group.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            console.log(`✅ Found and highlighted person ${personId}`);
+        }
+    });
 }
 
 function updateTimeDisplay() {

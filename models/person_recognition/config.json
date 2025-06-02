@@ -1,8 +1,8 @@
 {
-  "default_model": "refined_quick_20250529_165210",
-  "last_updated": "2025-05-29T16:52:12.418994",
-  "note": "Complete model with all visualization data",
-  "auto_refined": true,
-  "refinement_type": "quick",
-  "updated_at": "2025-05-29T16:52:21.603823"
+  "default_model": "fallback_model",
+  "last_updated": "2025-06-02T16:15:00.000000",
+  "note": "Fallback model set to allow deletion of previous default",
+  "auto_refined": false,
+  "refinement_type": "manual",
+  "updated_at": "2025-06-02T16:15:00.000000"
 }

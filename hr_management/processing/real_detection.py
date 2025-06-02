@@ -183,8 +183,16 @@ def detect_persons_yolo(filepath):
         if "yolo" not in _model_cache:
             print("📥 Loading YOLO model...")
             model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'yolov8n.pt')
-            _model_cache["yolo"] = YOLO(model_path)  # Use nano model for speed
-            print("✅ YOLO model loaded")
+            model = YOLO(model_path)  # Use nano model for speed
+            
+            # Configure GPU if available
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                model.to('cuda')
+                print(f"🚀 YOLO model loaded on GPU: {torch.cuda.get_device_name(0)}")
+            else:
+                print("⚠️ YOLO model loaded on CPU (CUDA not available)")
+                
+            _model_cache["yolo"] = model
         
         model = _model_cache["yolo"]
         
@@ -213,9 +221,9 @@ def detect_persons_yolo(filepath):
             # Sample frames to avoid processing every frame
             if frame_number % sample_rate == 0:
                 print(f"🔄 Processing frame {frame_number}/{total_frames} ({(frame_number/total_frames)*100:.1f}%)")
-                
-                # Run YOLO detection
-                results = model(frame, verbose=False)
+                  # Run YOLO detection
+                device = 'cuda' if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
+                results = model(frame, device=device, verbose=False)
                 
                 # Extract person detections (class 0 = person in COCO)
                 for result in results:

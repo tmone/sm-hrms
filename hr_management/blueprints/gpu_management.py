@@ -3,11 +3,24 @@ from flask_login import login_required
 import subprocess
 import sys
 import os
-import torch
-import cv2
 import platform
 import json
 from datetime import datetime
+
+# Optional imports - these may not be available initially
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    TORCH_AVAILABLE = False
+
+try:
+    import cv2
+    OPENCV_AVAILABLE = True
+except ImportError:
+    cv2 = None
+    OPENCV_AVAILABLE = False
 
 gpu_management_bp = Blueprint('gpu_management', __name__, url_prefix='/gpu')
 
@@ -22,33 +35,44 @@ def check_gpu_status():
         'gpu_devices': [],
         'torch_version': None,
         'opencv_cuda': False,
-        'opencv_version': cv2.__version__
+        'opencv_version': None,
+        'torch_available': TORCH_AVAILABLE,
+        'opencv_available': OPENCV_AVAILABLE
     }
     
+    # Check OpenCV version if available
+    if OPENCV_AVAILABLE and cv2:
+        status['opencv_version'] = cv2.__version__
+    
     # Check PyTorch and CUDA
-    try:
-        import torch
-        status['torch_version'] = torch.__version__
-        status['cuda_available'] = torch.cuda.is_available()
-        
-        if status['cuda_available']:
-            status['cuda_version'] = torch.version.cuda
-            for i in range(torch.cuda.device_count()):
-                device_props = torch.cuda.get_device_properties(i)
-                status['gpu_devices'].append({
-                    'index': i,
-                    'name': device_props.name,
-                    'memory_total': f"{device_props.total_memory / 1024**3:.2f} GB",
-                    'compute_capability': f"{device_props.major}.{device_props.minor}"
-                })
-    except Exception as e:
-        status['torch_error'] = str(e)
+    if TORCH_AVAILABLE and torch:
+        try:
+            status['torch_version'] = torch.__version__
+            status['cuda_available'] = torch.cuda.is_available()
+            
+            if status['cuda_available']:
+                status['cuda_version'] = torch.version.cuda
+                for i in range(torch.cuda.device_count()):
+                    device_props = torch.cuda.get_device_properties(i)
+                    status['gpu_devices'].append({
+                        'index': i,
+                        'name': device_props.name,
+                        'memory_total': f"{device_props.total_memory / 1024**3:.2f} GB",
+                        'compute_capability': f"{device_props.major}.{device_props.minor}"
+                    })
+        except Exception as e:
+            status['torch_error'] = str(e)
+    else:
+        status['torch_version'] = 'Not installed'
+        status['torch_error'] = 'PyTorch not available'
     
     # Check OpenCV CUDA support
-    try:
-        build_info = cv2.getBuildInformation()
-        status['opencv_cuda'] = 'CUDA:                      YES' in build_info
-    except:
+    if OPENCV_AVAILABLE and cv2:
+        try:
+            build_info = cv2.getBuildInformation()
+            status['opencv_cuda'] = 'CUDA:                      YES' in build_info
+        except:
+            pass
         pass
     
     # Check NVIDIA driver and CUDA toolkit
@@ -299,8 +323,7 @@ def install_gpu_support():
         
         # Check new status
         new_status = check_gpu_status()
-        
-        # Schedule restart if installation was successful
+          # Schedule restart if installation was successful
         restart_scheduled = False
         if all(r['success'] for r in results):
             # Import here to avoid circular imports
@@ -308,11 +331,14 @@ def install_gpu_support():
             import time
             
             def restart_app():
-                time.sleep(2)  # Give time for response to be sent
+                time.sleep(5)  # Give more time for response to be sent and received
                 try:
+                    print("GPU installation completed. Restarting application to load new libraries...")
                     if platform.system() == 'Windows':
-                        # Windows restart
-                        subprocess.Popen([sys.executable] + sys.argv)
+                        # Windows restart - use a more reliable method
+                        import os
+                        # Exit current process, let process manager restart
+                        os._exit(0)
                     else:
                         # Linux/Mac restart
                         os.execv(sys.executable, [sys.executable] + sys.argv)
@@ -542,3 +568,15 @@ def codec_info():
         return jsonify({
             'error': str(e)
         }), 500
+
+@gpu_management_bp.route('/restart-status')
+@login_required
+def restart_status():
+    """Check if application has restarted after GPU installation"""
+    # This endpoint existing and responding means the app has restarted successfully
+    status = check_gpu_status()
+    return jsonify({
+        'restarted': True,
+        'timestamp': datetime.now().isoformat(),
+        'gpu_status': status
+    })

@@ -1,0 +1,23 @@
+{
+  "name": "fallback_model",
+  "version": "1.0.0",
+  "description": "Basic fallback model for person recognition",
+  "created_at": "2025-06-02T16:12:00.000000",
+  "type": "fallback",
+  "status": "ready",
+  "training_data": {
+    "dataset_size": 0,
+    "unique_persons": 0,
+    "total_images": 0
+  },
+  "performance": {
+    "accuracy": 0.0,
+    "precision": 0.0,
+    "recall": 0.0
+  },
+  "model_files": {
+    "weights": "model.pkl",
+    "config": "config.yaml",
+    "labels": "labels.txt"
+  }
+}

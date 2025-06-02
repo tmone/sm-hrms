@@ -348,16 +348,77 @@ function installGPUSupport() {
         
         // Refresh GPU status
         checkGPUStatus();
-    })
-    .catch(error => {
-        document.getElementById('install-progress').style.display = 'none';
-        document.getElementById('install-gpu-btn').disabled = false;
-        document.getElementById('install-results').innerHTML = 
-            '<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">' +
-            '<div class="flex items-center">' +
-            '<i class="fas fa-times-circle text-red-600 dark:text-red-400 mr-2"></i>' +
-            '<span class="text-red-800 dark:text-red-300">Error installing GPU support: ' + error + '</span>' +
-            '</div></div>';
+    })    .catch(error => {
+        console.log('GPU installation error:', error);
+        
+        // Check if this is a connection reset (expected during app restart)
+        if (error.message.includes('Failed to fetch') || 
+            error.message.includes('network error') ||
+            error.message.includes('ERR_CONNECTION_RESET')) {
+            
+            // This is expected - the app is restarting after installing GPU libraries
+            document.getElementById('install-progress').style.display = 'none';
+            document.getElementById('install-results').innerHTML = 
+                '<div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">' +
+                '<div class="flex items-center">' +
+                '<i class="fas fa-sync-alt fa-spin text-blue-600 dark:text-blue-400 mr-2"></i>' +
+                '<span class="text-blue-800 dark:text-blue-300">' +
+                'GPU installation is processing... The application is restarting to load new libraries. Page will reload automatically.' +
+                '</span>' +
+                '</div></div>';
+            
+            // Try to reload the page after a delay to allow the app to restart
+            let reloadAttempts = 0;
+            const maxAttempts = 12; // Try for up to 60 seconds (12 * 5 seconds)
+            
+            const checkAndReload = () => {
+                reloadAttempts++;
+                if (reloadAttempts >= maxAttempts) {
+                    document.getElementById('install-results').innerHTML = 
+                        '<div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">' +
+                        '<div class="flex items-center">' +
+                        '<i class="fas fa-exclamation-triangle text-yellow-600 dark:text-yellow-400 mr-2"></i>' +
+                        '<span class="text-yellow-800 dark:text-yellow-300">' +
+                        'Installation may have completed, but the application is taking longer than expected to restart. Please refresh the page manually.' +
+                        '</span>' +
+                        '</div></div>';
+                    document.getElementById('install-gpu-btn').disabled = false;
+                    return;
+                }
+                  // Try to check if the server is back up
+                fetch('/gpu/restart-status', { 
+                    method: 'GET',
+                    credentials: 'same-origin'
+                })
+                    .then(response => {
+                        if (response.ok) {
+                            // Server is back, reload the page
+                            window.location.reload();
+                        } else {
+                            // Server not ready yet, try again
+                            setTimeout(checkAndReload, 5000);
+                        }
+                    })
+                    .catch(() => {
+                        // Server still not ready, try again
+                        setTimeout(checkAndReload, 5000);
+                    });
+            };
+            
+            // Start checking after 5 seconds
+            setTimeout(checkAndReload, 5000);
+            
+        } else {
+            // This is an actual error
+            document.getElementById('install-progress').style.display = 'none';
+            document.getElementById('install-gpu-btn').disabled = false;
+            document.getElementById('install-results').innerHTML = 
+                '<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">' +
+                '<div class="flex items-center">' +
+                '<i class="fas fa-times-circle text-red-600 dark:text-red-400 mr-2"></i>' +
+                '<span class="text-red-800 dark:text-red-300">Error installing GPU support: ' + error + '</span>' +
+                '</div></div>';
+        }
     });
 }
 

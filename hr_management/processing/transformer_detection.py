@@ -457,8 +457,16 @@ def detect_persons_yolo_v8(filepath):
             print("📥 Loading YOLOv8 model...")
             model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'yolov8n.pt')
             model = YOLO(model_path)  # nano model for speed
+            
+            # Configure GPU if available
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                model.to('cuda')
+                print(f"🚀 YOLOv8 model loaded on GPU: {torch.cuda.get_device_name(0)}")
+            else:
+                print("⚠️ YOLOv8 model loaded on CPU (CUDA not available)")
+                
             _model_cache["yolo"] = model
-            print("✅ YOLOv8 model loaded")
+            print("✅ YOLOv8 model configured")
         
         model = _model_cache["yolo"]
         
@@ -484,7 +492,8 @@ def detect_persons_yolo_v8(filepath):
                 print(f"🔄 YOLOv8 processing frame {frame_number}/{total_frames}")
                 
                 # Run YOLO detection
-                results = model(frame, verbose=False)
+                device = 'cuda' if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
+                results = model(frame, device=device, verbose=False)
                 
                 # Extract person detections (class 0 = person)
                 for result in results:

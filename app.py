@@ -537,11 +537,10 @@ def create_app(config_name=None):
     app.TrainedModel = TrainedModel
     app.RecognitionResult = RecognitionResult
     app.SystemSettings = SystemSettings
-    
-    # Set up user loader now that Employee model is defined
+      # Set up user loader now that Employee model is defined
     @login_manager.user_loader
     def load_user(user_id):
-        return Employee.query.get(int(user_id))
+        return db.session.get(Employee, int(user_id))
     
     # Initialize database and create tables
     with app.app_context():
@@ -565,8 +564,7 @@ def create_app(config_name=None):
             db.session.add(admin)
             db.session.commit()
             print("✅ Demo admin user created: admin@stepmedia.com")
-    
-    # Add a simple test route
+      # Add a simple test route
     @app.route('/test')
     def test():
         return "<h1>✅ App is working!</h1><p><a href='/auth/login'>Go to Login</a></p>"
@@ -585,46 +583,64 @@ def create_app(config_name=None):
         import os
         outputs_dir = os.path.join('processing', 'outputs')
         return send_from_directory(outputs_dir, filename)
+      # Register blueprints
+    blueprint_errors = []
     
-    # Register blueprints
+    # Essential blueprints (required for basic functionality)
+    try:
+        from hr_management.blueprints.auth import auth_bp
+        app.register_blueprint(auth_bp, url_prefix='/auth')
+        print("✅ Auth blueprint registered")
+    except ImportError as e:
+        blueprint_errors.append(f"Auth blueprint: {e}")
+        
     try:
         from hr_management.blueprints.dashboard import dashboard_bp
-        from hr_management.blueprints.employees import employees_bp  
-        from hr_management.blueprints.videos import videos_bp
-        from hr_management.blueprints.face_recognition import face_recognition_bp
-        from hr_management.blueprints.auth import auth_bp
-        from hr_management.blueprints.api import api_bp
-        from hr_management.blueprints.persons import persons_bp
-        
         app.register_blueprint(dashboard_bp, url_prefix='/')
-        app.register_blueprint(employees_bp, url_prefix='/employees')
-        app.register_blueprint(videos_bp, url_prefix='/videos')
-        app.register_blueprint(face_recognition_bp, url_prefix='/face-recognition')
-        app.register_blueprint(auth_bp, url_prefix='/auth')
-        app.register_blueprint(api_bp, url_prefix='/api')
-        app.register_blueprint(persons_bp, url_prefix='/persons')
-        
-        # GPU management blueprint
-        from hr_management.blueprints import gpu_management_bp
-        app.register_blueprint(gpu_management_bp, url_prefix='/gpu')
-        
-        # Person recognition blueprint
-        from hr_management.blueprints.person_recognition import person_recognition_bp
-        app.register_blueprint(person_recognition_bp, url_prefix='/person-recognition')
-        
-        # Attendance blueprint
-        from hr_management.blueprints.attendance import attendance_bp
-        app.register_blueprint(attendance_bp, url_prefix='/attendance')
-        
-        # Settings blueprint
-        from hr_management.blueprints.settings import settings_bp
-        app.register_blueprint(settings_bp, url_prefix='/settings')
-        
-        print("All blueprints registered successfully")
-        
+        print("✅ Dashboard blueprint registered")
     except ImportError as e:
-        print(f"Warning: Some blueprints failed to load: {e}")
+        blueprint_errors.append(f"Dashboard blueprint: {e}")
+        
+    # Optional blueprints
+    optional_blueprints = [
+        ('hr_management.blueprints.employees', 'employees_bp', '/employees', 'Employees'),
+        ('hr_management.blueprints.videos', 'videos_bp', '/videos', 'Videos'),
+        ('hr_management.blueprints.face_recognition', 'face_recognition_bp', '/face-recognition', 'Face Recognition'),
+        ('hr_management.blueprints.api', 'api_bp', '/api', 'API'),
+        ('hr_management.blueprints.persons', 'persons_bp', '/persons', 'Persons'),
+        ('hr_management.blueprints.attendance', 'attendance_bp', '/attendance', 'Attendance'),
+        ('hr_management.blueprints.settings', 'settings_bp', '/settings', 'Settings'),
+        ('hr_management.blueprints.person_recognition', 'person_recognition_bp', '/person-recognition', 'Person Recognition'),
+    ]
+    
+    for module_name, blueprint_name, url_prefix, display_name in optional_blueprints:
+        try:
+            module = __import__(module_name, fromlist=[blueprint_name])
+            blueprint = getattr(module, blueprint_name)
+            app.register_blueprint(blueprint, url_prefix=url_prefix)
+            print(f"✅ {display_name} blueprint registered")
+        except ImportError as e:
+            blueprint_errors.append(f"{display_name} blueprint: {e}")
+        except AttributeError as e:
+            blueprint_errors.append(f"{display_name} blueprint: {e}")
+      # GPU management blueprint (special import)
+    try:
+        from hr_management.blueprints import gpu_management_bp
+        if gpu_management_bp is not None:
+            app.register_blueprint(gpu_management_bp, url_prefix='/gpu')
+            print("✅ GPU Management blueprint registered")
+        else:
+            blueprint_errors.append("GPU Management blueprint: Dependencies not available")
+    except ImportError as e:
+        blueprint_errors.append(f"GPU Management blueprint: {e}")
+    
+    if blueprint_errors:
+        print("⚠️  Some blueprints failed to load:")
+        for error in blueprint_errors:
+            print(f"   - {error}")
         print("The application will run with limited functionality")
+    else:
+        print("✅ All blueprints registered successfully")
     
     return app
 

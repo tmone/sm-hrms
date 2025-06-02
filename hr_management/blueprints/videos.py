@@ -2777,15 +2777,13 @@ def start_fallback_processing(video, processing_options, app):
                 
                 print(f"🎯 Found {len(detections)} person detections")
                 
-                # Step 3: Save detections to database
-                print(f"💾 Step 3/4: Saving {len(detections)} detections to database")
+                # Step 3: Save detections to database                print(f"💾 Step 3/4: Saving {len(detections)} detections to database")
                 video_obj.processing_progress = 80
                 db.session.commit()
                 
-                from processing.standalone_tasks import save_detections_to_db
-                # Import DetectedPerson model
-                DetectedPerson = app.DetectedPerson if hasattr(app, 'DetectedPerson') else None
-                save_detections_to_db(video_obj.id, detections, metadata.get('fps', 25), db, DetectedPerson)
+                from processing.tasks import save_detections_to_db
+                # Use the correct save function that matches the DetectedPerson model schema
+                save_detections_to_db(video_obj.id, detections, metadata.get('fps', 25))
                 video_obj.processing_progress = 90
                 db.session.commit()
                 

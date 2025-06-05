@@ -43,40 +43,87 @@ class SharedStateManager:
     
     def __init__(self):
         self.lock = Lock()
+        self.unknown_counter = 0
         self.person_counter = 0
         self.recognized_to_person_id = {}  # recognized_id -> assigned person_id
-        self.track_to_person_id = {}  # track_id -> person_id
-        self.person_id_appearances = defaultdict(list)  # person_id -> [(chunk_idx, frame_num)]
+        self.track_to_unknown_id = {}  # track_id -> unknown_id
+        self.unknown_to_final_id = {}  # unknown_id -> final person_id (assigned later)
+        self.unknown_id_appearances = defaultdict(list)  # unknown_id -> [(chunk_idx, frame_num)]
+        self.unknown_recognition_info = {}  # unknown_id -> recognition info
         
+    def get_next_unknown_id(self) -> str:
+        """Get next available unknown ID"""
+        with self.lock:
+            self.unknown_counter += 1
+            return f"UNKNOWN-{self.unknown_counter:04d}"
+            
     def get_next_person_id(self) -> str:
         """Get next available person ID"""
         with self.lock:
             self.person_counter += 1
             return f"PERSON-{self.person_counter:04d}"
             
-    def assign_person_id(self, recognized_id: Optional[str], track_id: int, 
-                        chunk_idx: int, frame_num: int) -> str:
-        """Assign person ID based on recognition or create new one"""
+    def assign_temporary_id(self, recognized_id: Optional[str], track_id: int, 
+                           chunk_idx: int, frame_num: int) -> str:
+        """Assign temporary UNKNOWN ID during extraction"""
         with self.lock:
-            # Check if this recognized person already has an ID
-            if recognized_id and recognized_id in self.recognized_to_person_id:
-                person_id = self.recognized_to_person_id[recognized_id]
-            # Check if this track already has an ID
-            elif track_id in self.track_to_person_id:
-                person_id = self.track_to_person_id[track_id]
+            # Check if this track already has an unknown ID
+            if track_id in self.track_to_unknown_id:
+                unknown_id = self.track_to_unknown_id[track_id]
             else:
-                # Create new person ID
-                person_id = self.get_next_person_id()
+                # Create new unknown ID
+                unknown_id = self.get_next_unknown_id()
+                self.track_to_unknown_id[track_id] = unknown_id
                 
-                # Store mappings
+                # Store recognition info if available
                 if recognized_id:
-                    self.recognized_to_person_id[recognized_id] = person_id
-                self.track_to_person_id[track_id] = person_id
+                    self.unknown_recognition_info[unknown_id] = {
+                        'recognized_id': recognized_id,
+                        'first_seen': frame_num
+                    }
             
             # Record appearance
-            self.person_id_appearances[person_id].append((chunk_idx, frame_num))
+            self.unknown_id_appearances[unknown_id].append((chunk_idx, frame_num))
             
-            return person_id
+            return unknown_id
+            
+    def finalize_person_ids(self) -> Dict[str, str]:
+        """Convert UNKNOWN IDs to final PERSON IDs after tracking completes"""
+        with self.lock:
+            # Group unknowns by recognized ID
+            recognized_groups = defaultdict(list)
+            unrecognized_unknowns = []
+            
+            for unknown_id, info in self.unknown_recognition_info.items():
+                if info.get('recognized_id'):
+                    recognized_groups[info['recognized_id']].append(unknown_id)
+                else:
+                    unrecognized_unknowns.append(unknown_id)
+                    
+            # Also add unknowns without recognition info
+            for unknown_id in self.track_to_unknown_id.values():
+                if unknown_id not in self.unknown_recognition_info:
+                    unrecognized_unknowns.append(unknown_id)
+            
+            # Assign PERSON IDs to recognized groups
+            for recognized_id, unknown_ids in recognized_groups.items():
+                # Check if we already assigned a PERSON ID to this recognized person
+                if recognized_id in self.recognized_to_person_id:
+                    person_id = self.recognized_to_person_id[recognized_id]
+                else:
+                    person_id = self.get_next_person_id()
+                    self.recognized_to_person_id[recognized_id] = person_id
+                
+                # Map all unknowns in this group to the same person ID
+                for unknown_id in unknown_ids:
+                    self.unknown_to_final_id[unknown_id] = person_id
+                    
+            # Assign unique PERSON IDs to unrecognized unknowns
+            for unknown_id in set(unrecognized_unknowns):
+                person_id = self.get_next_person_id()
+                self.unknown_to_final_id[unknown_id] = person_id
+                
+            return self.unknown_to_final_id
             
     def get_state_dict(self) -> Dict:
         """Get current state as dictionary"""
@@ -241,24 +288,24 @@ class ChunkProcessor:
                             except Exception as e:
                                 logger.debug(f"Recognition failed: {e}")
                         
-                        # Get person ID from shared state
-                        person_id = self.shared_state.assign_person_id(
+                        # Get temporary UNKNOWN ID from shared state
+                        temp_id = self.shared_state.assign_temporary_id(
                             recognized_id, track_id, self.chunk_idx, global_frame_num
                         )
                         
-                        # Save high-quality crop
+                        # Save high-quality crop with temporary ID
                         if crop_quality['blur_score'] > 70:  # Only save good quality crops
-                            crop_filename = f"{person_id}_chunk{self.chunk_idx:03d}_frame{frame_num:06d}.jpg"
+                            crop_filename = f"{temp_id}_chunk{self.chunk_idx:03d}_frame{frame_num:06d}.jpg"
                             crop_path = os.path.join(chunk_output, crop_filename)
                             cv2.imwrite(crop_path, person_crop, [cv2.IMWRITE_JPEG_QUALITY, 95])
                         
-                        # Store detection info
+                        # Store detection info with temporary ID
                         detection = {
                             'chunk_idx': self.chunk_idx,
                             'frame_num': frame_num,
                             'global_frame_num': global_frame_num,
                             'timestamp': global_frame_num / fps,
-                            'person_id': person_id,
+                            'temp_id': temp_id,  # Store temporary ID
                             'recognized_id': recognized_id,
                             'track_id': track_id,
                             'bbox': [int(x1), int(y1), int(x2), int(y2)],
@@ -436,7 +483,22 @@ class ChunkedVideoProcessor:
         # Sort detections by global frame number
         all_detections.sort(key=lambda x: x['global_frame_num'])
         
-        # Generate annotated video
+        # Finalize person IDs - convert UNKNOWN to PERSON
+        logger.info("Finalizing person IDs...")
+        unknown_to_person_mapping = self.shared_state.finalize_person_ids()
+        
+        # Update all detections with final person IDs
+        for detection in all_detections:
+            temp_id = detection.get('temp_id')
+            if temp_id and temp_id in unknown_to_person_mapping:
+                detection['person_id'] = unknown_to_person_mapping[temp_id]
+            else:
+                # This shouldn't happen, but handle it
+                detection['person_id'] = detection.get('temp_id', 'UNKNOWN')
+                
+        logger.info(f"Converted {len(unknown_to_person_mapping)} temporary IDs to person IDs")
+        
+        # Generate annotated video (will filter UNKNOWN IDs)
         annotated_path = self.create_annotated_video(
             video_path, all_detections, output_dir
         )
@@ -455,6 +517,10 @@ class ChunkedVideoProcessor:
             monitoring_file = os.path.join(output_dir, 'gpu_monitoring_history.json')
             self.gpu_manager.save_monitoring_history(monitoring_file)
         
+        # Rename person crops from UNKNOWN to PERSON IDs
+        logger.info("Renaming person crops with final IDs...")
+        self._rename_person_crops(output_dir, unknown_to_person_mapping)
+        
         # Save processing metadata
         metadata = {
             'video_path': video_path,
@@ -463,9 +529,10 @@ class ChunkedVideoProcessor:
             'chunk_duration': self.chunk_duration,
             'num_workers': self.max_workers,
             'total_detections': len(all_detections),
-            'unique_persons': len(self.shared_state.recognized_to_person_id),
+            'unique_persons': len(set(det['person_id'] for det in all_detections 
+                                    if det.get('person_id', '').startswith('PERSON-'))),
             'processing_time': time.time() - start_time,
-            'person_mappings': self.shared_state.get_state_dict(),
+            'person_mappings': unknown_to_person_mapping,
             'gpu_info': {
                 'total_gpus': final_gpu_report['total_gpus'],
                 'gpus_used': self.max_workers if final_gpu_report['total_gpus'] > 0 else 0,
@@ -494,9 +561,15 @@ class ChunkedVideoProcessor:
         """Create browser-compatible annotated video"""
         logger.info("Creating annotated video for browser preview")
         
+        # Filter out any remaining UNKNOWN IDs - only show PERSON IDs
+        filtered_detections = [det for det in detections 
+                             if det.get('person_id', '').startswith('PERSON-')]
+        
+        logger.info(f"Filtered {len(detections) - len(filtered_detections)} UNKNOWN detections")
+        
         # Group detections by frame
         detections_by_frame = defaultdict(list)
-        for det in detections:
+        for det in filtered_detections:
             detections_by_frame[det['global_frame_num']].append(det)
             
         # Open original video
@@ -587,6 +660,42 @@ class ChunkedVideoProcessor:
         logger.info(f"Annotated {annotated_frames} detections across {frame_num} frames")
         
         return annotated_path
+        
+    def _rename_person_crops(self, output_dir: str, unknown_to_person_mapping: Dict[str, str]):
+        """Rename person crop files from UNKNOWN to PERSON IDs"""
+        import glob
+        
+        # Find all chunk directories
+        chunk_dirs = glob.glob(os.path.join(output_dir, "chunk_*"))
+        
+        renamed_count = 0
+        for chunk_dir in chunk_dirs:
+            # Find all UNKNOWN crop files
+            unknown_files = glob.glob(os.path.join(chunk_dir, "UNKNOWN-*.jpg"))
+            
+            for old_path in unknown_files:
+                filename = os.path.basename(old_path)
+                # Extract UNKNOWN ID from filename
+                if filename.startswith("UNKNOWN-"):
+                    parts = filename.split("_")
+                    if len(parts) >= 1:
+                        unknown_id = parts[0]  # UNKNOWN-XXXX
+                        
+                        if unknown_id in unknown_to_person_mapping:
+                            person_id = unknown_to_person_mapping[unknown_id]
+                            # Create new filename
+                            new_filename = filename.replace(unknown_id, person_id)
+                            new_path = os.path.join(chunk_dir, new_filename)
+                            
+                            # Rename file
+                            os.rename(old_path, new_path)
+                            renamed_count += 1
+                        else:
+                            # Remove files without mapping (shouldn't happen)
+                            os.remove(old_path)
+                            logger.warning(f"Removed unmapped file: {filename}")
+                            
+        logger.info(f"Renamed {renamed_count} person crop files")
 
 
 def main():

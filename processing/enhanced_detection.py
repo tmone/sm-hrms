@@ -573,9 +573,15 @@ def process_video_with_enhanced_detection(video_path, output_base_dir="static/up
         detections = result['detections']
         
         # Group by person_id to create person_tracks
+        # Only include PERSON IDs, filter out any UNKNOWN IDs
         person_tracks = {}
         for det in detections:
-            person_id = det['person_id']
+            person_id = det.get('person_id', '')
+            
+            # Skip if not a valid PERSON ID
+            if not person_id.startswith('PERSON-'):
+                continue
+                
             if person_id not in person_tracks:
                 person_tracks[person_id] = []
             
@@ -596,20 +602,34 @@ def process_video_with_enhanced_detection(video_path, output_base_dir="static/up
         annotated_video_path = result['annotated_video']
         
         # Extract person data is already done by chunked processor
-        # Just organize the extracted crops
+        # Just organize the extracted crops for PERSON IDs only
         for person_id in person_tracks:
+            # Skip if not a valid PERSON ID (extra safety check)
+            if not person_id.startswith('PERSON-'):
+                continue
+                
             person_dir = os.path.join(persons_dir, person_id)
-            chunk_person_dir = os.path.join(output_dir, f"chunk_*/{person_id}_*.jpg")
             
-            # Move extracted person crops to standard location
+            # Find person crops in chunk directories
             import glob
             import shutil
             
             os.makedirs(person_dir, exist_ok=True)
-            for crop_file in glob.glob(chunk_person_dir):
-                if os.path.exists(crop_file):
-                    dest_file = os.path.join(person_dir, os.path.basename(crop_file))
-                    shutil.move(crop_file, dest_file)
+            
+            # Search for this person's crops in all chunk directories
+            chunk_dirs = glob.glob(os.path.join(output_dir, "chunk_*"))
+            moved_count = 0
+            
+            for chunk_dir in chunk_dirs:
+                person_crops = glob.glob(os.path.join(chunk_dir, f"{person_id}_*.jpg"))
+                for crop_file in person_crops:
+                    if os.path.exists(crop_file):
+                        dest_file = os.path.join(person_dir, os.path.basename(crop_file))
+                        shutil.move(crop_file, dest_file)
+                        moved_count += 1
+                        
+            if moved_count > 0:
+                logger.info(f"Moved {moved_count} crops for {person_id}")
                     
             # Create metadata for each person
             detections = person_tracks[person_id]

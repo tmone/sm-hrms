@@ -36,6 +36,11 @@ sam2>=0.1.0
 supervision>=0.20.0
 roboflow>=1.0.0
 
+# GPU Monitoring and Management
+gputil>=1.4.0
+nvidia-ml-py3>=7.352.0
+psutil>=5.9.0
+
 # Person Recognition (Machine Learning)
 scikit-learn>=1.3.0
 joblib>=1.3.0

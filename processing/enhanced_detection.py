@@ -253,12 +253,12 @@ def detect_and_track_persons(video_path):
         model = YOLO('yolov8n.pt')  # Use nano model for speed
     except Exception as e:
         logger.error(f"Failed to load YOLO model: {e}")
-        return {}
+        return {}, None
     
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         logger.error(f"Failed to open video: {video_path}")
-        return {}
+        return {}, None
     
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -525,6 +525,10 @@ def process_video_with_enhanced_detection(video_path, output_base_dir="static/up
     """Main function to process video with enhanced person detection and tracking"""
     logger.info(f"Starting enhanced video processing: {video_path}")
     
+    # Get file size for logging
+    file_size_mb = os.path.getsize(video_path) / (1024 * 1024)
+    logger.info(f"Video file size: {file_size_mb:.1f} MB")
+    
     # Setup output directories
     video_name = os.path.splitext(os.path.basename(video_path))[0]
     output_dir = output_base_dir  # Use base dir directly, not a subdirectory
@@ -546,25 +550,87 @@ def process_video_with_enhanced_detection(video_path, output_base_dir="static/up
                 logger.error(f"OCR extraction failed: {e}")
                 ocr_data = None
         
-        # Step 1: Detect and track persons across frames
-        logger.info("Step 1: Detecting and tracking persons...")
-        person_tracks = detect_and_track_persons(video_path)
+        # Always use chunked processing for all videos
+        logger.info(f"Processing video using chunked approach (30s chunks)...")
         
-        if not person_tracks:
-            logger.warning("No persons detected in video")
-            return None
+        # Import chunked processor
+        from processing.chunked_video_processor import ChunkedVideoProcessor
         
-        # Step 2: Create annotated video with bounding boxes
-        logger.info("Step 2: Creating annotated video...")
-        annotated_video_path = create_annotated_video(video_path, person_tracks, output_dir)
+        # Create chunked processor
+        processor = ChunkedVideoProcessor(max_workers=4, chunk_duration=30)
         
-        # Step 3: Extract person images and metadata
-        logger.info("Step 3: Extracting person data...")
-        extract_persons_data(video_path, person_tracks, persons_dir)
+        # Process video with chunking
+        result = processor.process_video(video_path, output_dir)
+        
+        if result['status'] != 'success':
+            logger.error(f"Chunked processing failed: {result.get('error')}")
+            return {
+                'success': False,
+                'error': result.get('error', 'Chunked processing failed')
+            }
+        
+        # Convert chunked results to standard format
+        detections = result['detections']
+        
+        # Group by person_id to create person_tracks
+        person_tracks = {}
+        for det in detections:
+            person_id = det['person_id']
+            if person_id not in person_tracks:
+                person_tracks[person_id] = []
+            
+            # Convert to standard detection format
+            detection = {
+                'frame_number': det['global_frame_num'],
+                'timestamp': det['timestamp'],
+                'bbox': det['bbox'],
+                'confidence': det['confidence'],
+                'person_id': person_id,
+                'track_id': det.get('track_id', 0),
+                'is_recognized': det.get('recognized_id') is not None,
+                'recognition_confidence': det.get('confidence', 0.0) if det.get('recognized_id') else 0.0
+            }
+            person_tracks[person_id].append(detection)
+        
+        # Use the annotated video from chunked processing
+        annotated_video_path = result['annotated_video']
+        
+        # Extract person data is already done by chunked processor
+        # Just organize the extracted crops
+        for person_id in person_tracks:
+            person_dir = os.path.join(persons_dir, person_id)
+            chunk_person_dir = os.path.join(output_dir, f"chunk_*/{person_id}_*.jpg")
+            
+            # Move extracted person crops to standard location
+            import glob
+            import shutil
+            
+            os.makedirs(person_dir, exist_ok=True)
+            for crop_file in glob.glob(chunk_person_dir):
+                if os.path.exists(crop_file):
+                    dest_file = os.path.join(person_dir, os.path.basename(crop_file))
+                    shutil.move(crop_file, dest_file)
+                    
+            # Create metadata for each person
+            detections = person_tracks[person_id]
+            person_metadata = {
+                'person_id': person_id,
+                'total_detections': len(detections),
+                'first_appearance': detections[0]['timestamp'],
+                'last_appearance': detections[-1]['timestamp'],
+                'avg_confidence': sum(d['confidence'] for d in detections) / len(detections),
+                'created_at': datetime.now().isoformat()
+            }
+            
+            metadata_path = os.path.join(person_dir, 'metadata.json')
+            with open(metadata_path, 'w') as f:
+                json.dump(person_metadata, f, indent=2)
         
         # Create summary report
         summary = {
             'video_path': video_path,
+            'file_size_mb': file_size_mb,
+            'processing_method': 'chunked',  # Always chunked now
             'annotated_video_path': annotated_video_path,
             'output_directory': output_dir,
             'persons_directory': persons_dir,

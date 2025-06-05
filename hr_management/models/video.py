@@ -59,6 +59,13 @@ class DetectedPerson(db.Model):
     is_identified = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # OCR/Attendance fields
+    attendance_date = db.Column(db.Date)
+    attendance_time = db.Column(db.Time)
+    attendance_location = db.Column(db.String(100))
+    check_in_time = db.Column(db.DateTime)
+    check_out_time = db.Column(db.DateTime)
+    
     __table_args__ = (db.Index('idx_video_person', 'video_id', 'person_code'),)
     
     def __repr__(self):
@@ -80,5 +87,10 @@ class DetectedPerson(db.Model):
             'employee_id': self.employee_id,
             'is_identified': self.is_identified,
             'created_at': self.created_at.isoformat(),
-            'employee_name': self.employee.name if self.employee else None
+            'employee_name': self.employee.name if self.employee else None,
+            'attendance_date': self.attendance_date.isoformat() if self.attendance_date else None,
+            'attendance_time': self.attendance_time.isoformat() if self.attendance_time else None,
+            'attendance_location': self.attendance_location,
+            'check_in_time': self.check_in_time.isoformat() if self.check_in_time else None,
+            'check_out_time': self.check_out_time.isoformat() if self.check_out_time else None
         }

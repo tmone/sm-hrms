@@ -18,15 +18,17 @@ except ImportError:
 class VideoOCRExtractor:
     """Extract timestamp and location information from video frames using OCR"""
     
-    def __init__(self, ocr_engine='easyocr'):
+    def __init__(self, ocr_engine='easyocr', date_format='DD-MM-YYYY'):
         """
         Initialize OCR extractor
         
         Args:
             ocr_engine: 'easyocr' or 'tesseract'
+            date_format: Expected date format (DD-MM-YYYY, MM-DD-YYYY, YYYY-MM-DD)
         """
         self.ocr_engine = ocr_engine
         self.reader = None
+        self.date_format = date_format
         
         if OCR_AVAILABLE:
             if ocr_engine == 'easyocr':
@@ -152,8 +154,22 @@ class VideoOCRExtractor:
                 date_str = match.group(1)
                 time_str = match.group(2)
                 
-                # Try different date formats
-                date_formats = ['%d-%m-%Y', '%m-%d-%Y', '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']
+                # Map display format to strptime format
+                format_map = {
+                    'DD-MM-YYYY': '%d-%m-%Y',
+                    'MM-DD-YYYY': '%m-%d-%Y',
+                    'YYYY-MM-DD': '%Y-%m-%d'
+                }
+                
+                # Get primary format based on configuration
+                primary_format = format_map.get(self.date_format, '%d-%m-%Y')
+                
+                # Try configured format first, then fallback to others
+                date_formats = [primary_format]
+                # Add other formats as fallback (excluding the primary)
+                for fmt in ['%d-%m-%Y', '%m-%d-%Y', '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']:
+                    if fmt != primary_format and fmt not in date_formats:
+                        date_formats.append(fmt)
                 
                 for date_format in date_formats:
                     try:

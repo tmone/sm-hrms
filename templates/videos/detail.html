@@ -126,14 +126,16 @@
                     
                     <!-- Extract/Re-extract OCR Button (for completed videos) -->
                     {% if video.status == 'completed' %}
-                        <form action="{{ url_for('videos.extract_ocr', id=video.id) }}" method="POST" class="inline">
+                        <form action="{{ url_for('videos.extract_ocr', id=video.id) }}" method="POST" class="inline" id="ocrExtractionForm">
                             <button type="submit" 
+                                    id="ocrButton"
                                     class="action-button warning"
                                     title="{% if video.ocr_extraction_done %}Re-extract{% else %}Extract{% endif %} timestamp and location from video">
-                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" id="ocrIcon">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                 </svg>
-                                {% if video.ocr_extraction_done %}Re-extract OCR Data{% else %}Extract OCR Data{% endif %}
+                                <span id="ocrButtonText">{% if video.ocr_extraction_done %}Re-extract OCR Data{% else %}Extract OCR Data{% endif %}</span>
+                                <div class="loading-spinner hidden ml-2" id="ocrSpinner"></div>
                             </button>
                         </form>
                     {% endif %}
@@ -524,6 +526,80 @@ window.addEventListener('load', function() {
         });
         supportHTML += '</ul>';
         codecSupport.innerHTML = supportHTML;
+    }
+});
+
+// OCR Extraction Button Handler
+document.addEventListener('DOMContentLoaded', function() {
+    const videoId = {{ video.id }};
+    const ocrForm = document.getElementById('ocrExtractionForm');
+    const ocrButton = document.getElementById('ocrButton');
+    const ocrButtonText = document.getElementById('ocrButtonText');
+    const ocrSpinner = document.getElementById('ocrSpinner');
+    const ocrIcon = document.getElementById('ocrIcon');
+    
+    if (ocrForm) {
+        ocrForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Disable button and show loading state
+            ocrButton.disabled = true;
+            ocrButton.classList.add('opacity-50', 'cursor-not-allowed');
+            ocrIcon.classList.add('hidden');
+            ocrSpinner.classList.remove('hidden');
+            ocrButtonText.textContent = 'Extracting OCR Data...';
+            
+            // Submit the form
+            fetch(ocrForm.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'processing') {
+                    // Start polling for status
+                    pollOCRStatus();
+                } else {
+                    // Reload page to show results
+                    window.location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                // Re-enable button on error
+                resetOCRButton();
+            });
+        });
+    }
+    
+    function pollOCRStatus() {
+        const interval = setInterval(() => {
+            fetch(`/videos/api/${videoId}/ocr-status`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'completed' || data.status === 'failed') {
+                        clearInterval(interval);
+                        window.location.reload();
+                    }
+                })
+                .catch(error => {
+                    console.error('Polling error:', error);
+                    clearInterval(interval);
+                    resetOCRButton();
+                });
+        }, 2000); // Poll every 2 seconds
+    }
+    
+    function resetOCRButton() {
+        if (ocrButton) {
+            ocrButton.disabled = false;
+            ocrButton.classList.remove('opacity-50', 'cursor-not-allowed');
+            ocrIcon.classList.remove('hidden');
+            ocrSpinner.classList.add('hidden');
+            ocrButtonText.textContent = ocrButtonText.dataset.originalText || 'Re-extract OCR Data';
+        }
     }
 });
 </script>

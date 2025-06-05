@@ -543,7 +543,20 @@ def process_video_with_enhanced_detection(video_path, output_base_dir="static/up
         if extract_ocr and OCR_AVAILABLE:
             logger.info("Step 0: Extracting OCR data from video...")
             try:
-                ocr_extractor = VideoOCRExtractor(ocr_engine='easyocr')
+                # Get OCR date format from settings if available
+                ocr_date_format = 'DD-MM-YYYY'  # Default
+                try:
+                    from hr_management.models.settings import SystemSettings
+                    from hr_management.models.base import db
+                    
+                    format_setting = SystemSettings.query.filter_by(key='ocr_date_format').first()
+                    if format_setting:
+                        ocr_date_format = format_setting.value
+                        logger.info(f"Using OCR date format from settings: {ocr_date_format}")
+                except Exception as e:
+                    logger.warning(f"Could not load OCR date format from settings: {e}")
+                
+                ocr_extractor = VideoOCRExtractor(ocr_engine='easyocr', date_format=ocr_date_format)
                 ocr_data = ocr_extractor.extract_video_info(video_path, sample_interval=300)  # Sample every 10 seconds
                 logger.info(f"OCR extraction complete. Location: {ocr_data.get('location')}, Date: {ocr_data.get('video_date')}")
             except Exception as e:

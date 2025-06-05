@@ -454,12 +454,15 @@ def extract_ocr(id):
     try:
         Video = current_app.Video
         DetectedPerson = current_app.DetectedPerson
+        SystemSettings = current_app.SystemSettings if hasattr(current_app, 'SystemSettings') else None
         db = current_app.db
         
         video = Video.query.get_or_404(id)
         
         # Check if video is completed
         if video.status != 'completed':
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'status': 'error', 'message': 'OCR extraction is only available for completed videos'})
             flash('OCR extraction is only available for completed videos', 'warning')
             return redirect(url_for('videos.detail', id=id))
         
@@ -584,16 +587,37 @@ def extract_ocr(id):
             if timestamps:
                 timestamp_text = max(set(timestamps), key=timestamps.count)
                 try:
-                    for fmt in ['%d-%m-%Y', '%m-%d-%Y', '%Y-%m-%d']:
-                        try:
-                            date_part = re.search(r'\d{2}[-/]\d{2}[-/]\d{4}', timestamp_text).group()
-                            date_part = date_part.replace('/', '-')
-                            video_date = datetime.strptime(date_part, fmt).date()
-                            break
-                        except:
-                            continue
+                    # Get OCR date format from settings
+                    ocr_date_format = 'DD-MM-YYYY'  # Default
+                    if SystemSettings:
+                        format_setting = SystemSettings.query.filter_by(key='ocr_date_format').first()
+                        if format_setting:
+                            ocr_date_format = format_setting.value
+                    
+                    # Convert format string to strptime format
+                    format_map = {
+                        'DD-MM-YYYY': '%d-%m-%Y',
+                        'MM-DD-YYYY': '%m-%d-%Y',
+                        'YYYY-MM-DD': '%Y-%m-%d'
+                    }
+                    strptime_format = format_map.get(ocr_date_format, '%d-%m-%Y')
+                    
+                    # Try to parse with the configured format first
+                    date_part = re.search(r'\d{2}[-/]\d{2}[-/]\d{4}', timestamp_text).group()
+                    date_part = date_part.replace('/', '-')
+                    video_date = datetime.strptime(date_part, strptime_format).date()
                 except:
-                    pass
+                    # If configured format fails, try other formats
+                    try:
+                        for fmt in ['%d-%m-%Y', '%m-%d-%Y', '%Y-%m-%d']:
+                            if fmt != strptime_format:  # Skip the already tried format
+                                try:
+                                    video_date = datetime.strptime(date_part, fmt).date()
+                                    break
+                                except:
+                                    continue
+                    except:
+                        pass
             
             if times:
                 time_text = max(set(times), key=times.count).replace(' ', '')
@@ -657,6 +681,17 @@ def extract_ocr(id):
                 if video.ocr_video_time:
                     parts.append(f'Time: {video.ocr_video_time}')
                 
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({
+                        'status': 'completed',
+                        'message': f'OCR extraction successful! {", ".join(parts)}' if parts else 'OCR extraction completed',
+                        'data': {
+                            'location': video.ocr_location,
+                            'date': str(video.ocr_video_date) if video.ocr_video_date else None,
+                            'time': str(video.ocr_video_time) if video.ocr_video_time else None
+                        }
+                    })
+                
                 if parts:
                     flash(f'OCR extraction successful! {", ".join(parts)}', 'success')
                 else:
@@ -665,13 +700,30 @@ def extract_ocr(id):
                 video.ocr_extraction_done = True
                 video.ocr_extraction_confidence = 0.0
                 db.session.commit()
+                
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({
+                        'status': 'completed',
+                        'message': 'No OCR data could be extracted from the video'
+                    })
+                
                 flash('No OCR data could be extracted from the video', 'warning')
                 
         except Exception as e:
             db.session.rollback()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'status': 'error',
+                    'message': f'OCR extraction failed: {str(e)}'
+                })
             flash(f'OCR extraction failed: {str(e)}', 'error')
             
     except Exception as e:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({
+                'status': 'error',
+                'message': f'Error: {str(e)}'
+            })
         flash(f'Error: {str(e)}', 'error')
     
     return redirect(url_for('videos.detail', id=id))
@@ -2401,43 +2453,34 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                 video_obj.processing_progress = 75
                 db.session.commit()
                 
-                # Get OCR data for detections
-                ocr_location = None
-                ocr_video_date = None
-                if result.get('ocr_data'):
-                    ocr_location = result['ocr_data'].get('location')
-                    ocr_video_date = result['ocr_data'].get('video_date')
-                
+                # Convert detections to the format expected by enhanced save function
+                detections_for_save = []
                 for detection_data in result['detections']:
-                    detection = DetectedPerson(
-                        video_id=video_obj.id,
-                        frame_number=detection_data['frame_number'],
-                        timestamp=detection_data['timestamp'],
-                        bbox_x=detection_data['x'],
-                        bbox_y=detection_data['y'],
-                        bbox_width=detection_data['width'],
-                        bbox_height=detection_data['height'],
-                        confidence=detection_data['confidence'],
-                        person_id=detection_data.get('person_id'),
-                        track_id=detection_data.get('track_id')
-                    )
-                    
-                    # Add OCR-based attendance data if available
-                    if ocr_location:
-                        detection.attendance_location = ocr_location
-                    if ocr_video_date:
-                        detection.attendance_date = ocr_video_date
-                        # Calculate attendance time from video timestamp
-                        if detection_data.get('timestamp'):
-                            from datetime import timedelta
-                            time_in_video = timedelta(seconds=detection_data['timestamp'])
-                            # This gives us the time offset in the video
-                            detection.attendance_time = (datetime.min + time_in_video).time()
-                    
-                    db.session.add(detection)
+                    detection = {
+                        'person_id': detection_data.get('person_id'),
+                        'frame_number': detection_data['frame_number'],
+                        'timestamp': detection_data['timestamp'],
+                        'x': detection_data['x'],
+                        'y': detection_data['y'],
+                        'width': detection_data['width'],
+                        'height': detection_data['height'],
+                        'confidence': detection_data['confidence'],
+                        'track_id': detection_data.get('track_id'),
+                        'bbox': [detection_data['x'], detection_data['y'], 
+                                detection_data['width'], detection_data['height']]
+                    }
+                    detections_for_save.append(detection)
                 
-                db.session.commit()
-                print(f"✅ Saved {len(result['detections'])} detections")
+                # Use enhanced save function with OCR data
+                from hr_management.processing.enhanced_save_detections import save_detections_with_ocr
+                saved_count = save_detections_with_ocr(
+                    video_obj.id, 
+                    detections_for_save,
+                    result.get('ocr_data'),
+                    db,
+                    DetectedPerson
+                )
+                print(f"✅ Saved {saved_count} detections with OCR data")
                 
                 # Step 4: Update video metadata
                 print(f"📊 Step 4/5: Updating video metadata")

@@ -29,6 +29,7 @@ from processing.video_quality_analyzer import VideoQualityAnalyzer, FrameExtract
 from processing.enhanced_person_tracker import EnhancedPersonTracker
 from hr_management.processing.person_recognition_inference_simple import SimplePersonRecognitionInference
 from processing.gpu_resource_manager import get_gpu_manager, cleanup_gpu_manager
+from processing.shared_state_manager_v2 import ImprovedSharedStateManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -38,102 +39,7 @@ logger = logging.getLogger(__name__)
 atexit.register(cleanup_gpu_manager)
 
 
-class SharedStateManager:
-    """Manages shared state across workers for person ID consistency"""
-    
-    def __init__(self):
-        self.lock = Lock()
-        self.unknown_counter = 0
-        self.person_counter = 0
-        self.recognized_to_person_id = {}  # recognized_id -> assigned person_id
-        self.track_to_unknown_id = {}  # track_id -> unknown_id
-        self.unknown_to_final_id = {}  # unknown_id -> final person_id (assigned later)
-        self.unknown_id_appearances = defaultdict(list)  # unknown_id -> [(chunk_idx, frame_num)]
-        self.unknown_recognition_info = {}  # unknown_id -> recognition info
-        
-    def get_next_unknown_id(self) -> str:
-        """Get next available unknown ID"""
-        with self.lock:
-            self.unknown_counter += 1
-            return f"UNKNOWN-{self.unknown_counter:04d}"
-            
-    def get_next_person_id(self) -> str:
-        """Get next available person ID"""
-        with self.lock:
-            self.person_counter += 1
-            return f"PERSON-{self.person_counter:04d}"
-            
-    def assign_temporary_id(self, recognized_id: Optional[str], track_id: int, 
-                           chunk_idx: int, frame_num: int) -> str:
-        """Assign temporary UNKNOWN ID during extraction"""
-        with self.lock:
-            # Check if this track already has an unknown ID
-            if track_id in self.track_to_unknown_id:
-                unknown_id = self.track_to_unknown_id[track_id]
-            else:
-                # Create new unknown ID
-                unknown_id = self.get_next_unknown_id()
-                self.track_to_unknown_id[track_id] = unknown_id
-                
-                # Store recognition info if available
-                if recognized_id:
-                    self.unknown_recognition_info[unknown_id] = {
-                        'recognized_id': recognized_id,
-                        'first_seen': frame_num
-                    }
-            
-            # Record appearance
-            self.unknown_id_appearances[unknown_id].append((chunk_idx, frame_num))
-            
-            return unknown_id
-            
-    def finalize_person_ids(self) -> Dict[str, str]:
-        """Convert UNKNOWN IDs to final PERSON IDs after tracking completes"""
-        with self.lock:
-            # Group unknowns by recognized ID
-            recognized_groups = defaultdict(list)
-            unrecognized_unknowns = []
-            
-            for unknown_id, info in self.unknown_recognition_info.items():
-                if info.get('recognized_id'):
-                    recognized_groups[info['recognized_id']].append(unknown_id)
-                else:
-                    unrecognized_unknowns.append(unknown_id)
-                    
-            # Also add unknowns without recognition info
-            for unknown_id in self.track_to_unknown_id.values():
-                if unknown_id not in self.unknown_recognition_info:
-                    unrecognized_unknowns.append(unknown_id)
-            
-            # Assign PERSON IDs to recognized groups
-            for recognized_id, unknown_ids in recognized_groups.items():
-                # Check if we already assigned a PERSON ID to this recognized person
-                if recognized_id in self.recognized_to_person_id:
-                    person_id = self.recognized_to_person_id[recognized_id]
-                else:
-                    person_id = self.get_next_person_id()
-                    self.recognized_to_person_id[recognized_id] = person_id
-                
-                # Map all unknowns in this group to the same person ID
-                for unknown_id in unknown_ids:
-                    self.unknown_to_final_id[unknown_id] = person_id
-                    
-            # Assign unique PERSON IDs to unrecognized unknowns
-            for unknown_id in set(unrecognized_unknowns):
-                person_id = self.get_next_person_id()
-                self.unknown_to_final_id[unknown_id] = person_id
-                
-            return self.unknown_to_final_id
-            
-    def get_state_dict(self) -> Dict:
-        """Get current state as dictionary"""
-        with self.lock:
-            return {
-                'person_counter': self.person_counter,
-                'recognized_to_person_id': dict(self.recognized_to_person_id),
-                'track_to_person_id': dict(self.track_to_person_id),
-                'person_id_appearances': dict(self.person_id_appearances)
-            }
+# SharedStateManager has been replaced by ImprovedSharedStateManager from shared_state_manager_v2.py
 
 
 class ChunkProcessor:
@@ -288,9 +194,11 @@ class ChunkProcessor:
                             except Exception as e:
                                 logger.debug(f"Recognition failed: {e}")
                         
-                        # Get temporary UNKNOWN ID from shared state
+                        # Get temporary UNKNOWN ID from shared state with bbox info
                         temp_id = self.shared_state.assign_temporary_id(
-                            recognized_id, track_id, self.chunk_idx, global_frame_num
+                            recognized_id, track_id, self.chunk_idx, global_frame_num,
+                            bbox=(x1, y1, x2, y2), confidence=conf, 
+                            timestamp=global_frame_num / fps
                         )
                         
                         # Save high-quality crop with temporary ID
@@ -355,11 +263,12 @@ class ChunkedVideoProcessor:
     """Main processor for handling large videos through chunking"""
     
     def __init__(self, max_workers: int = 4, chunk_duration: int = 30,
-                 use_gpu_monitoring: bool = True):
+                 use_gpu_monitoring: bool = True, detect_violations: bool = True):
         self.max_workers = max_workers
         self.chunk_duration = chunk_duration
-        self.shared_state = SharedStateManager()
+        self.shared_state = ImprovedSharedStateManager()
         self.use_gpu_monitoring = use_gpu_monitoring
+        self.detect_violations = detect_violations
         
         # Initialize GPU manager
         self.gpu_manager = get_gpu_manager()
@@ -483,20 +392,56 @@ class ChunkedVideoProcessor:
         # Sort detections by global frame number
         all_detections.sort(key=lambda x: x['global_frame_num'])
         
-        # Finalize person IDs - convert UNKNOWN to PERSON
+        # Finalize person IDs - convert UNKNOWN to PERSON with violation detection
         logger.info("Finalizing person IDs...")
-        unknown_to_person_mapping = self.shared_state.finalize_person_ids()
+        
+        # Check for violations before finalizing
+        violations_detected = []
+        if self.detect_violations:
+            violations = self.shared_state.detect_violations()
+            if violations:
+                logger.warning(f"Detected {len(violations)} violations where same person "
+                             f"appears multiple times in a frame")
+                violations_detected = violations
+                
+                # Save violations report for review
+                violations_report_path = os.path.join(output_dir, 'violations_for_review.json')
+                self.shared_state.export_violations_report(violations_report_path)
+                logger.info(f"Violations report saved to {violations_report_path}")
+        
+        # Finalize WITHOUT auto-resolve - violations need manual review
+        unknown_to_person_mapping = self.shared_state.finalize_person_ids(
+            auto_resolve_violations=False
+        )
         
         # Update all detections with final person IDs
+        review_count = 0
+        normal_count = 0
+        
         for detection in all_detections:
             temp_id = detection.get('temp_id')
             if temp_id and temp_id in unknown_to_person_mapping:
-                detection['person_id'] = unknown_to_person_mapping[temp_id]
-            else:
-                # This shouldn't happen, but handle it
-                detection['person_id'] = detection.get('temp_id', 'UNKNOWN')
+                final_id = unknown_to_person_mapping[temp_id]
+                detection['person_id'] = final_id
                 
-        logger.info(f"Converted {len(unknown_to_person_mapping)} temporary IDs to person IDs")
+                # Check if this needs review
+                if final_id.startswith('REVIEW-'):
+                    detection['needs_review'] = True
+                    review_count += 1
+                else:
+                    normal_count += 1
+            else:
+                # This shouldn't happen
+                detection['person_id'] = 'ERROR-NO-MAPPING'
+                logger.error(f"No mapping found for {temp_id}")
+        
+        logger.info(f"ID Assignment Summary:")
+        logger.info(f"  - Normal assignments: {normal_count}")
+        logger.info(f"  - Need review: {review_count}")
+        
+        if review_count > 0:
+            logger.warning(f"⚠️  {review_count} detections need manual review due to violations")
+            logger.warning(f"   Review file: {output_dir}/violations_for_review.json")
         
         # Generate annotated video (will filter UNKNOWN IDs)
         annotated_path = self.create_annotated_video(
@@ -521,6 +466,9 @@ class ChunkedVideoProcessor:
         logger.info("Renaming person crops with final IDs...")
         self._rename_person_crops(output_dir, unknown_to_person_mapping)
         
+        # Get processing statistics
+        stats = self.shared_state.get_statistics()
+        
         # Save processing metadata
         metadata = {
             'video_path': video_path,
@@ -533,6 +481,12 @@ class ChunkedVideoProcessor:
                                     if det.get('person_id', '').startswith('PERSON-'))),
             'processing_time': time.time() - start_time,
             'person_mappings': unknown_to_person_mapping,
+            'violations': {
+                'detected': stats.get('violations_detected', 0),
+                'need_review': review_count,
+                'review_file': 'violations_for_review.json' if review_count > 0 else None
+            },
+            'detection_stats': stats,
             'gpu_info': {
                 'total_gpus': final_gpu_report['total_gpus'],
                 'gpus_used': self.max_workers if final_gpu_report['total_gpus'] > 0 else 0,
@@ -561,11 +515,17 @@ class ChunkedVideoProcessor:
         """Create browser-compatible annotated video"""
         logger.info("Creating annotated video for browser preview")
         
-        # Filter out any remaining UNKNOWN IDs - only show PERSON IDs
+        # Filter detections - show PERSON IDs and REVIEW cases
         filtered_detections = [det for det in detections 
-                             if det.get('person_id', '').startswith('PERSON-')]
+                             if (det.get('person_id', '').startswith('PERSON-') or 
+                                 det.get('person_id', '').startswith('REVIEW-'))]
         
-        logger.info(f"Filtered {len(detections) - len(filtered_detections)} UNKNOWN detections")
+        review_detections = [det for det in filtered_detections 
+                           if det.get('person_id', '').startswith('REVIEW-')]
+        
+        logger.info(f"Filtered {len(detections) - len(filtered_detections)} invalid detections")
+        if review_detections:
+            logger.info(f"Including {len(review_detections)} detections that need review")
         
         # Group detections by frame
         detections_by_frame = defaultdict(list)
@@ -620,13 +580,31 @@ class ChunkedVideoProcessor:
                 person_id = det['person_id']
                 recognized_id = det.get('recognized_id', 'Unknown')
                 confidence = det['confidence']
+                needs_review = det.get('needs_review', False)
+                
+                # Choose color based on status
+                if needs_review:
+                    # Red for violations that need review
+                    color = (0, 0, 255)
+                    thickness = 3
+                elif recognized_id and recognized_id != 'Unknown':
+                    # Green for recognized persons
+                    color = (0, 255, 0)
+                    thickness = 2
+                else:
+                    # Orange for unrecognized
+                    color = (0, 165, 255)
+                    thickness = 2
                 
                 # Draw bounding box
-                color = (0, 255, 0) if recognized_id and recognized_id != 'Unknown' else (0, 165, 255)
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
                 
                 # Draw label
-                label = f"{person_id}"
+                if needs_review:
+                    label = f"⚠️ REVIEW NEEDED"
+                else:
+                    label = f"{person_id}"
+                    
                 if recognized_id and recognized_id != 'Unknown':
                     label += f" ({recognized_id})"
                 label += f" {confidence:.2f}"

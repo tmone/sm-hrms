@@ -15,9 +15,9 @@ def debug_attendance_data():
     app = create_app()
     
     with app.app_context():
+        db = app.db
         Video = app.Video
         DetectedPerson = app.DetectedPerson
-        db = app.db
         
         print("="*80)
         print("DEBUGGING ATTENDANCE DATA")
@@ -58,7 +58,37 @@ def debug_attendance_data():
             print(f"     Attendance Time: {det.attendance_time}")
             print(f"     Attendance Location: {det.attendance_location}")
         
-        # 4. Check if we need to populate attendance fields
+        # 4. Detailed analysis of attendance data
+        print("\n4. Attendance Data Analysis:")
+        
+        # Check videos without OCR data
+        videos_without_ocr = Video.query.filter(
+            db.or_(
+                Video.ocr_extraction_done == False,
+                Video.ocr_video_date.is_(None)
+            )
+        ).count()
+        print(f"   Videos without OCR data: {videos_without_ocr}")
+        
+        # Check detections with partial attendance data
+        with_time = DetectedPerson.query.filter(
+            DetectedPerson.attendance_time.isnot(None)
+        ).count()
+        with_location = DetectedPerson.query.filter(
+            DetectedPerson.attendance_location.isnot(None)
+        ).count()
+        
+        print(f"   Detections with attendance_time: {with_time}")
+        print(f"   Detections with attendance_location: {with_location}")
+        
+        # Show summary
+        print("\n5. Summary:")
+        print(f"   Total videos: {Video.query.count()}")
+        print(f"   Videos with OCR: {len(videos_with_ocr)} ({len(videos_with_ocr)/Video.query.count()*100:.1f}%)")
+        print(f"   Total detections: {total_detections}")
+        print(f"   Detections with attendance data: {with_attendance} ({with_attendance/total_detections*100:.1f}%)" if total_detections > 0 else "   No detections found")
+        
+        # Check if we need to populate attendance fields
         if with_attendance == 0 and len(videos_with_ocr) > 0:
             print("\n⚠️  ISSUE FOUND: Videos have OCR data but DetectedPerson records don't have attendance fields populated!")
             print("\nThis is why attendance reports are empty.")
@@ -66,24 +96,27 @@ def debug_attendance_data():
             print("based on the OCR data from their associated videos.")
             
             # Show what needs to be done
-            print("\n4. What needs to be populated:")
+            print("\n6. What needs to be populated:")
             for video in videos_with_ocr[:3]:
-                detections = DetectedPerson.query.filter_by(video_id=video.id).limit(3).all()
-                if detections:
+                detections_count = DetectedPerson.query.filter_by(video_id=video.id).count()
+                if detections_count > 0:
                     print(f"\n   Video: {video.filename}")
                     print(f"   OCR Date: {video.ocr_video_date}")
                     print(f"   OCR Time: {video.ocr_video_time}")
                     print(f"   OCR Location: {video.ocr_location}")
-                    print(f"   Has {len(detections)} detections that need attendance fields updated")
+                    print(f"   Has {detections_count} detections that need attendance fields updated")
+        elif with_attendance > 0:
+            print("\n✅ Attendance data is already populated for some detections.")
+            print("   Attendance reports should be showing data.")
 
 def populate_attendance_fields():
     """Populate attendance fields in DetectedPerson records from video OCR data"""
     app = create_app()
     
     with app.app_context():
+        db = app.db
         Video = app.Video
         DetectedPerson = app.DetectedPerson
-        db = app.db
         
         print("\n" + "="*80)
         print("POPULATING ATTENDANCE FIELDS")
@@ -125,15 +158,12 @@ def populate_attendance_fields():
                     actual_datetime = datetime.fromtimestamp(actual_datetime)
                     detection.attendance_time = actual_datetime.time()
                     
-                    # Set check-in time (for first detection of a person)
-                    if detection.start_time is not None:
-                        check_in_timestamp = base_datetime.timestamp() + detection.start_time
-                        detection.check_in_time = datetime.fromtimestamp(check_in_timestamp)
+                    # Set check-in time (using the detection timestamp)
+                    check_in_timestamp = base_datetime.timestamp() + detection.timestamp
+                    detection.check_in_time = datetime.fromtimestamp(check_in_timestamp)
                     
-                    # Set check-out time (for last detection)
-                    if detection.end_time is not None:
-                        check_out_timestamp = base_datetime.timestamp() + detection.end_time
-                        detection.check_out_time = datetime.fromtimestamp(check_out_timestamp)
+                    # Note: check_out_time would typically be set from a different detection
+                    # or calculated differently based on business logic
                 
                 updated_count += 1
             

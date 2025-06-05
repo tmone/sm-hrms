@@ -371,10 +371,12 @@ class PersonRecognitionInferenceSimple:
             # Crop the person from the image
             person_crop = image[int(y1):int(y2), int(x1):int(x2)]
             
-            # Save cropped image temporarily
+            # Save cropped image temporarily with proper cleanup
             import tempfile
             temp_file = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
             temp_path = temp_file.name
+            temp_file.close()  # Close the file handle before cv2 uses it
+            
             cv2.imwrite(temp_path, person_crop)
             
             try:
@@ -395,8 +397,19 @@ class PersonRecognitionInferenceSimple:
                         'all_probabilities': prediction['all_probabilities']
                     })
             finally:
-                # Clean up temp file
-                Path(temp_path).unlink(missing_ok=True)
+                # Clean up temp file - more robust for Windows
+                try:
+                    os.unlink(temp_path)
+                except PermissionError:
+                    # On Windows, sometimes the file is still in use
+                    # Try again after a short delay
+                    import time
+                    time.sleep(0.1)
+                    try:
+                        os.unlink(temp_path)
+                    except:
+                        # If still fails, ignore - temp files will be cleaned up later
+                        pass
         
         return {
             'persons': recognized_persons,

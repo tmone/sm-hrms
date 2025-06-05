@@ -149,3 +149,4 @@ Thumbs.db
 .claude/
 processing/outputs/
 datasets/
+models/

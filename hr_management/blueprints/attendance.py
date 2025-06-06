@@ -250,6 +250,182 @@ def daily_report():
                          timedelta=timedelta,
                          format_duration=format_duration)
 
+@attendance_bp.route('/list')
+@login_required
+def attendance_list():
+    """Get paginated attendance list with filters"""
+    db = current_app.db
+    Video = current_app.Video
+    DetectedPerson = current_app.DetectedPerson
+    
+    # Get parameters
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    filter_type = request.args.get('filter', 'all')  # today, week, month, custom, all
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    location = request.args.get('location', '')
+    person_id_filter = request.args.get('person_id', '')
+    sort = request.args.get('sort', 'desc')  # desc or asc
+    
+    # Build date filter
+    today = date.today()
+    if filter_type == 'today':
+        date_filter = DetectedPerson.attendance_date == today
+    elif filter_type == 'week':
+        week_start = today - timedelta(days=today.weekday())
+        date_filter = and_(
+            DetectedPerson.attendance_date >= week_start,
+            DetectedPerson.attendance_date <= today
+        )
+    elif filter_type == 'month':
+        month_start = today.replace(day=1)
+        date_filter = and_(
+            DetectedPerson.attendance_date >= month_start,
+            DetectedPerson.attendance_date <= today
+        )
+    elif filter_type == 'custom' and start_date and end_date:
+        start = datetime.strptime(start_date, '%Y-%m-%d').date()
+        end = datetime.strptime(end_date, '%Y-%m-%d').date()
+        date_filter = and_(
+            DetectedPerson.attendance_date >= start,
+            DetectedPerson.attendance_date <= end
+        )
+    else:
+        # Show all data
+        date_filter = DetectedPerson.attendance_date.isnot(None)
+    
+    # Build query - aggregate by person, date, and location
+    base_query = db.session.query(
+        DetectedPerson.person_id,
+        DetectedPerson.attendance_date,
+        DetectedPerson.attendance_location,
+        func.min(DetectedPerson.attendance_time).label('check_in'),
+        func.max(DetectedPerson.attendance_time).label('check_out'),
+        func.count(DetectedPerson.id).label('detection_count'),
+        func.avg(DetectedPerson.confidence).label('avg_confidence'),
+        DetectedPerson.video_id,
+        func.min(DetectedPerson.timestamp).label('first_timestamp')
+    ).filter(
+        date_filter,
+        DetectedPerson.attendance_date.isnot(None)
+    ).group_by(
+        DetectedPerson.person_id,
+        DetectedPerson.attendance_date,
+        DetectedPerson.attendance_location,
+        DetectedPerson.video_id
+    )
+    
+    # Apply location filter if specified
+    if location:
+        base_query = base_query.filter(DetectedPerson.attendance_location == location)
+    
+    # Apply person ID filter if specified
+    if person_id_filter:
+        # Extract numeric ID from PERSON-XXXX format if provided
+        if person_id_filter.startswith('PERSON-'):
+            try:
+                person_id_num = person_id_filter.split('-')[1]
+                base_query = base_query.filter(DetectedPerson.person_id == person_id_num)
+            except:
+                # If format is invalid, try exact match
+                base_query = base_query.filter(DetectedPerson.person_id == person_id_filter)
+        else:
+            # Direct ID match
+            base_query = base_query.filter(DetectedPerson.person_id == person_id_filter)
+    
+    # Apply sorting
+    if sort == 'desc':
+        base_query = base_query.order_by(
+            DetectedPerson.attendance_date.desc(),
+            DetectedPerson.attendance_location,
+            DetectedPerson.person_id
+        )
+    else:
+        base_query = base_query.order_by(
+            DetectedPerson.attendance_date.asc(),
+            DetectedPerson.attendance_location,
+            DetectedPerson.person_id
+        )
+    
+    # Paginate
+    pagination = base_query.paginate(page=page, per_page=per_page, error_out=False)
+    
+    # Define format_duration helper function
+    def format_duration(seconds):
+        """Format duration helper"""
+        if not seconds:
+            return "0m"
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        return f"{minutes}m"
+    
+    # Format results
+    attendance_records = []
+    for record in pagination.items:
+        # Get video info
+        video = Video.query.get(record.video_id)
+        
+        # Calculate duration
+        if record.check_in and record.check_out:
+            check_in_time = datetime.combine(record.attendance_date, record.check_in)
+            check_out_time = datetime.combine(record.attendance_date, record.check_out)
+            duration = (check_out_time - check_in_time).total_seconds()
+        else:
+            duration = 0
+        
+        # Format person ID
+        try:
+            person_id_str = f"PERSON-{int(record.person_id):04d}"
+        except (ValueError, TypeError):
+            person_id_str = str(record.person_id)
+        
+        attendance_records.append({
+            'id': f"{record.person_id}_{record.attendance_date}_{record.video_id}",
+            'person_id': person_id_str,
+            'date': record.attendance_date.isoformat(),
+            'location': record.attendance_location or 'Unknown',
+            'check_in': record.check_in.isoformat() if record.check_in else None,
+            'check_out': record.check_out.isoformat() if record.check_out else None,
+            'duration_seconds': int(duration),
+            'duration_formatted': format_duration(int(duration)),
+            'detection_count': record.detection_count,
+            'confidence': round(record.avg_confidence, 2) if record.avg_confidence else 0,
+            'video_filename': video.filename if video else 'Unknown',
+            'video_id': record.video_id,
+            'first_timestamp': record.first_timestamp
+        })
+    
+    # Get available locations for filter
+    all_locations = db.session.query(
+        func.distinct(DetectedPerson.attendance_location)
+    ).filter(
+        DetectedPerson.attendance_location.isnot(None)
+    ).all()
+    locations = [loc[0] for loc in all_locations]
+    
+    return jsonify({
+        'records': attendance_records,
+        'pagination': {
+            'page': page,
+            'per_page': per_page,
+            'total': pagination.total,
+            'pages': pagination.pages,
+            'has_prev': pagination.has_prev,
+            'has_next': pagination.has_next
+        },
+        'filters': {
+            'filter_type': filter_type,
+            'start_date': start_date,
+            'end_date': end_date,
+            'location': location,
+            'person_id': person_id_filter,
+            'locations': locations
+        }
+    })
+
 @attendance_bp.route('/export')
 @login_required
 def export_report():
@@ -393,3 +569,98 @@ def export_report():
     
     else:
         return jsonify({'error': 'Invalid format. Use excel or csv'}), 400
+
+@attendance_bp.route('/export-selected', methods=['POST'])
+@login_required
+def export_selected():
+    """Export selected attendance records to CSV"""
+    db = current_app.db
+    Video = current_app.Video
+    DetectedPerson = current_app.DetectedPerson
+    
+    # Get selected IDs from request
+    data = request.get_json()
+    selected_ids = data.get('selected_ids', [])
+    
+    if not selected_ids:
+        return jsonify({'error': 'No records selected'}), 400
+    
+    # Parse IDs and build query
+    records = []
+    for record_id in selected_ids:
+        try:
+            # ID format: personId_date_videoId
+            parts = record_id.split('_')
+            if len(parts) >= 3:
+                person_id = parts[0]
+                date_str = parts[1]
+                video_id = parts[2]
+                
+                # Get aggregated data for this person/date/video
+                record_data = db.session.query(
+                    DetectedPerson.person_id,
+                    DetectedPerson.attendance_date,
+                    DetectedPerson.attendance_location,
+                    func.min(DetectedPerson.attendance_time).label('check_in'),
+                    func.max(DetectedPerson.attendance_time).label('check_out'),
+                    func.count(DetectedPerson.id).label('detection_count'),
+                    func.avg(DetectedPerson.confidence).label('avg_confidence')
+                ).filter(
+                    DetectedPerson.person_id == person_id,
+                    DetectedPerson.attendance_date == datetime.strptime(date_str, '%Y-%m-%d').date(),
+                    DetectedPerson.video_id == int(video_id)
+                ).group_by(
+                    DetectedPerson.person_id,
+                    DetectedPerson.attendance_date,
+                    DetectedPerson.attendance_location
+                ).first()
+                
+                if record_data:
+                    # Calculate duration
+                    if record_data.check_in and record_data.check_out:
+                        check_in_time = datetime.combine(record_data.attendance_date, record_data.check_in)
+                        check_out_time = datetime.combine(record_data.attendance_date, record_data.check_out)
+                        duration_minutes = round((check_out_time - check_in_time).total_seconds() / 60, 2)
+                    else:
+                        duration_minutes = 0
+                    
+                    # Format person ID
+                    try:
+                        person_id_str = f"PERSON-{int(record_data.person_id):04d}"
+                    except (ValueError, TypeError):
+                        person_id_str = str(record_data.person_id)
+                    
+                    records.append({
+                        'Date': record_data.attendance_date.strftime('%Y-%m-%d'),
+                        'Person ID': person_id_str,
+                        'Location': record_data.attendance_location or 'Unknown',
+                        'Check In': record_data.check_in.strftime('%H:%M:%S') if record_data.check_in else '',
+                        'Check Out': record_data.check_out.strftime('%H:%M:%S') if record_data.check_out else '',
+                        'Duration (minutes)': duration_minutes,
+                        'Detections': record_data.detection_count,
+                        'Avg Confidence': round(record_data.avg_confidence, 2) if record_data.avg_confidence else 0
+                    })
+        except Exception as e:
+            print(f"Error processing record {record_id}: {e}")
+            continue
+    
+    if not records:
+        return jsonify({'error': 'No valid records found'}), 404
+    
+    # Create CSV
+    df = pd.DataFrame(records)
+    df = df.sort_values(['Date', 'Location', 'Person ID'])
+    
+    output = io.StringIO()
+    df.to_csv(output, index=False)
+    output.seek(0)
+    
+    # Create response
+    response = send_file(
+        io.BytesIO(output.getvalue().encode()),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f'attendance_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+    )
+    
+    return response

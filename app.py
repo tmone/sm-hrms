@@ -50,6 +50,22 @@ def create_app(config_name=None):
     db_path = os.path.join(instance_path, 'stepmedia_hrm.db')
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', f'sqlite:///{db_path}')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
+    # Import database configuration for connection pool
+    try:
+        from config_database import SQLALCHEMY_ENGINE_OPTIONS
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = SQLALCHEMY_ENGINE_OPTIONS
+        print("✅ Using enhanced database connection pool settings")
+    except ImportError:
+        # Default connection pool settings
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+            'pool_size': 10,
+            'max_overflow': 20,
+            'pool_timeout': 45,
+            'pool_recycle': 3600,
+            'pool_pre_ping': True,
+        }
+        print("📊 Using default database connection pool settings")
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB file upload limit
     
     # Optional configuration

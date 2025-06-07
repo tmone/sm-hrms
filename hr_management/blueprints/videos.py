@@ -18,6 +18,18 @@ except ImportError:
 
 videos_bp = Blueprint('videos', __name__)
 
+@videos_bp.route('/gpu-queue-status')
+@login_required
+def gpu_queue_status():
+    """Get GPU processing queue status"""
+    try:
+        from processing.gpu_processing_queue import get_gpu_processing_queue
+        gpu_queue = get_gpu_processing_queue()
+        status = gpu_queue.get_queue_status()
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
 @videos_bp.route('/')
 @login_required
 def index():
@@ -135,6 +147,10 @@ def upload():
                 video.processing_log = f"Splitting video into chunks at {datetime.utcnow()}"
                 db.session.commit()
                 
+                # Import GPU queue
+                from processing.gpu_processing_queue import get_gpu_processing_queue
+                gpu_queue = get_gpu_processing_queue(max_workers=1)  # Only 1 GPU worker for safety
+                
                 # Split video into chunks
                 chunk_paths = chunk_manager.split_video_to_chunks(
                     upload_path, 
@@ -148,9 +164,17 @@ def upload():
                         current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
                     )
                     
-                    # Process each chunk as a separate video
+                    # Add chunks to GPU processing queue
+                    task_ids = []
                     for chunk_video in chunk_videos:
-                        print(f"🚀 Auto-starting extraction for chunk {chunk_video.chunk_index + 1}/{chunk_video.total_chunks}")
+                        print(f"📋 Queueing chunk {chunk_video.chunk_index + 1}/{chunk_video.total_chunks} for GPU processing")
+                        
+                        chunk_info = {
+                            'index': chunk_video.chunk_index,
+                            'total': chunk_video.total_chunks,
+                            'video_id': chunk_video.id,
+                            'parent_video_id': video.id
+                        }
                         
                         processing_options = {
                             'extract_persons': True,
@@ -160,10 +184,26 @@ def upload():
                             'use_gpu': True
                         }
                         
-                        # Start processing for this chunk
-                        start_enhanced_gpu_processing(chunk_video, processing_options, current_app._get_current_object())
+                        # Get chunk path
+                        upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
+                        chunk_path = os.path.join(upload_folder, chunk_video.file_path)
+                        
+                        # Store chunk info with processing options
+                        chunk_info['processing_options'] = processing_options
+                        
+                        # Add to queue with a simple wrapper
+                        task_id = gpu_queue.add_chunk_task(
+                            chunk_path,
+                            chunk_info,
+                            process_video_chunk,  # Use module-level function
+                            current_app._get_current_object()
+                        )
+                        task_ids.append(task_id)
                     
-                    flash(f'Large video "{filename}" uploaded! Split into {len(chunk_videos)} chunks for processing. Results will be merged automatically.', 'info')
+                    queue_status = gpu_queue.get_queue_status()
+                    print(f"✅ Added {len(task_ids)} chunks to GPU queue. Queue status: {queue_status}")
+                    
+                    flash(f'Large video "{filename}" uploaded! Split into {len(chunk_videos)} chunks and queued for GPU processing. Results will be merged automatically.', 'info')
                 else:
                     flash('Failed to split video into chunks', 'error')
             else:
@@ -2482,7 +2522,20 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                 
                 print(f"🎮 GPU Config: {gpu_config}")
                 
-                result = gpu_person_detection_task(video_path, gpu_config, video_obj.id, app)
+                # Get video ID before calling task to avoid lazy loading
+                video_id = video_obj.id
+                
+                # Close session before long-running GPU task
+                db.session.close()
+                db.session.remove()
+                
+                # Run GPU detection (no DB operations)
+                result = gpu_person_detection_task(video_path, gpu_config, video_id, app)
+                
+                # Re-establish session after GPU processing
+                video_obj = Video.query.get(video_id)
+                if not video_obj:
+                    raise Exception("Video not found after GPU processing")
                 
                 if 'error' in result:
                     raise Exception(f"GPU detection failed: {result['error']}")
@@ -3013,3 +3066,70 @@ else:
     def init_socketio_events():
         """No-op when SocketIO is not available"""
         pass
+
+
+# Module-level function for GPU queue processing
+def process_video_chunk(video_path, chunk_info, app):
+    """Process a video chunk within the GPU queue"""
+    try:
+        # Import models within app context
+        Video = app.Video
+        
+        # Get chunk video from database
+        chunk_video = Video.query.get(chunk_info['video_id'])
+        if not chunk_video:
+            raise Exception(f"Chunk video {chunk_info['video_id']} not found")
+        
+        # Get processing options
+        processing_options = chunk_info.get('processing_options', {
+            'extract_persons': True,
+            'face_recognition': False,
+            'extract_frames': False,
+            'use_enhanced_detection': True,
+            'use_gpu': True
+        })
+        
+        print(f"🎮 Processing chunk {chunk_info['index']+1}/{chunk_info['total']} in GPU queue")
+        
+        # Start processing
+        start_enhanced_gpu_processing(chunk_video, processing_options, app)
+        
+        # After processing completes, check if all chunks are done
+        parent_video_id = chunk_info.get('parent_video_id')
+        if parent_video_id:
+            # Check if all chunks are complete
+            all_chunks = Video.query.filter_by(
+                parent_video_id=parent_video_id,
+                is_chunk=True
+            ).all()
+            
+            completed_chunks = [c for c in all_chunks if c.status == 'completed']
+            
+            if len(completed_chunks) == len(all_chunks):
+                print(f"✅ All {len(all_chunks)} chunks completed for parent video {parent_video_id}")
+                
+                # Trigger merge process
+                from processing.video_chunk_manager import VideoChunkManager
+                chunk_manager = VideoChunkManager()
+                
+                parent_video = Video.query.get(parent_video_id)
+                if parent_video:
+                    DetectedPerson = app.DetectedPerson
+                    db = app.db
+                    
+                    success = chunk_manager.merge_chunk_results(
+                        parent_video, db, Video, DetectedPerson
+                    )
+                    
+                    if success:
+                        print(f"✅ Successfully merged results for parent video {parent_video_id}")
+                    else:
+                        print(f"❌ Failed to merge results for parent video {parent_video_id}")
+        
+        return {'status': 'completed', 'chunk_id': chunk_info['video_id']}
+        
+    except Exception as e:
+        print(f"❌ Error processing chunk: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'status': 'failed', 'error': str(e)}

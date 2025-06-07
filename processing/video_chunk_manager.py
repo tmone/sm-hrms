@@ -21,6 +21,7 @@ class VideoChunkManager:
         self.chunk_duration = chunk_duration
         self.chunks_folder = chunks_folder
         self.cleanup_manager = get_cleanup_manager()
+        self._gpu_available = None  # Cache GPU availability check
         
     def get_video_duration(self, video_path):
         """Get video duration in seconds"""
@@ -62,22 +63,24 @@ class VideoChunkManager:
         
         for i in range(num_chunks):
             start_time = i * self.chunk_duration
-            chunk_filename = f"{video_name}_chunk_{i:03d}.mp4"
+            # Keep original extension to maintain format
+            original_ext = Path(video_path).suffix
+            chunk_filename = f"{video_name}_chunk_{i:03d}{original_ext}"
             chunk_path = chunks_dir / chunk_filename
             
-            # Use ffmpeg with copy codec for fast splitting
+            # Use stream copy (no re-encoding) for fastest chunking
+            # This preserves original video format and quality
             cmd = [
-                'ffmpeg', '-i', str(video_path),
-                '-ss', str(start_time),
+                'ffmpeg',
+                '-ss', str(start_time),  # Seek BEFORE input (much faster)
+                '-i', str(video_path),
                 '-t', str(self.chunk_duration),
-                '-c:v', 'libx264',  # Force H.264 encoding
-                '-preset', 'fast',
-                '-crf', '23',
-                '-c:a', 'copy',  # Copy audio
+                '-c', 'copy',  # Copy all streams without re-encoding
                 '-avoid_negative_ts', 'make_zero',
                 '-y',  # Overwrite
                 str(chunk_path)
             ]
+            logger.info(f"📋 Creating chunk {i+1}/{num_chunks} with stream copy (no re-encoding)")
             
             try:
                 logger.info(f"Creating chunk {i+1}/{num_chunks}: {chunk_filename}")
@@ -87,21 +90,39 @@ class VideoChunkManager:
                 logger.error(f"Failed to create chunk {i}: {e.stderr}")
                 # Try alternative method without avoid_negative_ts
                 cmd_alt = [
-                    'ffmpeg', '-i', str(video_path),
-                    '-ss', str(start_time),
+                    'ffmpeg',
+                    '-ss', str(start_time),  # Input seeking
+                    '-i', str(video_path),
                     '-t', str(self.chunk_duration),
-                    '-c:v', 'libx264',  # Force H.264 even in fallback
-                    '-preset', 'fast',
-                    '-crf', '23',
-                    '-c:a', 'copy',
+                    '-c', 'copy',  # Still use stream copy in fallback
                     '-y',
                     str(chunk_path)
                 ]
                 try:
                     subprocess.run(cmd_alt, check=True, capture_output=True, text=True)
                     chunk_paths.append(str(chunk_path))
+                    logger.info(f"✅ Chunk {i+1} created with alternative method")
                 except subprocess.CalledProcessError as e2:
-                    logger.error(f"Alternative method also failed: {e2.stderr}")
+                    # Last resort: try with re-encoding if copy fails
+                    logger.warning(f"Stream copy failed, trying with re-encoding for chunk {i}")
+                    cmd_encode = [
+                        'ffmpeg',
+                        '-ss', str(start_time),
+                        '-i', str(video_path),
+                        '-t', str(self.chunk_duration),
+                        '-c:v', 'libx264',
+                        '-preset', 'ultrafast',
+                        '-crf', '28',  # Lower quality for speed
+                        '-c:a', 'aac',
+                        '-y',
+                        str(chunk_path)
+                    ]
+                    try:
+                        subprocess.run(cmd_encode, check=True, capture_output=True, text=True)
+                        chunk_paths.append(str(chunk_path))
+                        logger.info(f"✅ Chunk {i+1} created with re-encoding")
+                    except subprocess.CalledProcessError as e3:
+                        logger.error(f"All methods failed for chunk {i}: {e3.stderr}")
                     
         logger.info(f"Successfully created {len(chunk_paths)} chunks")
         return chunk_paths

@@ -150,20 +150,29 @@ def update_video_progress(video_id, progress, message="Processing...", app=None)
     """Update video processing progress in database"""
     try:
         # Try to get app context
-        if app:
+        if app and video_id:
             with app.app_context():
                 db = app.db
                 Video = app.Video
-                video = Video.query.get(video_id)
+                
+                # Use a new session for this update
+                video = db.session.get(Video, video_id)
                 if video:
                     video.processing_progress = int(progress)
                     video.processing_log = f"{video.processing_log}\n[{datetime.now().strftime('%H:%M:%S')}] {message} ({progress}%)" if video.processing_log else f"[{datetime.now().strftime('%H:%M:%S')}] {message} ({progress}%)"
                     db.session.commit()
+                    
+                    # Important: Close the session after update
+                    db.session.close()
+                    db.session.remove()
+                    
                     print(f"📊 Progress updated: {progress}% - {message}")
         else:
-            print(f"⚠️ No app context for progress update: {progress}% - {message}")
+            # Just log without database update
+            print(f"📊 Progress: {progress}% - {message}")
     except Exception as e:
         print(f"⚠️ Could not update progress: {e}")
+        # Don't propagate the error - progress updates are non-critical
 
 def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=None):
     """
@@ -186,9 +195,8 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             print(f"🎮 GPU Device: {torch.cuda.get_device_name(0)}")
             print(f"💾 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
         
-        # Update progress: Initializing
-        if video_id:
-            update_video_progress(video_id, 5, "Initializing GPU detection...", app)
+        # Skip progress updates during processing to avoid database connections
+        print("📊 Progress: 5% - Initializing GPU detection...")
         
         # Initialize person recognizer if available
         ui_style_recognizer = None
@@ -276,14 +284,15 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         
         # Update progress: Video loaded
         if video_id:
-            update_video_progress(video_id, 10, f"Video loaded: {total_frames} frames, {duration:.1f}s", app)
+            # Skip DB update to avoid connection pool issues
+            print(f"📊 Progress: 10% - Video loaded: {total_frames} frames, {duration:.1f}s")
         
         # Extract OCR data (timestamp and location) from video
         ocr_data = None
         if OCR_AVAILABLE:
             print("\n🔤 Extracting OCR data from video...")
             if video_id:
-                update_video_progress(video_id, 12, "Extracting timestamps and location...", app)
+                print("📊 Progress: 12% - Extracting timestamps and location...")
             
             try:
                 ocr_extractor = VideoOCRExtractor(ocr_engine='easyocr')
@@ -516,7 +525,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 
                 # Update database progress
                 if video_id:
-                    update_video_progress(video_id, int(progress), f"Detecting persons: {processed_frames}/{total_frames} frames", app)
+                    print(f"📊 Progress: {int(progress)}% - Detecting persons: {processed_frames}/{total_frames} frames")
             
             frame_count += 1
         
@@ -613,7 +622,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         
         # Update progress: Finalizing
         if video_id:
-            update_video_progress(video_id, 95, f"Finalizing: {len(detections)} detections found", app)
+            print(f"📊 Progress: 95% - Finalizing: {len(detections)} detections found")
         
         # Create processing summary
         unique_persons = len(set(d.get('person_id', 0) for d in detections if d.get('person_id')))

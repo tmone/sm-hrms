@@ -2518,10 +2518,10 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                     except ImportError:
                         from processing.enhanced_detection_fallback import enhanced_person_detection_task as gpu_person_detection_task
                 
-                # Configure GPU processing
+                # Configure GPU processing with conservative settings
                 gpu_config = {
                     'use_gpu': processing_options.get('use_gpu', True) and gpu_available,
-                    'batch_size': 8 if gpu_available else 4,  # Larger batch size for GPU
+                    'batch_size': 4 if gpu_available else 2,  # Reduced batch size for stability
                     'device': 'cuda:0' if gpu_available else 'cpu',
                     'fp16': True if gpu_available else False,  # Use half precision on GPU
                     'num_workers': 4 if gpu_available else 2

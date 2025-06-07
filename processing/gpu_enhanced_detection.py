@@ -10,6 +10,7 @@ import json
 import glob
 import uuid
 import tempfile
+import time
 
 # Set up logging
 try:
@@ -18,6 +19,16 @@ try:
 except:
     import logging
     logger = logging.getLogger(__name__)
+
+# Import resource throttler
+try:
+    from processing.resource_throttler import get_throttler, safe_gpu_operation, BatchProcessor
+    throttler = get_throttler()
+    THROTTLING_ENABLED = True
+except:
+    logger.warning("Resource throttling not available")
+    THROTTLING_ENABLED = False
+    throttler = None
 
 # Try to import torch and check CUDA availability
 try:
@@ -191,7 +202,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         if gpu_config is None:
             gpu_config = {
                 'use_gpu': CUDA_AVAILABLE,
-                'batch_size': 8 if CUDA_AVAILABLE else 4,
+                'batch_size': 4 if CUDA_AVAILABLE else 2,  # Reduced from 8 to 4 for stability
                 'device': 'cuda:0' if CUDA_AVAILABLE else 'cpu',
                 'fp16': CUDA_AVAILABLE,
                 'num_workers': 4
@@ -205,6 +216,17 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         
         # Skip progress updates during processing to avoid database connections
         print("📊 Progress: 5% - Initializing GPU detection...")
+        
+        # Set CUDA to use less aggressive memory allocation
+        if CUDA_AVAILABLE and torch.cuda.is_available():
+            try:
+                # Limit CUDA memory growth
+                torch.cuda.set_per_process_memory_fraction(0.8)  # Use max 80% of GPU memory
+                # Clear any existing cache
+                torch.cuda.empty_cache()
+                logger.info("CUDA memory management configured")
+            except Exception as e:
+                logger.warning(f"Could not configure CUDA memory: {e}")
         
         # Initialize person recognizer if available
         ui_style_recognizer = None
@@ -474,21 +496,43 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             
             # Process batch when full or at end of video
             if len(frame_batch) >= batch_size or frame_count == total_frames - 1:
+                # Apply resource throttling before GPU operations
+                if THROTTLING_ENABLED and throttler:
+                    throttler.throttle()
+                
                 # Run batch inference
                 if gpu_tracker:
                     # Use GPU appearance tracker
-                    batch_detections = process_batch_gpu_with_tracker(
-                        model, frame_batch, frame_numbers, 
-                        gpu_config, gpu_tracker, fps,
-                        ui_style_recognizer=ui_style_recognizer
-                    )
+                    if THROTTLING_ENABLED:
+                        batch_detections = safe_gpu_operation(
+                            process_batch_gpu_with_tracker,
+                            model, frame_batch, frame_numbers, 
+                            gpu_config, gpu_tracker, fps,
+                            ui_style_recognizer=ui_style_recognizer,
+                            batch_size=len(frame_batch)
+                        )
+                    else:
+                        batch_detections = process_batch_gpu_with_tracker(
+                            model, frame_batch, frame_numbers, 
+                            gpu_config, gpu_tracker, fps,
+                            ui_style_recognizer=ui_style_recognizer
+                        )
                 else:
                     # Use simple position-based tracking
-                    batch_detections = process_batch_gpu(
-                        model, frame_batch, frame_numbers, 
-                        gpu_config, person_tracks, next_person_id,
-                        ui_style_recognizer=ui_style_recognizer
-                    )
+                    if THROTTLING_ENABLED:
+                        batch_detections = safe_gpu_operation(
+                            process_batch_gpu,
+                            model, frame_batch, frame_numbers, 
+                            gpu_config, person_tracks, next_person_id,
+                            ui_style_recognizer=ui_style_recognizer,
+                            batch_size=len(frame_batch)
+                        )
+                    else:
+                        batch_detections = process_batch_gpu(
+                            model, frame_batch, frame_numbers, 
+                            gpu_config, person_tracks, next_person_id,
+                            ui_style_recognizer=ui_style_recognizer
+                        )
                 
                 # Update next person ID
                 if batch_detections:
@@ -695,6 +739,10 @@ def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, n
     detections = []
     
     try:
+        # Add small delay to prevent GPU overload
+        if THROTTLING_ENABLED and throttler and len(frames) > 4:
+            time.sleep(0.02 * len(frames))  # 20ms per frame
+        
         # Run batch inference
         if hasattr(model, 'predict'):  # YOLO model
             # Process all frames at once on GPU

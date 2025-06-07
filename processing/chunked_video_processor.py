@@ -89,12 +89,21 @@ class ChunkProcessor:
         # Initialize recognition model
         try:
             self.recognizer = SimplePersonRecognitionInference()
-            self.use_recognition = True
-            logger.info(f"Worker {worker_id} (Chunk {chunk_idx}): "
-                       f"Recognition model loaded successfully")
+            # Check if the model actually loaded
+            if self.recognizer and self.recognizer.inference:
+                self.use_recognition = True
+                logger.info(f"✅ Worker {worker_id} (Chunk {chunk_idx}): "
+                           f"Recognition model loaded successfully")
+            else:
+                logger.error(f"❌ Worker {worker_id} (Chunk {chunk_idx}): "
+                            f"Recognition model created but inference is None")
+                logger.error("⚠️ RECOGNITION DISABLED - All persons will get NEW PERSON-XXXX IDs!")
+                self.recognizer = None
+                self.use_recognition = False
         except Exception as e:
-            logger.warning(f"Worker {worker_id} (Chunk {chunk_idx}): "
-                          f"Failed to load recognition model: {e}")
+            logger.error(f"❌ Worker {worker_id} (Chunk {chunk_idx}): "
+                        f"Failed to load recognition model: {e}")
+            logger.error("⚠️ RECOGNITION DISABLED - All persons will get NEW PERSON-XXXX IDs!")
             self.recognizer = None
             self.use_recognition = False
             
@@ -192,8 +201,16 @@ class ChunkProcessor:
                                     if recog_result and recog_result.get('confidence', 0) > 0.85:
                                         recognized_id = recog_result.get('person_id')
                                         self.tracker.set_recognized_person_id(track_id, recognized_id)
+                                        logger.info(f"🎯 Frame {global_frame_num}: Recognized {recognized_id} "
+                                                   f"with confidence {recog_result.get('confidence', 0):.2f}")
+                                    else:
+                                        logger.debug(f"Frame {global_frame_num}: No recognition "
+                                                    f"(confidence: {recog_result.get('confidence', 0) if recog_result else 0:.2f})")
                             except Exception as e:
                                 logger.debug(f"Recognition failed: {e}")
+                        else:
+                            if frame_num == 0 and track_id == 1:  # Log once per chunk
+                                logger.warning("⚠️ Recognition is DISABLED - creating new IDs for ALL persons")
                         
                         # Get temporary UNKNOWN ID from shared state with bbox info
                         temp_id = self.shared_state.assign_temporary_id(

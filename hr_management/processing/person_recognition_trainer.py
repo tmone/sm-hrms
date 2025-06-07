@@ -18,6 +18,17 @@ from sklearn.metrics import classification_report, confusion_matrix
 import joblib
 from typing import Dict, List, Tuple, Optional
 
+# Import compatibility layer for NumPy version issues
+try:
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from processing.recognition_compatibility import load_compatible_pickle
+except ImportError:
+    # Fallback to regular pickle if compatibility layer not available
+    def load_compatible_pickle(file_path):
+        with open(file_path, 'rb') as f:
+            return pickle.load(f)
+
 class PersonRecognitionTrainer:
     def __init__(self, models_dir: str = "models/person_recognition"):
         self.models_dir = Path(models_dir)
@@ -288,16 +299,24 @@ class PersonRecognitionTrainer:
             raise ValueError(f"Model not found: {model_name}")
         
         # Load model and scaler
-        model = joblib.load(model_dir / 'model.pkl')
-        scaler = joblib.load(model_dir / 'scaler.pkl')
+        try:
+            model = joblib.load(model_dir / 'model.pkl')
+            scaler = joblib.load(model_dir / 'scaler.pkl')
+        except Exception as e:
+            # Try compatibility loader
+            model = load_compatible_pickle(model_dir / 'model.pkl')
+            scaler = load_compatible_pickle(model_dir / 'scaler.pkl')
         
         # Load metadata
         with open(model_dir / 'metadata.json') as f:
             metadata = json.load(f)
         
         # Load person ID mapping
-        with open(model_dir / 'person_id_mapping.pkl', 'rb') as f:
-            person_id_mapping = pickle.load(f)
+        try:
+            with open(model_dir / 'person_id_mapping.pkl', 'rb') as f:
+                person_id_mapping = pickle.load(f)
+        except Exception as e:
+            person_id_mapping = load_compatible_pickle(model_dir / 'person_id_mapping.pkl')
         
         return model, scaler, metadata, person_id_mapping
     

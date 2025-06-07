@@ -9,6 +9,7 @@ from pathlib import Path
 import json
 import glob
 import uuid
+import tempfile
 
 # Try to import torch and check CUDA availability
 try:
@@ -44,6 +45,26 @@ try:
     print("✅ OCR Extractor available")
 except ImportError as e:
     print(f"⚠️ OCR Extractor not available: {e}")
+
+# Try to import recognition - use venv wrapper to avoid NumPy issues
+RECOGNITION_AVAILABLE = False
+try:
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    
+    # Try direct import first
+    try:
+        from hr_management.processing.person_recognition_inference_simple import PersonRecognitionInferenceSimple
+        RECOGNITION_AVAILABLE = True
+        print("✅ Person Recognition available (direct)")
+    except ImportError as e:
+        # Use virtual environment wrapper as fallback
+        from processing.venv_recognition_wrapper import VenvRecognitionWrapper, recognize_in_venv
+        RECOGNITION_AVAILABLE = True
+        print("✅ Person Recognition available (via venv wrapper)")
+except Exception as e:
+    print(f"⚠️ Person Recognition not available: {e}")
+    RECOGNITION_AVAILABLE = False
 
 def get_next_person_id():
     """
@@ -168,6 +189,45 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         # Update progress: Initializing
         if video_id:
             update_video_progress(video_id, 5, "Initializing GPU detection...", app)
+        
+        # Initialize person recognizer if available
+        ui_style_recognizer = None
+        if RECOGNITION_AVAILABLE:
+            try:
+                # Check if we need to use venv wrapper
+                try:
+                    # Try direct import
+                    from hr_management.processing.person_recognition_inference_simple import PersonRecognitionInferenceSimple
+                    
+                    # Try to find the latest refined model
+                    model_path = Path('models/person_recognition')
+                    refined_models = list(model_path.glob('refined_*'))
+                    
+                    if refined_models:
+                        # Use the latest refined model
+                        latest_model = max(refined_models, key=lambda p: p.stat().st_mtime)
+                        model_name = latest_model.name
+                        print(f"🎯 Using model: {model_name}")
+                    else:
+                        # Try the default model
+                        model_name = 'refined_quick_20250606_054446'
+                        print(f"🎯 Using default model: {model_name}")
+                    
+                    ui_style_recognizer = PersonRecognitionInferenceSimple(
+                        model_name=model_name,
+                        confidence_threshold=0.8  # High threshold for automatic recognition
+                    )
+                    print("✅ Person Recognizer initialized directly")
+                except (ImportError, Exception) as e:
+                    # Use venv wrapper
+                    print(f"⚠️ Direct load failed: {e}")
+                    print("🔄 Using virtual environment wrapper for recognition")
+                    from processing.venv_recognition_wrapper import VenvRecognitionWrapper
+                    ui_style_recognizer = VenvRecognitionWrapper()
+                    print("✅ Person recognition loaded via venv wrapper")
+            except Exception as e:
+                print(f"❌ Could not initialize any recognizer: {e}")
+                ui_style_recognizer = None
         
         # Initialize video capture with backend preference
         # Try different backends for better codec support
@@ -390,13 +450,15 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                     # Use GPU appearance tracker
                     batch_detections = process_batch_gpu_with_tracker(
                         model, frame_batch, frame_numbers, 
-                        gpu_config, gpu_tracker, fps
+                        gpu_config, gpu_tracker, fps,
+                        ui_style_recognizer=ui_style_recognizer
                     )
                 else:
                     # Use simple position-based tracking
                     batch_detections = process_batch_gpu(
                         model, frame_batch, frame_numbers, 
-                        gpu_config, person_tracks, next_person_id
+                        gpu_config, person_tracks, next_person_id,
+                        ui_style_recognizer=ui_style_recognizer
                     )
                 
                 # Update next person ID
@@ -539,7 +601,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             })
         
         # Extract person images
-        extracted_count = extract_persons_data_gpu(video_path, person_tracks, persons_dir)
+        extracted_count = extract_persons_data_gpu(video_path, person_tracks, persons_dir, ui_style_recognizer)
         
         # Update progress: Finalizing
         if video_id:
@@ -597,7 +659,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         return {'error': str(e), 'trace': error_trace}
 
 
-def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, next_person_id):
+def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, next_person_id, ui_style_recognizer=None):
     """
     Process a batch of frames on GPU for efficiency
     """
@@ -954,12 +1016,24 @@ def validate_and_merge_tracks(person_tracks):
     return merged_tracks
 
 
-def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
+def extract_persons_data_gpu(video_path, person_tracks, persons_dir, ui_style_recognizer=None):
     """
     Extract person images and metadata to PERSON-XXXX folders
     Optimized version for GPU processing pipeline
+    
+    Args:
+        video_path: Path to the video file
+        person_tracks: Dictionary of person tracks with detections
+        persons_dir: Directory to save person data
+        ui_style_recognizer: Optional PersonRecognitionInferenceSimple instance for recognition
     """
     print(f"📸 Extracting person data to {persons_dir}")
+    
+    # Import recognition module if needed
+    if ui_style_recognizer is not None:
+        print("✅ Person recognition enabled during extraction")
+        import tempfile
+        import os as temp_os
     
     # Validate and merge potential duplicate tracks
     person_tracks = validate_and_merge_tracks(person_tracks)
@@ -972,11 +1046,80 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
     extracted_count = 0
     
     for person_id, detections in person_tracks.items():
-        # Create PERSON-XXXX folder name
-        if isinstance(person_id, int):
-            person_id_str = f"PERSON-{person_id:04d}"
+        # First, try to recognize this person before creating folder
+        recognized_person_id = None
+        recognition_confidence = 0.0
+        
+        if ui_style_recognizer and len(detections) > 0:
+            print(f"🔍 Attempting recognition for tracked person {person_id}...")
+            
+            # Try recognition on first valid detection
+            for i, detection in enumerate(detections[:3]):  # Try up to 3 frames
+                frame_number = detection["frame_number"]
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+                ret, frame = cap.read()
+                
+                if ret:
+                    x, y, w, h = detection["bbox"]
+                    
+                    # Skip small bounding boxes
+                    if w < 128:
+                        continue
+                    
+                    # Extract person region
+                    padding = 10
+                    x1 = max(0, int(x - padding))
+                    y1 = max(0, int(y - padding))
+                    x2 = min(frame.shape[1], int(x + w + padding))
+                    y2 = min(frame.shape[0], int(y + h + padding))
+                    
+                    person_img = frame[y1:y2, x1:x2]
+                    
+                    if person_img.size > 0:
+                        try:
+                            # Try recognition
+                            if hasattr(ui_style_recognizer, 'recognize_person'):
+                                # VenvRecognitionWrapper
+                                result = ui_style_recognizer.recognize_person(person_img, 0.8)
+                                if result:
+                                    recognized_person_id = result['person_id']
+                                    recognition_confidence = result['confidence']
+                            else:
+                                # Direct recognizer
+                                temp_file = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+                                cv2.imwrite(temp_file.name, person_img)
+                                temp_file.close()
+                                
+                                result = ui_style_recognizer.process_cropped_image(temp_file.name)
+                                os.unlink(temp_file.name)
+                                
+                                if result and result.get('persons'):
+                                    first_person = result['persons'][0]
+                                    if first_person['person_id'] != 'unknown' and first_person['confidence'] >= 0.8:
+                                        recognized_person_id = first_person['person_id']
+                                        recognition_confidence = first_person['confidence']
+                            
+                            if recognized_person_id:
+                                print(f"✅ Pre-recognition successful: {recognized_person_id} ({recognition_confidence:.2%})")
+                                break
+                                
+                        except Exception as e:
+                            print(f"⚠️ Pre-recognition error: {e}")
+            
+            # Reset video position
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        
+        # Now determine folder name based on recognition
+        if recognized_person_id:
+            person_id_str = recognized_person_id
+            print(f"🎯 Using recognized ID for folder: {person_id_str}")
         else:
-            person_id_str = str(person_id)
+            if isinstance(person_id, int):
+                person_id_str = f"PERSON-{person_id:04d}"
+            else:
+                person_id_str = str(person_id)
+            print(f"🆕 Creating new person folder: {person_id_str}")
+        
         person_dir = persons_dir / person_id_str
         person_dir.mkdir(parents=True, exist_ok=True)
         
@@ -999,6 +1142,9 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
         
         person_metadata = {
             "person_id": person_id_str,
+            "original_tracking_id": person_id,
+            "recognized": recognized_person_id is not None,
+            "recognition_confidence": float(recognition_confidence) if recognized_person_id else 0,
             "total_detections": len(detections),
             "first_appearance": detections[0]["timestamp"],
             "last_appearance": detections[-1]["timestamp"],
@@ -1041,13 +1187,20 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
                     img_path = person_dir / img_filename
                     cv2.imwrite(str(img_path), person_img)
                     
-                    person_metadata["images"].append({
+                    image_metadata = {
                         "filename": img_filename,
                         "frame_number": frame_number,
                         "timestamp": detection["timestamp"],
                         "confidence": detection["confidence"],
                         "bbox": detection["bbox"]
-                    })
+                    }
+                    
+                    # Add recognition info if available
+                    if recognized_person_id:
+                        image_metadata["recognized_as"] = recognized_person_id
+                        image_metadata["recognition_confidence"] = float(recognition_confidence)
+                    
+                    person_metadata["images"].append(image_metadata)
         
         # Save metadata
         metadata_path = person_dir / "metadata.json"
@@ -1066,7 +1219,7 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir):
 
 
 
-def process_batch_gpu_with_tracker(model, frames, frame_numbers, gpu_config, gpu_tracker, fps):
+def process_batch_gpu_with_tracker(model, frames, frame_numbers, gpu_config, gpu_tracker, fps, ui_style_recognizer=None):
     """
     Process a batch of frames using GPU appearance tracker
     """

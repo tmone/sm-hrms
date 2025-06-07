@@ -11,15 +11,23 @@ import glob
 import uuid
 import tempfile
 
+# Set up logging
+try:
+    from config_logging import get_logger
+    logger = get_logger(__name__)
+except:
+    import logging
+    logger = logging.getLogger(__name__)
+
 # Try to import torch and check CUDA availability
 try:
     import torch
     TORCH_AVAILABLE = True
     CUDA_AVAILABLE = torch.cuda.is_available()
     if not CUDA_AVAILABLE:
-        print("⚠️ CUDA not available - will use CPU for processing")
+        logger.info("CUDA not available - will use CPU for processing")
 except ImportError:
-    print("⚠️ PyTorch not available - will use OpenCV DNN")
+    logger.info("PyTorch not available - will use OpenCV DNN")
     TORCH_AVAILABLE = False
     CUDA_AVAILABLE = False
 
@@ -238,9 +246,13 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                     # Use venv wrapper
                     print(f"⚠️ Direct load failed: {e}")
                     print("🔄 Using virtual environment wrapper for recognition")
-                    from processing.venv_recognition_wrapper import VenvRecognitionWrapper
-                    ui_style_recognizer = VenvRecognitionWrapper()
-                    print("✅ Person recognition loaded via venv wrapper")
+                    try:
+                        from processing.venv_recognition_wrapper import VenvRecognitionWrapper
+                        ui_style_recognizer = VenvRecognitionWrapper()
+                        print("✅ Person recognition loaded via venv wrapper")
+                    except Exception as venv_error:
+                        print(f"❌ Venv recognition error: {venv_error}")
+                        ui_style_recognizer = None
             except Exception as e:
                 print(f"❌ Could not initialize any recognizer: {e}")
                 ui_style_recognizer = None

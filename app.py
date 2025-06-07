@@ -2,6 +2,18 @@ import os
 import sys
 from flask import Flask
 
+# Set up logging before anything else
+try:
+    from config_logging import setup_logging, get_logger
+    progress_logger = setup_logging()
+    logger = get_logger(__name__)
+    logger.info("Logging system initialized")
+except Exception as e:
+    print(f"Failed to setup logging: {e}")
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
 # Try to import optional dependencies
 SOCKETIO_AVAILABLE = False
 BABEL_AVAILABLE = False
@@ -11,21 +23,21 @@ try:
     from flask_socketio import SocketIO
     SOCKETIO_AVAILABLE = True
 except ImportError:
-    print("⚠️  Flask-SocketIO not available. Real-time features disabled.")
+    logger.warning("Flask-SocketIO not available. Real-time features disabled.")
     SocketIO = None
 
 try:
     from flask_babel import Babel
     BABEL_AVAILABLE = True
 except ImportError:
-    print("⚠️  Flask-Babel not available. Multi-language support disabled.")
+    logger.warning("Flask-Babel not available. Multi-language support disabled.")
     Babel = None
 
 try:
     import celery
     CELERY_AVAILABLE = True
 except ImportError:
-    print("⚠️  Celery not available. Background processing disabled.")
+    logger.warning("Celery not available. Background processing disabled.")
 
 # Core required imports
 from flask_sqlalchemy import SQLAlchemy
@@ -55,7 +67,7 @@ def create_app(config_name=None):
     try:
         from config_database import SQLALCHEMY_ENGINE_OPTIONS
         app.config['SQLALCHEMY_ENGINE_OPTIONS'] = SQLALCHEMY_ENGINE_OPTIONS
-        print("✅ Using enhanced database connection pool settings")
+        logger.info("Using enhanced database connection pool settings")
     except ImportError:
         # Default connection pool settings
         app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -65,7 +77,7 @@ def create_app(config_name=None):
             'pool_recycle': 3600,
             'pool_pre_ping': True,
         }
-        print("📊 Using default database connection pool settings")
+        logger.info("Using default database connection pool settings")
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB file upload limit
     
     # Optional configuration

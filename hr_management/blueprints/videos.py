@@ -621,9 +621,16 @@ def extract_ocr(id):
                 
                 height, width = frame.shape[:2]
                 
-                # Initialize OCR reader
+                # Initialize OCR reader with GPU if available
                 from easyocr import Reader
-                reader = Reader(['en'], gpu=False, verbose=False)
+                try:
+                    import torch
+                    gpu_available = torch.cuda.is_available()
+                    reader = Reader(['en'], gpu=gpu_available, verbose=False)
+                    if gpu_available:
+                        print("🎮 Using GPU for OCR extraction")
+                except:
+                    reader = Reader(['en'], gpu=False, verbose=False)
                 
                 # Extract timestamp and time (top region)
                 timestamp_region = frame[0:int(height*0.1), 0:width]
@@ -2623,7 +2630,10 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                 
                 # Update processing log
                 unique_persons = len(set(d.get('person_id') for d in result['detections'] if d.get('person_id')))
-                video_obj.processing_log += f"\nGPU processing completed at {datetime.utcnow()} - Found {unique_persons} unique persons"
+                if video_obj.processing_log:
+                    video_obj.processing_log += f"\nGPU processing completed at {datetime.utcnow()} - Found {unique_persons} unique persons"
+                else:
+                    video_obj.processing_log = f"GPU processing completed at {datetime.utcnow()} - Found {unique_persons} unique persons"
                 
                 db.session.commit()
                 
@@ -2776,10 +2786,16 @@ def start_enhanced_fallback_processing(video, processing_options, app):
                             print(f"📁 Stored annotated video path: {relative_path}")
                     
                     # Store enhanced processing info
-                    video_obj.processing_log += f"\nEnhanced processing completed:"
-                    video_obj.processing_log += f"\n- Annotated video: {result.get('annotated_video_path', 'N/A')}"
-                    video_obj.processing_log += f"\n- Total persons detected: {summary.get('total_persons', 0)}"
-                    video_obj.processing_log += f"\n- Person summary: {summary.get('person_summary', {})}"
+                    if video_obj.processing_log:
+                        video_obj.processing_log += f"\nEnhanced processing completed:"
+                        video_obj.processing_log += f"\n- Annotated video: {result.get('annotated_video_path', 'N/A')}"
+                        video_obj.processing_log += f"\n- Total persons detected: {summary.get('total_persons', 0)}"
+                        video_obj.processing_log += f"\n- Person summary: {summary.get('person_summary', {})}"
+                    else:
+                        video_obj.processing_log = f"Enhanced processing completed:"
+                        video_obj.processing_log += f"\n- Annotated video: {result.get('annotated_video_path', 'N/A')}"
+                        video_obj.processing_log += f"\n- Total persons detected: {summary.get('total_persons', 0)}"
+                        video_obj.processing_log += f"\n- Person summary: {summary.get('person_summary', {})}"
                 
                 db.session.commit()
                 
@@ -2791,7 +2807,10 @@ def start_enhanced_fallback_processing(video, processing_options, app):
                 
                 # Update processing log with final summary
                 unique_persons = len(set(d.get('person_id') for d in result['detections'] if d.get('person_id')))
-                video_obj.processing_log += f"\nCompleted at {datetime.utcnow()} - Found {unique_persons} unique persons with {len(result['detections'])} total detections"
+                if video_obj.processing_log:
+                    video_obj.processing_log += f"\nCompleted at {datetime.utcnow()} - Found {unique_persons} unique persons with {len(result['detections'])} total detections"
+                else:
+                    video_obj.processing_log = f"Completed at {datetime.utcnow()} - Found {unique_persons} unique persons with {len(result['detections'])} total detections"
                 
                 db.session.commit()
                 

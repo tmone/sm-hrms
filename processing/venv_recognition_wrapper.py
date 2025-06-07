@@ -83,19 +83,26 @@ else:
             os.unlink(temp_file.name)
             
             if result.returncode == 0:
-                output = result.stdout.strip()
+                output = result.stdout.strip() if result.stdout else ""
                 if output:
                     parts = output.split()
                     if len(parts) >= 2 and parts[0] != 'unknown':
-                        person_id = parts[0]
-                        confidence = float(parts[1])
-                        if confidence >= confidence_threshold:
-                            return {
-                                'person_id': person_id,
-                                'confidence': confidence
-                            }
+                        try:
+                            person_id = parts[0]
+                            confidence = float(parts[1])
+                            if confidence >= confidence_threshold:
+                                return {
+                                    'person_id': person_id,
+                                    'confidence': confidence
+                                }
+                        except (ValueError, IndexError):
+                            print(f"Failed to parse recognition output: {output}")
+                else:
+                    # No output means no recognition
+                    return None
             else:
-                print(f"Recognition error: {result.stderr}")
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                print(f"Recognition error: {error_msg}")
             
             return None
             

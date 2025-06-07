@@ -1,4 +1,0 @@
-file 'D:\sm-hrm\6b0e2a6e-8ec4-406b-b604-bf7ef7470596_test_chunk_000_annotated_20250607_102940_web.mp4'
-file 'D:\sm-hrm\6b0e2a6e-8ec4-406b-b604-bf7ef7470596_test_chunk_001_annotated_20250607_102940_web.mp4'
-file 'D:\sm-hrm\6b0e2a6e-8ec4-406b-b604-bf7ef7470596_test_chunk_002_annotated_20250607_102940_web.mp4'
-file 'D:\sm-hrm\6b0e2a6e-8ec4-406b-b604-bf7ef7470596_test_chunk_003_annotated_20250607_102940_web.mp4'

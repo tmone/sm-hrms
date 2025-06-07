@@ -5,13 +5,19 @@ and queuing them for processing
 
 import os
 import subprocess
-import logging
 from pathlib import Path
 from datetime import datetime
 import shutil
 from .cleanup_manager import get_cleanup_manager
 
-logger = logging.getLogger(__name__)
+# Set up logging
+try:
+    from config_logging import get_logger
+    from utils.progress_logger import VideoProcessingProgress, simple_progress
+    logger = get_logger(__name__)
+except:
+    import logging
+    logger = logging.getLogger(__name__)
 
 
 class VideoChunkManager:
@@ -30,7 +36,9 @@ class VideoChunkManager:
             '-of', 'default=noprint_wrappers=1:nokey=1', video_path
         ]
         try:
-            duration = float(subprocess.check_output(cmd).decode().strip())
+            # Use UTF-8 encoding to handle non-ASCII characters
+            output = subprocess.check_output(cmd, encoding='utf-8', errors='replace')
+            duration = float(output.strip())
             return duration
         except Exception as e:
             logger.error(f"Failed to get video duration: {e}")
@@ -84,7 +92,8 @@ class VideoChunkManager:
             
             try:
                 logger.info(f"Creating chunk {i+1}/{num_chunks}: {chunk_filename}")
-                subprocess.run(cmd, check=True, capture_output=True, text=True)
+                # Use encoding='utf-8' and errors='replace' to handle non-ASCII characters
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
                 chunk_paths.append(str(chunk_path))
             except subprocess.CalledProcessError as e:
                 logger.error(f"Failed to create chunk {i}: {e.stderr}")
@@ -99,7 +108,7 @@ class VideoChunkManager:
                     str(chunk_path)
                 ]
                 try:
-                    subprocess.run(cmd_alt, check=True, capture_output=True, text=True)
+                    subprocess.run(cmd_alt, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
                     chunk_paths.append(str(chunk_path))
                     logger.info(f"✅ Chunk {i+1} created with alternative method")
                 except subprocess.CalledProcessError as e2:
@@ -118,7 +127,7 @@ class VideoChunkManager:
                         str(chunk_path)
                     ]
                     try:
-                        subprocess.run(cmd_encode, check=True, capture_output=True, text=True)
+                        subprocess.run(cmd_encode, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
                         chunk_paths.append(str(chunk_path))
                         logger.info(f"✅ Chunk {i+1} created with re-encoding")
                     except subprocess.CalledProcessError as e3:
@@ -299,7 +308,7 @@ class VideoChunkManager:
         ]
         
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
             logger.info(f"Merged annotated video created: {output_path}")
             
             # Clean up concat file

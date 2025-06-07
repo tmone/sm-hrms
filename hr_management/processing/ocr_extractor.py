@@ -37,13 +37,13 @@ class VideoOCRExtractor:
                     import torch
                     gpu_available = torch.cuda.is_available()
                     if gpu_available:
-                        print("🎮 GPU detected for OCR, using GPU acceleration")
+                        print("[GPU] GPU detected for OCR, using GPU acceleration")
                         self.reader = easyocr.Reader(['en'], gpu=True, verbose=False)
                     else:
-                        print("⚠️ No GPU detected for OCR, using CPU")
+                        print("[WARNING] No GPU detected for OCR, using CPU")
                         self.reader = easyocr.Reader(['en'], gpu=False, verbose=False)
                 except Exception as e:
-                    print(f"⚠️ Failed to initialize EasyOCR with GPU: {e}")
+                    print(f"[WARNING] Failed to initialize EasyOCR with GPU: {e}")
                     self.reader = easyocr.Reader(['en'], gpu=False, verbose=False)
             elif ocr_engine == 'tesseract':
                 # Configure tesseract path for Windows

@@ -85,7 +85,7 @@ class FFmpegH264Writer:
             logger.info(f"Encoding {len(self.frames)} frames to H.264...")
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0:
-                logger.info(f"✅ H.264 video created: {self.output_path}")
+                logger.info(f"[OK] H.264 video created: {self.output_path}")
             else:
                 logger.error(f"FFmpeg error: {result.stderr}")
         except Exception as e:
@@ -151,7 +151,7 @@ def convert_to_h264(input_path, output_path=None):
     try:
         logger.info(f"Converting to H.264: {input_path} -> {output_path}")
         subprocess.run(cmd, check=True, capture_output=True)
-        logger.info(f"✅ Converted to H.264: {output_path}")
+        logger.info(f"[OK] Converted to H.264: {output_path}")
         return output_path
     except subprocess.CalledProcessError as e:
         logger.error(f"Failed to convert video: {e.stderr.decode()}")

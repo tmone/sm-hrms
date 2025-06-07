@@ -33,7 +33,7 @@ def test_chunked_processor(video_path, output_dir):
     result = processor.process_video(video_path, output_dir)
     
     if result['status'] == 'success':
-        logger.info(f"✅ Chunked processing successful!")
+        logger.info(f"[OK] Chunked processing successful!")
         logger.info(f"   Total detections: {len(result['detections'])}")
         logger.info(f"   Unique persons: {result['metadata']['unique_persons']}")
         logger.info(f"   Processing time: {result['metadata']['processing_time']:.1f}s")
@@ -50,7 +50,7 @@ def test_chunked_processor(video_path, output_dir):
         
         return True
     else:
-        logger.error(f"❌ Chunked processing failed: {result.get('error')}")
+        logger.error(f"[ERROR] Chunked processing failed: {result.get('error')}")
         return False
 
 
@@ -66,7 +66,7 @@ def test_enhanced_detection(video_path, output_dir):
     result = process_video_with_enhanced_detection(video_path, output_dir)
     
     if result and result.get('success'):
-        logger.info(f"✅ Enhanced detection successful!")
+        logger.info(f"[OK] Enhanced detection successful!")
         logger.info(f"   Processing method: {result['summary']['processing_method']}")
         logger.info(f"   Total persons: {result['summary']['total_persons']}")
         logger.info(f"   Annotated video: {result['annotated_video']}")
@@ -79,7 +79,7 @@ def test_enhanced_detection(video_path, output_dir):
         
         return True
     else:
-        logger.error(f"❌ Enhanced detection failed: {result.get('error') if result else 'Unknown error'}")
+        logger.error(f"[ERROR] Enhanced detection failed: {result.get('error') if result else 'Unknown error'}")
         return False
 
 
@@ -125,10 +125,10 @@ def main():
             success = False
     
     if success:
-        logger.info("\n✅ All tests passed!")
+        logger.info("\n[OK] All tests passed!")
         return 0
     else:
-        logger.error("\n❌ Some tests failed!")
+        logger.error("\n[ERROR] Some tests failed!")
         return 1
 
 

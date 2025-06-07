@@ -51,7 +51,7 @@ def fix_annotated_video_paths():
                 if found_files:
                     # Use the most recent annotated file
                     annotated_file = sorted(found_files)[-1]
-                    print(f"  ✅ Found annotated video: {annotated_file}")
+                    print(f"  [OK] Found annotated video: {annotated_file}")
                     
                     # Update the database
                     # Store just the filename (without processing/outputs/ prefix)
@@ -62,13 +62,13 @@ def fix_annotated_video_paths():
                         video.processed_path = video.annotated_video_path
                     
                     db.session.commit()
-                    print(f"  ✅ Updated annotated_video_path to: {video.annotated_video_path}")
+                    print(f"  [OK] Updated annotated_video_path to: {video.annotated_video_path}")
                 else:
-                    print(f"  ❌ No annotated video found for this video")
+                    print(f"  [ERROR] No annotated video found for this video")
             else:
-                print(f"  ❌ Outputs directory not found: {outputs_dir}")
+                print(f"  [ERROR] Outputs directory not found: {outputs_dir}")
         
-        print("\n✅ Finished updating annotated video paths")
+        print("\n[OK] Finished updating annotated video paths")
 
 if __name__ == '__main__':
     fix_annotated_video_paths()

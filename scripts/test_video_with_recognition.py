@@ -18,7 +18,7 @@ def check_recognition_status():
     # Check latest processing results
     persons_dir = Path("processing/outputs/persons")
     if not persons_dir.exists():
-        print("❌ No persons directory found. Process a video first.")
+        print("[ERROR] No persons directory found. Process a video first.")
         return
     
     # Get recent person folders
@@ -28,7 +28,7 @@ def check_recognition_status():
         reverse=True
     )[:10]  # Last 10 persons
     
-    print(f"📁 Checking {len(person_folders)} recent person folders...\n")
+    print(f"[FILE] Checking {len(person_folders)} recent person folders...\n")
     
     recognized_count = 0
     new_count = 0
@@ -45,28 +45,28 @@ def check_recognition_status():
                 if img.get("recognized_as"):
                     recognized = True
                     recognized_count += 1
-                    print(f"✅ {folder.name} → Recognized as {img['recognized_as']} "
+                    print(f"[OK] {folder.name} -> Recognized as {img['recognized_as']} "
                           f"(confidence: {img.get('recognition_confidence', 0):.2%})")
                     break
             
             if not recognized:
                 new_count += 1
-                print(f"🆕 {folder.name} → New person (not recognized)")
+                print(f"[NEW] {folder.name} -> New person (not recognized)")
     
-    print(f"\n📊 Summary:")
+    print(f"\n[INFO] Summary:")
     print(f"   Recognized: {recognized_count}")
     print(f"   New persons: {new_count}")
     print(f"   Total: {recognized_count + new_count}")
     
     if recognized_count == 0 and new_count > 0:
-        print("\n⚠️  Recognition may not be working properly!")
+        print("\n[WARNING]  Recognition may not be working properly!")
         print("   All persons are being created as new.")
-        print("\n💡 Possible issues:")
+        print("\n[TIP] Possible issues:")
         print("   1. NumPy version incompatibility")
         print("   2. Recognition model not loaded")
         print("   3. Confidence threshold too high")
     elif recognized_count > 0:
-        print("\n✅ Recognition is working!")
+        print("\n[OK] Recognition is working!")
         print("   Known persons are being recognized correctly.")
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def create_test_video():
     """Create a simple test video with moving rectangles (simulating persons)"""
-    print("🎬 Creating test video...")
+    print("[ACTION] Creating test video...")
     
     # Create temporary video file
     temp_video = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
@@ -50,13 +50,13 @@ def create_test_video():
         out.write(frame)
     
     out.release()
-    print(f"✅ Test video created: {temp_video.name}")
+    print(f"[OK] Test video created: {temp_video.name}")
     return temp_video.name
 
 def test_enhanced_detection():
     """Test the enhanced detection system"""
     try:
-        print("🚀 Testing Enhanced Person Detection System")
+        print("[START] Testing Enhanced Person Detection System")
         print("=" * 50)
         
         # Create test video
@@ -66,37 +66,37 @@ def test_enhanced_detection():
             # Import and test enhanced detection
             from processing.enhanced_detection import process_video_with_enhanced_detection
             
-            print("🤖 Running enhanced detection...")
+            print("[AI] Running enhanced detection...")
             result = process_video_with_enhanced_detection(test_video_path)
             
             if result and result['success']:
-                print("✅ Enhanced detection completed successfully!")
-                print(f"📊 Results:")
+                print("[OK] Enhanced detection completed successfully!")
+                print(f"[INFO] Results:")
                 print(f"   - Output directory: {result['output_dir']}")
                 print(f"   - Annotated video: {result['annotated_video']}")
                 print(f"   - Total persons detected: {result['summary']['total_persons']}")
                 
                 # Check if annotated video was created
                 if os.path.exists(result['annotated_video']):
-                    print(f"✅ Annotated video file exists: {os.path.getsize(result['annotated_video'])} bytes")
+                    print(f"[OK] Annotated video file exists: {os.path.getsize(result['annotated_video'])} bytes")
                 else:
-                    print(f"❌ Annotated video file not found")
+                    print(f"[ERROR] Annotated video file not found")
                 
                 # Check if person folders were created
                 persons_dir = os.path.join(result['output_dir'], 'persons')
                 if os.path.exists(persons_dir):
                     person_folders = [d for d in os.listdir(persons_dir) if d.startswith('PERSON-')]
-                    print(f"✅ Person folders created: {len(person_folders)} folders")
+                    print(f"[OK] Person folders created: {len(person_folders)} folders")
                     for folder in person_folders:
                         folder_path = os.path.join(persons_dir, folder)
                         files = os.listdir(folder_path)
                         print(f"   - {folder}: {len(files)} files")
                 else:
-                    print(f"❌ Person folders not found")
+                    print(f"[ERROR] Person folders not found")
                 
                 # Print person summary
                 if 'person_summary' in result['summary']:
-                    print(f"📈 Person Summary:")
+                    print(f"[GRAPH] Person Summary:")
                     for person_id, data in result['summary']['person_summary'].items():
                         print(f"   - {person_id}: {data['total_detections']} detections, "
                               f"{data['duration']:.1f}s duration, "
@@ -105,22 +105,22 @@ def test_enhanced_detection():
                 return True
                 
             else:
-                print(f"❌ Enhanced detection failed: {result.get('error', 'Unknown error')}")
+                print(f"[ERROR] Enhanced detection failed: {result.get('error', 'Unknown error')}")
                 return False
                 
         finally:
             # Clean up test video
             if os.path.exists(test_video_path):
                 os.unlink(test_video_path)
-                print(f"🗑️ Cleaned up test video")
+                print(f"[DELETE] Cleaned up test video")
         
     except ImportError as e:
-        print(f"❌ Import error: {e}")
-        print("⚠️ Make sure YOLO and OpenCV are installed:")
+        print(f"[ERROR] Import error: {e}")
+        print("[WARNING] Make sure YOLO and OpenCV are installed:")
         print("   pip install ultralytics opencv-python")
         return False
     except Exception as e:
-        print(f"❌ Test failed: {e}")
+        print(f"[ERROR] Test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -128,7 +128,7 @@ def test_enhanced_detection():
 def test_person_tracking():
     """Test that person tracking works correctly"""
     try:
-        print("\n🎯 Testing Person Tracking Algorithm")
+        print("\n[TARGET] Testing Person Tracking Algorithm")
         print("=" * 40)
         
         from processing.enhanced_detection import PersonTracker
@@ -163,7 +163,7 @@ def test_person_tracking():
         
         # Analyze tracking results
         unique_persons = len(set(d['person_id'] for d in all_tracked))
-        print(f"✅ Tracking test completed:")
+        print(f"[OK] Tracking test completed:")
         print(f"   - Total tracked detections: {len(all_tracked)}")
         print(f"   - Unique persons identified: {unique_persons}")
         
@@ -175,7 +175,7 @@ def test_person_tracking():
         return True
         
     except Exception as e:
-        print(f"❌ Person tracking test failed: {e}")
+        print(f"[ERROR] Person tracking test failed: {e}")
         return False
 
 if __name__ == "__main__":
@@ -201,15 +201,15 @@ if __name__ == "__main__":
         print("3. Check for 'detected_<video-name>' output directory")
         print("4. Review annotated video and PERSON-XXXX folders")
     else:
-        print("❌ Some tests failed. Please check the error messages above.")
+        print("[ERROR] Some tests failed. Please check the error messages above.")
         print("\nTroubleshooting:")
         print("1. Install required dependencies: pip install ultralytics opencv-python")
         print("2. Check that YOLO model can be downloaded")
         print("3. Verify file permissions for output directories")
     
-    print("\n🎯 Enhanced Detection Features:")
-    print("✅ Multi-frame person tracking (solves duplicate detection)")
-    print("✅ Annotated video generation with bounding boxes")
-    print("✅ PERSON-XXXX folders with extracted images and metadata")
-    print("✅ Professional video processing workflow")
-    print("✅ Database integration with person_id and track_id")
+    print("\n[TARGET] Enhanced Detection Features:")
+    print("[OK] Multi-frame person tracking (solves duplicate detection)")
+    print("[OK] Annotated video generation with bounding boxes")
+    print("[OK] PERSON-XXXX folders with extracted images and metadata")
+    print("[OK] Professional video processing workflow")
+    print("[OK] Database integration with person_id and track_id")

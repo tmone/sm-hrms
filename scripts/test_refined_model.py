@@ -47,7 +47,7 @@ def test_refined_models():
         status = ""
         if model['is_refined']:
             if model['improvement'] > 0:
-                status = f"✓ Improved +{model['improvement']:.1%}"
+                status = f"[CHECK] Improved +{model['improvement']:.1%}"
             else:
                 status = "Refined"
         else:

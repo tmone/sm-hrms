@@ -25,8 +25,8 @@ def check_frame_duplication(video_path, max_check_frames=300):
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     
-    print(f"🎬 Analyzing video: {video_path}")
-    print(f"📊 Total frames: {total_frames}, FPS: {fps}")
+    print(f"[ACTION] Analyzing video: {video_path}")
+    print(f"[INFO] Total frames: {total_frames}, FPS: {fps}")
     
     previous_frame = None
     duplicates = []
@@ -95,16 +95,16 @@ def check_frame_duplication(video_path, max_check_frames=300):
     }
     
     # Summary
-    print(f"\n📊 Analysis Results:")
+    print(f"\n[INFO] Analysis Results:")
     print(f"  - Frames checked: {frame_count}")
     print(f"  - Duplicates found: {duplicate_count} ({duplicate_rate:.1f}%)")
     
     if periodic_pattern:
-        print(f"  - ⚠️  Periodic duplication detected! Period: ~{period_seconds:.2f}s")
+        print(f"  - [WARNING]  Periodic duplication detected! Period: ~{period_seconds:.2f}s")
     elif duplicate_count > 0:
         print(f"  - ℹ️  Some duplicates found, but no periodic pattern")
     else:
-        print(f"  - ✅ No significant frame duplication detected")
+        print(f"  - [OK] No significant frame duplication detected")
     
     return result
 
@@ -118,17 +118,17 @@ def compare_videos(original_path, processed_path):
     original_size = Path(original_path).stat().st_size / (1024 * 1024)
     processed_size = Path(processed_path).stat().st_size / (1024 * 1024)
     
-    print(f"\n📁 File sizes:")
+    print(f"\n[FILE] File sizes:")
     print(f"  - Original:  {original_size:.1f} MB")
     print(f"  - Processed: {processed_size:.1f} MB")
     print(f"  - Reduction: {((original_size - processed_size) / original_size * 100):.1f}%")
     
     # Check original
-    print(f"\n🔍 Checking ORIGINAL video:")
+    print(f"\n[SEARCH] Checking ORIGINAL video:")
     original_result = check_frame_duplication(original_path)
     
     # Check processed
-    print(f"\n🔍 Checking PROCESSED video:")
+    print(f"\n[SEARCH] Checking PROCESSED video:")
     processed_result = check_frame_duplication(processed_path)
     
     return {

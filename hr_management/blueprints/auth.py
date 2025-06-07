@@ -5,7 +5,7 @@ auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/test-auth')
 def test_auth():
-    return "<h1>✅ Auth Blueprint Working!</h1><p><a href='/auth/login'>Go to Login</a></p>"
+    return "<h1>[OK] Auth Blueprint Working!</h1><p><a href='/auth/login'>Go to Login</a></p>"
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():

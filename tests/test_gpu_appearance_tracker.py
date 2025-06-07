@@ -18,10 +18,10 @@ def test_gpu_tracker():
     
     # Check GPU availability
     if torch.cuda.is_available():
-        print(f"✅ CUDA available: {torch.cuda.get_device_name(0)}")
-        print(f"💾 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+        print(f"[OK] CUDA available: {torch.cuda.get_device_name(0)}")
+        print(f"[SAVE] GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
     else:
-        print("⚠️ CUDA not available - will use CPU")
+        print("[WARNING] CUDA not available - will use CPU")
     
     try:
         # Import tracker
@@ -30,7 +30,7 @@ def test_gpu_tracker():
             GPUPersonTracker,
             process_video_with_gpu_tracking
         )
-        print("✅ Successfully imported GPU tracker modules")
+        print("[OK] Successfully imported GPU tracker modules")
         
         # Test feature extractor
         print("\n🔬 Testing Appearance Feature Extractor...")
@@ -53,16 +53,16 @@ def test_gpu_tracker():
         features = extractor.extract_batch(crops)
         extraction_time = time.time() - start_time
         
-        print(f"✅ Extracted features shape: {features.shape}")
-        print(f"⏱️ Extraction time: {extraction_time*1000:.1f}ms for {len(crops)} crops")
-        print(f"📊 Features normalized: {torch.allclose(features.norm(dim=1), torch.ones(len(crops)))}")
+        print(f"[OK] Extracted features shape: {features.shape}")
+        print(f"[TIMER] Extraction time: {extraction_time*1000:.1f}ms for {len(crops)} crops")
+        print(f"[INFO] Features normalized: {torch.allclose(features.norm(dim=1), torch.ones(len(crops)))}")
         
         # Test similarity computation
         print("\n🔬 Testing Similarity Computation...")
         similarities = torch.mm(features, features.t())
-        print(f"✅ Similarity matrix shape: {similarities.shape}")
-        print(f"📊 Self-similarity (diagonal): {similarities.diag().cpu().numpy()}")
-        print(f"📊 Cross-similarities: {similarities[0, 1]:.3f}, {similarities[0, 2]:.3f}, {similarities[1, 2]:.3f}")
+        print(f"[OK] Similarity matrix shape: {similarities.shape}")
+        print(f"[INFO] Self-similarity (diagonal): {similarities.diag().cpu().numpy()}")
+        print(f"[INFO] Cross-similarities: {similarities[0, 1]:.3f}, {similarities[0, 2]:.3f}, {similarities[1, 2]:.3f}")
         
         # Test tracker
         print("\n🔬 Testing GPU Person Tracker...")
@@ -83,7 +83,7 @@ def test_gpu_tracker():
         
         # Update tracker
         tracked = tracker.update(detections, frame, frame_number=0)
-        print(f"✅ Tracked {len(tracked)} persons")
+        print(f"[OK] Tracked {len(tracked)} persons")
         for t in tracked:
             print(f"   - {t['person_id']}: confidence {t['confidence']:.2f}")
         
@@ -97,23 +97,23 @@ def test_gpu_tracker():
         ]
         
         tracked2 = tracker.update(detections2, frame, frame_number=1)
-        print(f"✅ Frame 2: Tracked {len(tracked2)} persons")
+        print(f"[OK] Frame 2: Tracked {len(tracked2)} persons")
         
         # Check if same IDs are maintained
         ids_frame1 = sorted([t['person_id'] for t in tracked])
         ids_frame2 = sorted([t['person_id'] for t in tracked2])
         
         if ids_frame1 == ids_frame2:
-            print("✅ Person IDs correctly maintained across frames")
+            print("[OK] Person IDs correctly maintained across frames")
         else:
-            print("⚠️ Person ID mismatch between frames")
+            print("[WARNING] Person ID mismatch between frames")
             print(f"   Frame 1: {ids_frame1}")
             print(f"   Frame 2: {ids_frame2}")
         
-        print("\n✅ All tests passed!")
+        print("\n[OK] All tests passed!")
         
     except Exception as e:
-        print(f"\n❌ Test failed: {e}")
+        print(f"\n[ERROR] Test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -130,7 +130,7 @@ def test_video_processing(video_path):
     try:
         from hr_management.processing.gpu_appearance_tracker import process_video_with_gpu_tracking
         
-        print(f"📹 Processing video: {video_path}")
+        print(f"[VIDEO] Processing video: {video_path}")
         output_path = "test_tracked_output.mp4"
         
         start_time = time.time()
@@ -138,8 +138,8 @@ def test_video_processing(video_path):
         processing_time = time.time() - start_time
         
         if tracks:
-            print(f"\n✅ Processing completed in {processing_time:.1f}s")
-            print(f"📊 Found {len(track_data)} unique persons")
+            print(f"\n[OK] Processing completed in {processing_time:.1f}s")
+            print(f"[INFO] Found {len(track_data)} unique persons")
             
             # Show track statistics
             for tid, data in list(track_data.items())[:5]:  # First 5 tracks
@@ -149,10 +149,10 @@ def test_video_processing(video_path):
             if len(track_data) > 5:
                 print(f"   ... and {len(track_data) - 5} more persons")
         else:
-            print("❌ No tracks found")
+            print("[ERROR] No tracks found")
             
     except Exception as e:
-        print(f"❌ Video processing failed: {e}")
+        print(f"[ERROR] Video processing failed: {e}")
         import traceback
         traceback.print_exc()
 
@@ -167,7 +167,7 @@ if __name__ == "__main__":
         if os.path.exists(video_path):
             test_video_processing(video_path)
         else:
-            print(f"\n⚠️ Video not found: {video_path}")
+            print(f"\n[WARNING] Video not found: {video_path}")
     elif success:
-        print("\n💡 To test with a real video, run:")
+        print("\n[TIP] To test with a real video, run:")
         print(f"   python {sys.argv[0]} <video_path>")

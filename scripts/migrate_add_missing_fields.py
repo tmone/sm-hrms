@@ -19,33 +19,33 @@ def migrate():
             print("Adding task_id column to videos table...")
             cursor.execute("ALTER TABLE videos ADD COLUMN task_id VARCHAR(100)")
             conn.commit()
-            print("✅ Added task_id column!")
+            print("[OK] Added task_id column!")
         else:
-            print("✅ Column task_id already exists.")
+            print("[OK] Column task_id already exists.")
         
         # Add processing_progress if missing  
         if 'processing_progress' not in columns:
             print("Adding processing_progress column to videos table...")
             cursor.execute("ALTER TABLE videos ADD COLUMN processing_progress INTEGER DEFAULT 0")
             conn.commit()
-            print("✅ Added processing_progress column!")
+            print("[OK] Added processing_progress column!")
         else:
-            print("✅ Column processing_progress already exists.")
+            print("[OK] Column processing_progress already exists.")
             
         # Add annotated_video_path if missing
         if 'annotated_video_path' not in columns:
             print("Adding annotated_video_path column to videos table...")
             cursor.execute("ALTER TABLE videos ADD COLUMN annotated_video_path VARCHAR(500)")
             conn.commit()
-            print("✅ Added annotated_video_path column!")
+            print("[OK] Added annotated_video_path column!")
         else:
-            print("✅ Column annotated_video_path already exists.")
+            print("[OK] Column annotated_video_path already exists.")
         
         conn.close()
-        print("\n✅ Migration completed successfully!")
+        print("\n[OK] Migration completed successfully!")
         
     except Exception as e:
-        print(f"❌ Migration failed: {e}")
+        print(f"[ERROR] Migration failed: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

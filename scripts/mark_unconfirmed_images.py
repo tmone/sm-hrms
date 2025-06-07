@@ -42,14 +42,14 @@ def get_dataset_images():
 
 def mark_unconfirmed_images():
     """Mark images not in dataset as unconfirmed"""
-    print("🔍 Marking unconfirmed images for review\n")
+    print("[SEARCH] Marking unconfirmed images for review\n")
     
     dataset_images = get_dataset_images()
-    print(f"📊 Found {len(dataset_images)} images in datasets\n")
+    print(f"[INFO] Found {len(dataset_images)} images in datasets\n")
     
     persons_dir = Path("processing/outputs/persons")
     if not persons_dir.exists():
-        print("❌ No persons directory found")
+        print("[ERROR] No persons directory found")
         return
     
     stats = {
@@ -126,12 +126,12 @@ def mark_unconfirmed_images():
         
         if unconfirmed_count > 0:
             stats["persons_with_unconfirmed"] += 1
-            print(f"⚠️  {person_dir.name}: {unconfirmed_count} unconfirmed, {confirmed_count} confirmed")
+            print(f"[WARNING]  {person_dir.name}: {unconfirmed_count} unconfirmed, {confirmed_count} confirmed")
         else:
-            print(f"✅ {person_dir.name}: All {confirmed_count} images confirmed")
+            print(f"[OK] {person_dir.name}: All {confirmed_count} images confirmed")
     
     # Print summary
-    print(f"\n📊 Summary:")
+    print(f"\n[INFO] Summary:")
     print(f"   Total persons: {stats['total_persons']}")
     print(f"   Persons with unconfirmed images: {stats['persons_with_unconfirmed']}")
     print(f"   Total images: {stats['total_images']}")
@@ -139,7 +139,7 @@ def mark_unconfirmed_images():
     print(f"   Unconfirmed images: {stats['unconfirmed_images']}")
     
     if stats['unconfirmed_images'] > 0:
-        print(f"\n⚠️  Found {stats['unconfirmed_images']} unconfirmed images that need review!")
+        print(f"\n[WARNING]  Found {stats['unconfirmed_images']} unconfirmed images that need review!")
         print("   These may be misrecognized and should be verified.")
 
 if __name__ == "__main__":

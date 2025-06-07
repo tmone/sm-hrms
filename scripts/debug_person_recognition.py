@@ -12,47 +12,47 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def check_recognition_setup():
     """Check if recognition is properly set up"""
     
-    print("🔍 Checking Person Recognition Setup\n")
+    print("[SEARCH] Checking Person Recognition Setup\n")
     
     # 1. Check default model configuration
     config_path = Path('models/person_recognition/config.json')
     if config_path.exists():
         with open(config_path) as f:
             config = json.load(f)
-        print(f"✅ Config file exists")
+        print(f"[OK] Config file exists")
         print(f"   Default model: {config.get('default_model', 'NOT SET')}")
         
         # Check if default model directory exists
         if config.get('default_model'):
             model_dir = Path('models/person_recognition') / config['default_model']
             if model_dir.exists():
-                print(f"✅ Default model directory exists: {model_dir}")
+                print(f"[OK] Default model directory exists: {model_dir}")
                 
                 # Check model files
                 model_files = ['model.pkl', 'label_encoder.pkl', 'scaler.pkl', 'persons.json']
                 for file in model_files:
                     file_path = model_dir / file
                     if file_path.exists():
-                        print(f"   ✅ {file} exists")
+                        print(f"   [OK] {file} exists")
                         
                         # Show persons.json content if it exists
                         if file == 'persons.json':
                             with open(file_path) as f:
                                 persons_data = json.load(f)
-                            print(f"   📋 Trained persons: {list(persons_data.keys())}")
+                            print(f"   [TRACE] Trained persons: {list(persons_data.keys())}")
                     else:
-                        print(f"   ❌ {file} MISSING")
+                        print(f"   [ERROR] {file} MISSING")
             else:
-                print(f"❌ Default model directory NOT FOUND: {model_dir}")
+                print(f"[ERROR] Default model directory NOT FOUND: {model_dir}")
         else:
-            print("❌ No default model configured")
+            print("[ERROR] No default model configured")
     else:
-        print("❌ Config file NOT FOUND")
+        print("[ERROR] Config file NOT FOUND")
     
     print("\n" + "="*60 + "\n")
     
     # 2. Check which detection module is being used
-    print("🔍 Checking Detection Modules\n")
+    print("[SEARCH] Checking Detection Modules\n")
     
     # Check imports in chunked_video_processor
     chunked_processor_path = Path('processing/chunked_video_processor.py')
@@ -61,25 +61,25 @@ def check_recognition_setup():
             content = f.read()
         
         if 'from processing.shared_state_manager_improved import ImprovedSharedStateManagerV3' in content:
-            print("✅ ChunkedVideoProcessor is using ImprovedSharedStateManagerV3")
+            print("[OK] ChunkedVideoProcessor is using ImprovedSharedStateManagerV3")
         elif 'from processing.shared_state_manager_v2 import SharedStateManagerV2' in content:
-            print("⚠️  ChunkedVideoProcessor is using OLD SharedStateManagerV2")
+            print("[WARNING]  ChunkedVideoProcessor is using OLD SharedStateManagerV2")
         else:
             print("❓ Cannot determine which SharedStateManager is being used")
     
     # Check if improved manager exists
     improved_manager_path = Path('processing/shared_state_manager_improved.py')
     if improved_manager_path.exists():
-        print("✅ ImprovedSharedStateManagerV3 file exists")
+        print("[OK] ImprovedSharedStateManagerV3 file exists")
     else:
-        print("❌ ImprovedSharedStateManagerV3 file NOT FOUND")
+        print("[ERROR] ImprovedSharedStateManagerV3 file NOT FOUND")
     
     # Check if PersonIDManager exists
     person_id_manager_path = Path('processing/person_id_manager.py')
     if person_id_manager_path.exists():
-        print("✅ PersonIDManager file exists")
+        print("[OK] PersonIDManager file exists")
     else:
-        print("❌ PersonIDManager file NOT FOUND")
+        print("[ERROR] PersonIDManager file NOT FOUND")
     
     print("\n" + "="*60 + "\n")
     
@@ -101,7 +101,7 @@ def check_recognition_setup():
                     config['default_model'],
                     confidence_threshold=0.7
                 )
-                print("✅ Model loaded successfully")
+                print("[OK] Model loaded successfully")
                 
                 # Show model info
                 if hasattr(model, 'persons'):
@@ -126,10 +126,10 @@ def check_recognition_setup():
                                     print("   No persons detected")
                                 break
         else:
-            print("❌ No config file to load model")
+            print("[ERROR] No config file to load model")
             
     except Exception as e:
-        print(f"❌ Error testing recognition: {type(e).__name__}: {str(e)}")
+        print(f"[ERROR] Error testing recognition: {type(e).__name__}: {str(e)}")
         import traceback
         traceback.print_exc()
 

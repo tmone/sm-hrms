@@ -41,7 +41,7 @@ def validate_and_merge_tracks_improved(person_tracks):
                     # Only merge if very close and gap is small
                     frame_gap = current_start - existing_end
                     if distance < 50 and frame_gap < 30:
-                        print(f"🔄 Merging consecutive track {person_id} into {existing_id}")
+                        print(f"[PROCESSING] Merging consecutive track {person_id} into {existing_id}")
                         existing_detections.extend(detections)
                         is_duplicate = True
                         break
@@ -55,6 +55,6 @@ def validate_and_merge_tracks_improved(person_tracks):
     for person_id in merged_tracks:
         merged_tracks[person_id].sort(key=lambda d: d['frame_number'])
     
-    print(f"✅ Track validation complete: {len(person_tracks)} tracks → {len(merged_tracks)} tracks")
+    print(f"[OK] Track validation complete: {len(person_tracks)} tracks -> {len(merged_tracks)} tracks")
     
     return merged_tracks

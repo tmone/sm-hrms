@@ -27,7 +27,7 @@ def check_div_balance(filename):
             max_depth = depth
             
         if depth < 0:
-            print(f"❌ Error at line {line_num}: More closing divs than opening divs!")
+            print(f"[ERROR] Error at line {line_num}: More closing divs than opening divs!")
             print(f"   Line content: {line.strip()}")
             return False
     
@@ -35,10 +35,10 @@ def check_div_balance(filename):
     print(f"Final div depth: {depth}")
     
     if depth == 0:
-        print("✅ All divs are properly balanced!")
+        print("[OK] All divs are properly balanced!")
         return True
     else:
-        print(f"❌ Unbalanced divs! {depth} unclosed divs remain.")
+        print(f"[ERROR] Unbalanced divs! {depth} unclosed divs remain.")
         return False
 
 if __name__ == '__main__':

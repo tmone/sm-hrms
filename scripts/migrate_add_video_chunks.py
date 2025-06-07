@@ -27,7 +27,7 @@ def add_video_chunks_support():
                     ALTER TABLE videos 
                     ADD COLUMN parent_video_id INTEGER REFERENCES videos(id)
                 """))
-                print("✅ Added parent_video_id column")
+                print("[OK] Added parent_video_id column")
             
             # Add chunk_index field
             if 'chunk_index' not in columns:
@@ -35,7 +35,7 @@ def add_video_chunks_support():
                     ALTER TABLE videos 
                     ADD COLUMN chunk_index INTEGER
                 """))
-                print("✅ Added chunk_index column")
+                print("[OK] Added chunk_index column")
             
             # Add total_chunks field
             if 'total_chunks' not in columns:
@@ -43,7 +43,7 @@ def add_video_chunks_support():
                     ALTER TABLE videos 
                     ADD COLUMN total_chunks INTEGER
                 """))
-                print("✅ Added total_chunks column")
+                print("[OK] Added total_chunks column")
             
             # Add is_chunk field
             if 'is_chunk' not in columns:
@@ -51,13 +51,13 @@ def add_video_chunks_support():
                     ALTER TABLE videos 
                     ADD COLUMN is_chunk BOOLEAN DEFAULT 0
                 """))
-                print("✅ Added is_chunk column")
+                print("[OK] Added is_chunk column")
             
             db.session.commit()
-            print("✅ Video chunks support added successfully")
+            print("[OK] Video chunks support added successfully")
             
         except Exception as e:
-            print(f"❌ Error adding video chunks support: {e}")
+            print(f"[ERROR] Error adding video chunks support: {e}")
             db.session.rollback()
             raise
 

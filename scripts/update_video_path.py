@@ -32,4 +32,4 @@ print(f"  Annotated path: {result[2]}")
 print(f"  Processed path: {result[3]}")
 
 conn.close()
-print("\n✅ Database updated successfully!")
+print("\n[OK] Database updated successfully!")

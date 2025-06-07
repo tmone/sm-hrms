@@ -42,9 +42,9 @@ class RecognitionDebugLogger:
     def log_model_load(self, model_name, success, error=None):
         """Log model loading attempt"""
         if success:
-            self.logger.info(f"✅ Model loaded successfully: {model_name}")
+            self.logger.info(f"[OK] Model loaded successfully: {model_name}")
         else:
-            self.logger.error(f"❌ Failed to load model: {model_name} - {error}")
+            self.logger.error(f"[ERROR] Failed to load model: {model_name} - {error}")
     
     def log_recognition_attempt(self, frame_number, bbox, result=None, error=None):
         """Log recognition attempt"""

@@ -45,7 +45,7 @@ def test_video_codecs():
             out = cv2.VideoWriter(output_file, fourcc, fps, (width, height))
             
             if not out.isOpened():
-                print(f"  ❌ Failed to open video writer")
+                print(f"  [ERROR] Failed to open video writer")
                 results.append((fourcc_str, ext, "Failed to open", 0))
                 continue
             
@@ -73,24 +73,24 @@ def test_video_codecs():
             # Check file size
             if os.path.exists(output_file):
                 file_size = os.path.getsize(output_file) / 1024  # KB
-                print(f"  ✅ Success! File size: {file_size:.1f} KB")
+                print(f"  [OK] Success! File size: {file_size:.1f} KB")
                 
                 # Verify file can be read
                 test_cap = cv2.VideoCapture(output_file)
                 if test_cap.isOpened():
                     frame_count = int(test_cap.get(cv2.CAP_PROP_FRAME_COUNT))
                     test_cap.release()
-                    print(f"  ✅ Readable! Frames: {frame_count}")
+                    print(f"  [OK] Readable! Frames: {frame_count}")
                     results.append((fourcc_str, ext, "Success", file_size))
                 else:
-                    print(f"  ⚠️  File created but cannot be read")
+                    print(f"  [WARNING]  File created but cannot be read")
                     results.append((fourcc_str, ext, "Not readable", file_size))
             else:
-                print(f"  ❌ No file created")
+                print(f"  [ERROR] No file created")
                 results.append((fourcc_str, ext, "No file", 0))
                 
         except Exception as e:
-            print(f"  ❌ Error: {e}")
+            print(f"  [ERROR] Error: {e}")
             results.append((fourcc_str, ext, f"Error: {e}", 0))
     
     # Summary
@@ -98,20 +98,20 @@ def test_video_codecs():
     print("SUMMARY - Browser Compatible Codecs:")
     print("=" * 60)
     
-    print("\n📹 Recommended for browser compatibility:")
+    print("\n[VIDEO] Recommended for browser compatibility:")
     for fourcc_str, ext, status, size in results:
         if status == "Success" and ext == ".mp4":
-            print(f"  ✅ {fourcc_str} in MP4 - {size:.1f} KB")
+            print(f"  [OK] {fourcc_str} in MP4 - {size:.1f} KB")
     
-    print("\n🎬 Alternative options:")
+    print("\n[ACTION] Alternative options:")
     for fourcc_str, ext, status, size in results:
         if status == "Success" and ext == ".avi":
-            print(f"  ⚠️  {fourcc_str} in AVI - {size:.1f} KB (may need conversion)")
+            print(f"  [WARNING]  {fourcc_str} in AVI - {size:.1f} KB (may need conversion)")
     
-    print("\n❌ Failed codecs:")
+    print("\n[ERROR] Failed codecs:")
     for fourcc_str, ext, status, size in results:
         if status != "Success":
-            print(f"  ❌ {fourcc_str} in {ext} - {status}")
+            print(f"  [ERROR] {fourcc_str} in {ext} - {status}")
     
     # Clean up test files
     print("\nCleaning up test files...")

@@ -48,9 +48,9 @@ def restart_chunks():
             # Start processing
             try:
                 start_enhanced_gpu_processing(chunk, processing_options, app)
-                print(f"✅ Started processing for chunk {chunk.id}")
+                print(f"[OK] Started processing for chunk {chunk.id}")
             except Exception as e:
-                print(f"❌ Error starting chunk {chunk.id}: {e}")
+                print(f"[ERROR] Error starting chunk {chunk.id}: {e}")
                 chunk.status = 'failed'
                 chunk.error_message = str(e)
                 db.session.commit()

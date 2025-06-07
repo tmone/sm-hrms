@@ -47,7 +47,7 @@ class AppearanceFeatureExtractor:
                                std=[0.229, 0.224, 0.225])
         ])
         
-        logger.info(f"✅ Appearance feature extractor initialized on {self.device}")
+        logger.info(f"[OK] Appearance feature extractor initialized on {self.device}")
     
     def extract_batch(self, person_crops: List[np.ndarray]) -> torch.Tensor:
         """
@@ -126,7 +126,7 @@ class GPUPersonTracker:
         # Feature storage for active tracks
         self.track_features = {}  # track_id -> feature tensor
         
-        logger.info(f"✅ GPU Person Tracker initialized on {self.device}")
+        logger.info(f"[OK] GPU Person Tracker initialized on {self.device}")
         logger.info(f"   Appearance weight: {appearance_weight}")
         logger.info(f"   Position weight: {position_weight}")
     
@@ -345,7 +345,7 @@ def process_video_with_gpu_tracking(video_path: str, output_path: str = None):
         from ultralytics import YOLO
         
         # Initialize models
-        logger.info("🚀 Initializing GPU-accelerated tracking...")
+        logger.info("[START] Initializing GPU-accelerated tracking...")
         detector = YOLO('yolov8n.pt')
         tracker = GPUPersonTracker()
         
@@ -356,7 +356,7 @@ def process_video_with_gpu_tracking(video_path: str, output_path: str = None):
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        logger.info(f"📹 Processing video: {width}x{height} @ {fps}fps, {total_frames} frames")
+        logger.info(f"[VIDEO] Processing video: {width}x{height} @ {fps}fps, {total_frames} frames")
         
         # Setup video writer if output path provided
         out = None
@@ -417,12 +417,12 @@ def process_video_with_gpu_tracking(video_path: str, output_path: str = None):
         
         # Summary
         unique_persons = len(tracker.tracks)
-        logger.info(f"✅ Tracking complete: {unique_persons} unique persons tracked")
+        logger.info(f"[OK] Tracking complete: {unique_persons} unique persons tracked")
         
         return all_tracks, tracker.tracks
         
     except Exception as e:
-        logger.error(f"❌ GPU tracking failed: {e}")
+        logger.error(f"[ERROR] GPU tracking failed: {e}")
         import traceback
         traceback.print_exc()
         return None, None
@@ -466,7 +466,7 @@ if __name__ == "__main__":
         tracks, track_data = process_video_with_gpu_tracking(video_path, output_path)
         
         if tracks:
-            print(f"\n✅ Successfully tracked {len(track_data)} unique persons")
+            print(f"\n[OK] Successfully tracked {len(track_data)} unique persons")
             for tid, data in track_data.items():
                 duration = (data['last_frame'] - data['first_frame']) / 30.0  # Assuming 30fps
                 print(f"   Person {tid}: {len(data['detections'])} detections, {duration:.1f}s duration")

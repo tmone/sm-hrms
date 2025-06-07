@@ -225,7 +225,7 @@ def get_person_images(person_id):
         })
     
     except Exception as e:
-        print(f"❌ Error getting person images: {str(e)}")
+        print(f"[ERROR] Error getting person images: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -267,17 +267,17 @@ def merge_persons(primary_person_id, persons_to_merge):
         primary_dir = persons_dir / primary_person_id
         
         if not primary_dir.exists():
-            print(f"❌ Primary directory not found: {primary_dir}")
+            print(f"[ERROR] Primary directory not found: {primary_dir}")
             return {'success': False, 'error': f'Primary person {primary_person_id} not found at {primary_dir}'}
         
-        print(f"✅ Found primary directory: {primary_dir}")
+        print(f"[OK] Found primary directory: {primary_dir}")
         
         # Load primary metadata
         primary_metadata_path = primary_dir / 'metadata.json'
         with open(primary_metadata_path) as f:
             primary_metadata = json.load(f)
         
-        print(f"✅ Loaded primary metadata: {primary_metadata.get('total_detections', 0)} detections")
+        print(f"[OK] Loaded primary metadata: {primary_metadata.get('total_detections', 0)} detections")
         
         merged_count = 0
         total_images_added = 0
@@ -288,10 +288,10 @@ def merge_persons(primary_person_id, persons_to_merge):
             person_dir = persons_dir / person_id
             
             if not person_dir.exists():
-                print(f"⚠️ Warning: Person {person_id} not found at {person_dir}, skipping")
+                print(f"[WARNING] Warning: Person {person_id} not found at {person_dir}, skipping")
                 continue
             
-            print(f"✅ Processing merge for {person_id} from {person_dir}")
+            print(f"[OK] Processing merge for {person_id} from {person_dir}")
             
             # Load metadata
             metadata_path = person_dir / 'metadata.json'
@@ -306,7 +306,7 @@ def merge_persons(primary_person_id, persons_to_merge):
                     # Since we use UUIDs, no need to rename
                     dst_img = primary_dir / img_data['filename']
                     shutil.copy2(src_img, dst_img)
-                    print(f"  📁 Copied: {src_img.name} → {dst_img.name}")
+                    print(f"  [FILE] Copied: {src_img.name} -> {dst_img.name}")
                     
                     # Update image data
                     img_data['original_person_id'] = person_id
@@ -324,10 +324,10 @@ def merge_persons(primary_person_id, persons_to_merge):
                 primary_metadata['last_appearance'] = metadata['last_appearance']
             
             # Remove the merged person directory
-            print(f"🗑️ Removing merged directory: {person_dir}")
+            print(f"[DELETE] Removing merged directory: {person_dir}")
             shutil.rmtree(person_dir)
             merged_count += 1
-            print(f"✅ Merged {person_id} into {primary_person_id}: {person_images_added} images moved")
+            print(f"[OK] Merged {person_id} into {primary_person_id}: {person_images_added} images moved")
         
         # Recalculate average confidence
         if primary_metadata['images']:
@@ -365,12 +365,12 @@ def merge_persons(primary_person_id, persons_to_merge):
             updated = DetectedPerson.query.filter_by(person_id=numeric_id).update({
                 'person_id': primary_numeric_id
             })
-            print(f"📝 Updated {updated} database records: person_id {numeric_id} → {primary_numeric_id}")
+            print(f"[LOG] Updated {updated} database records: person_id {numeric_id} -> {primary_numeric_id}")
         
         db.session.commit()
         
         # Update video person counts
-        print("📊 Updating video person counts...")
+        print("[INFO] Updating video person counts...")
         
         # Get Video model from current_app
         Video = current_app.Video
@@ -387,15 +387,15 @@ def merge_persons(primary_person_id, persons_to_merge):
             # Update video person count
             old_count = video.person_count
             video.person_count = unique_persons
-            print(f"📹 Video {video.id} ({video.filename}): {old_count} → {video.person_count} persons")
+            print(f"[VIDEO] Video {video.id} ({video.filename}): {old_count} -> {video.person_count} persons")
         
         db.session.commit()
         
-        print(f"✅ Merge complete: {merged_count} persons merged, {total_images_added} images added")
-        print(f"✅ Updated video person counts")
+        print(f"[OK] Merge complete: {merged_count} persons merged, {total_images_added} images added")
+        print(f"[OK] Updated video person counts")
         
         # Sync all metadata files with database
-        print("🔄 Synchronizing metadata files...")
+        print("[PROCESSING] Synchronizing metadata files...")
         sync_metadata_with_database()
         
         return {
@@ -405,7 +405,7 @@ def merge_persons(primary_person_id, persons_to_merge):
         }
         
     except Exception as e:
-        print(f"❌ Merge error: {str(e)}")
+        print(f"[ERROR] Merge error: {str(e)}")
         import traceback
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
@@ -419,7 +419,7 @@ def update_datasets_after_person_deletion(deleted_person_ids):
     if not datasets_dir.exists():
         return updated_datasets
     
-    print(f"🔄 Checking datasets for deleted persons: {deleted_person_ids}")
+    print(f"[PROCESSING] Checking datasets for deleted persons: {deleted_person_ids}")
     
     # Check each dataset
     for dataset_dir in datasets_dir.iterdir():
@@ -440,7 +440,7 @@ def update_datasets_after_person_deletion(deleted_person_ids):
         
         if dataset_persons & deleted_set:
             # This dataset contains deleted persons
-            print(f"📊 Dataset {dataset_dir.name} contains deleted persons")
+            print(f"[INFO] Dataset {dataset_dir.name} contains deleted persons")
             
             # Remove deleted persons from dataset
             for person_id in deleted_person_ids:
@@ -473,7 +473,7 @@ def update_datasets_after_person_deletion(deleted_person_ids):
                         person_subdir = dataset_dir / subdir / person_id
                         if person_subdir.exists():
                             shutil.rmtree(person_subdir)
-                            print(f"   🗑️ Removed {person_id} from {subdir}")
+                            print(f"   [DELETE] Removed {person_id} from {subdir}")
             
             # Update dataset info
             dataset_info['modified_at'] = datetime.now().isoformat()
@@ -484,10 +484,10 @@ def update_datasets_after_person_deletion(deleted_person_ids):
                 # Dataset has no persons left, delete it
                 try:
                     shutil.rmtree(dataset_dir)
-                    print(f"   🗑️ Deleted empty dataset: {dataset_dir.name}")
+                    print(f"   [DELETE] Deleted empty dataset: {dataset_dir.name}")
                     updated_datasets.append(f"{dataset_dir.name} (deleted - empty)")
                 except Exception as e:
-                    print(f"   ⚠️  Error deleting empty dataset {dataset_dir.name}: {e}")
+                    print(f"   [WARNING]  Error deleting empty dataset {dataset_dir.name}: {e}")
                     # Still save the updated info even if we can't delete
                     with open(dataset_info_path, 'w') as f:
                         json.dump(dataset_info, f, indent=2)
@@ -498,7 +498,7 @@ def update_datasets_after_person_deletion(deleted_person_ids):
                     json.dump(dataset_info, f, indent=2)
                 
                 updated_datasets.append(dataset_dir.name)
-                print(f"   ✅ Updated dataset: {dataset_dir.name}")
+                print(f"   [OK] Updated dataset: {dataset_dir.name}")
     
     # Also update the main person_features.pkl if it exists
     features_pkl = Path('datasets/person_features.pkl')
@@ -516,14 +516,14 @@ def update_datasets_after_person_deletion(deleted_person_ids):
             
             # Update features arrays to match
             if len(features_data['person_ids']) < original_count:
-                print(f"   🔄 Updating person_features.pkl")
+                print(f"   [PROCESSING] Updating person_features.pkl")
                 # This is complex - we'd need to filter the feature vectors too
                 # For now, just mark it as needing regeneration
                 features_pkl.rename(features_pkl.with_suffix('.pkl.old'))
-                print(f"   ⚠️  Renamed person_features.pkl to .old - regeneration needed")
+                print(f"   [WARNING]  Renamed person_features.pkl to .old - regeneration needed")
                 
         except Exception as e:
-            print(f"   ⚠️  Error updating person_features.pkl: {e}")
+            print(f"   [WARNING]  Error updating person_features.pkl: {e}")
     
     return updated_datasets
 
@@ -537,10 +537,10 @@ def sync_metadata_with_database():
     
     persons_dir = Path('processing/outputs/persons')
     if not persons_dir.exists():
-        print("❌ Persons directory not found")
+        print("[ERROR] Persons directory not found")
         return
     
-    print("🔄 Starting metadata synchronization...")
+    print("[PROCESSING] Starting metadata synchronization...")
     
     # Get all person folders
     for person_dir in persons_dir.iterdir():
@@ -550,7 +550,7 @@ def sync_metadata_with_database():
             metadata_path = person_dir / 'metadata.json'
             
             if not metadata_path.exists():
-                print(f"⚠️  No metadata for {person_id}, creating...")
+                print(f"[WARNING]  No metadata for {person_id}, creating...")
                 metadata = {
                     'person_id': person_id,
                     'first_seen': None,
@@ -567,7 +567,7 @@ def sync_metadata_with_database():
             detections = DetectedPerson.query.filter_by(person_id=numeric_id).all()
             
             if not detections:
-                print(f"⚠️  {person_id} has no database records")
+                print(f"[WARNING]  {person_id} has no database records")
                 continue
             
             # Update metadata based on database
@@ -633,9 +633,9 @@ def sync_metadata_with_database():
             with open(metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
             
-            print(f"✅ Updated metadata for {person_id}: {len(detections)} detections, {len(image_files)} images")
+            print(f"[OK] Updated metadata for {person_id}: {len(detections)} detections, {len(image_files)} images")
     
-    print("✅ Metadata synchronization complete")
+    print("[OK] Metadata synchronization complete")
 
 
 @persons_bp.route('/sync-metadata')
@@ -738,7 +738,7 @@ def split_person():
         })
         
     except Exception as e:
-        print(f"❌ Split error: {str(e)}")
+        print(f"[ERROR] Split error: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
 
@@ -770,18 +770,18 @@ def remove_multiple():
                 person_dir = persons_dir / person_id
                 if person_dir.exists():
                     shutil.rmtree(person_dir)
-                    print(f"🗑️ Removed directory: {person_dir}")
+                    print(f"[DELETE] Removed directory: {person_dir}")
                 
                 # Remove from database
                 # Convert to numeric ID for database
                 numeric_id = int(person_id.replace('PERSON-', '')) if person_id.startswith('PERSON-') else person_id
                 deleted = DetectedPerson.query.filter_by(person_id=numeric_id).delete()
-                print(f"📝 Deleted {deleted} database records for person_id {numeric_id}")
+                print(f"[LOG] Deleted {deleted} database records for person_id {numeric_id}")
                 
                 deleted_count += 1
                 
             except Exception as e:
-                print(f"❌ Error deleting {person_id}: {str(e)}")
+                print(f"[ERROR] Error deleting {person_id}: {str(e)}")
                 continue
         
         # Commit database changes
@@ -795,7 +795,7 @@ def remove_multiple():
         })
         
     except Exception as e:
-        print(f"❌ Remove multiple error: {str(e)}")
+        print(f"[ERROR] Remove multiple error: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
@@ -824,7 +824,7 @@ def reset_all_persons():
                 try:
                     shutil.rmtree(folder)
                 except Exception as e:
-                    print(f"⚠️ Error removing {folder.name}: {e}")
+                    print(f"[WARNING] Error removing {folder.name}: {e}")
             
             # Remove the counter file
             counter_file = persons_dir / 'person_id_counter.json'
@@ -862,7 +862,7 @@ def reset_all_persons():
         if all_person_ids:
             datasets_updated = update_datasets_after_person_deletion(all_person_ids)
             if datasets_updated:
-                print(f"📊 Updated {len(datasets_updated)} datasets after clearing all persons")
+                print(f"[INFO] Updated {len(datasets_updated)} datasets after clearing all persons")
         
         return jsonify({
             'success': True,
@@ -871,7 +871,7 @@ def reset_all_persons():
         })
         
     except Exception as e:
-        print(f"❌ Reset all error: {str(e)}")
+        print(f"[ERROR] Reset all error: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})

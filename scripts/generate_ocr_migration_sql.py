@@ -31,7 +31,7 @@ def generate_migration_sql():
     return "\n".join(sql_commands)
 
 if __name__ == '__main__':
-    print("🔤 OCR Database Migration SQL Commands")
+    print("[TEXT] OCR Database Migration SQL Commands")
     print("=" * 50)
     print("Copy and run these SQL commands in your database:")
     print()
@@ -40,4 +40,4 @@ if __name__ == '__main__':
     print(sql)
     
     print("\n" + "=" * 50)
-    print("✅ After running these commands, you can use OCR extraction features!")
+    print("[OK] After running these commands, you can use OCR extraction features!")

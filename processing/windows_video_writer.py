@@ -41,8 +41,8 @@ def get_working_codec(output_path, fps, width, height):
             writer = cv2.VideoWriter(output_file, fourcc, fps, (width, height), True)
             
             if writer.isOpened():
-                print(f"✅ Using {description} codec ({fourcc_str})")
-                print(f"📁 Output file: {output_file}")
+                print(f"[OK] Using {description} codec ({fourcc_str})")
+                print(f"[FILE] Output file: {output_file}")
                 
                 # Set quality if possible (lower value = smaller file size)
                 try:
@@ -54,7 +54,7 @@ def get_working_codec(output_path, fps, width, height):
             else:
                 writer.release()
         except Exception as e:
-            print(f"⚠️  Failed to initialize {description}: {e}")
+            print(f"[WARNING]  Failed to initialize {description}: {e}")
             continue
     
     # If all fail, raise exception
@@ -67,12 +67,12 @@ def create_windows_compatible_writer(output_path, fps, width, height):
     # Always use .mp4 extension for the path
     output_path = Path(str(output_path).replace('.avi', '.mp4'))
     
-    print(f"🎥 Creating video writer for {width}x{height} @ {fps}fps")
-    print(f"🖥️  Platform: {platform.system()}")
+    print(f"[MOVIE] Creating video writer for {width}x{height} @ {fps}fps")
+    print(f"[MONITOR]  Platform: {platform.system()}")
     
     try:
         writer, actual_path = get_working_codec(output_path, fps, width, height)
         return writer, actual_path
     except Exception as e:
-        print(f"❌ Failed to create video writer: {e}")
+        print(f"[ERROR] Failed to create video writer: {e}")
         raise

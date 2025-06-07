@@ -27,7 +27,7 @@ def test_attendance_direct():
         # Create a test request context
         with app.test_request_context('/attendance/list?page=1&per_page=20&sort=desc&filter=all'):
             # Skip login for now - just test the function
-            print("⚠️  Testing without login (may fail if login_required)")
+            print("[WARNING]  Testing without login (may fail if login_required)")
             
             try:
                 # Call the function directly
@@ -48,7 +48,7 @@ def test_attendance_direct():
                     data = json.loads(result.data) if hasattr(result, 'data') else None
                 
                 if data:
-                    print(f"\n✅ SUCCESS! Got JSON response")
+                    print(f"\n[OK] SUCCESS! Got JSON response")
                     print(f"Total records: {data['pagination']['total']}")
                     print(f"Records on this page: {len(data['records'])}")
                     print(f"Available locations: {data['filters']['locations']}")
@@ -59,13 +59,13 @@ def test_attendance_direct():
                             print(f"{i+1}. Person: {record['person_id']}, Date: {record['date']}, Location: {record['location']}")
                             print(f"   Check In: {record['check_in']}, Check Out: {record['check_out']}, Duration: {record['duration_formatted']}")
                 else:
-                    print(f"❌ Could not extract JSON data")
+                    print(f"[ERROR] Could not extract JSON data")
                     print(f"Response: {result}")
                     if hasattr(result, 'data'):
                         print(f"Response data: {result.data}")
                     
             except Exception as e:
-                print(f"\n❌ ERROR: {e}")
+                print(f"\n[ERROR] ERROR: {e}")
                 import traceback
                 traceback.print_exc()
 

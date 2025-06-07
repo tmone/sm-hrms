@@ -77,31 +77,31 @@ def main():
     # Find database
     db_path = find_database()
     if not db_path:
-        print("❌ Database not found!")
+        print("[ERROR] Database not found!")
         return False
     
-    print(f"📁 Found database: {db_path}")
+    print(f"[FILE] Found database: {db_path}")
     
     # Get available videos
     videos = get_available_videos(db_path)
     if not videos:
-        print("❌ No videos found in database!")
+        print("[ERROR] No videos found in database!")
         return False
     
-    print(f"\n📊 Available videos:")
+    print(f"\n[INFO] Available videos:")
     for video in videos:
-        status_icon = "✅" if video[3] else "⚪"
+        status_icon = "[OK]" if video[3] else "⚪"
         print(f"   {status_icon} Video {video[0]}: {video[1]} (status: {video[2]})")
         if video[3]:
-            print(f"      📁 Annotated: {video[3]}")
+            print(f"      [FILE] Annotated: {video[3]}")
     
     # Get available outputs
     outputs = get_available_outputs()
     if not outputs:
-        print("❌ No annotated video outputs found!")
+        print("[ERROR] No annotated video outputs found!")
         return False
     
-    print(f"\n📁 Available annotated outputs:")
+    print(f"\n[FILE] Available annotated outputs:")
     for i, output in enumerate(outputs):
         print(f"   {i+1}. {output}")
     
@@ -119,21 +119,21 @@ def main():
     # Use first available output
     if outputs:
         annotated_path = outputs[0]
-        print(f"\n🔧 Updating video {target_video[0]} with annotated path: {annotated_path}")
+        print(f"\n[CONFIG] Updating video {target_video[0]} with annotated path: {annotated_path}")
         
         success = update_video_annotated_path(db_path, target_video[0], annotated_path)
         
         if success:
-            print("✅ Video record updated successfully!")
-            print(f"\n🎯 Test Instructions:")
+            print("[OK] Video record updated successfully!")
+            print(f"\n[TARGET] Test Instructions:")
             print(f"1. Start your Flask app: python3 app.py")
             print(f"2. Navigate to video {target_video[0]} detail page")
             print(f"3. You should see the enhanced detection video player")
-            print(f"4. The video should show: 🎯 Enhanced Detection Video")
+            print(f"4. The video should show: [TARGET] Enhanced Detection Video")
             print(f"5. Below should show enhanced detection statistics")
             return True
         else:
-            print("❌ Failed to update video record!")
+            print("[ERROR] Failed to update video record!")
             return False
     
     return False
@@ -144,6 +144,6 @@ if __name__ == "__main__":
         print("\n🎉 Annotated video display test setup complete!")
         print("Start your Flask app to see the enhanced video player in action!")
     else:
-        print("\n⚠️ Test setup failed. Check the errors above.")
+        print("\n[WARNING] Test setup failed. Check the errors above.")
     
     sys.exit(0 if success else 1)

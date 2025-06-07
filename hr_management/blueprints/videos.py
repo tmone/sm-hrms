@@ -14,7 +14,7 @@ try:
     SOCKETIO_AVAILABLE = True
 except ImportError:
     SOCKETIO_AVAILABLE = False
-    print("⚠️ Flask-SocketIO not available for real-time progress updates")
+    print("[WARNING] Flask-SocketIO not available for real-time progress updates")
 
 videos_bp = Blueprint('videos', __name__)
 
@@ -167,7 +167,7 @@ def upload():
                     # Add chunks to GPU processing queue
                     task_ids = []
                     for chunk_video in chunk_videos:
-                        print(f"📋 Queueing chunk {chunk_video.chunk_index + 1}/{chunk_video.total_chunks} for GPU processing")
+                        print(f"[TRACE] Queueing chunk {chunk_video.chunk_index + 1}/{chunk_video.total_chunks} for GPU processing")
                         
                         chunk_info = {
                             'index': chunk_video.chunk_index,
@@ -201,14 +201,14 @@ def upload():
                         task_ids.append(task_id)
                     
                     queue_status = gpu_queue.get_queue_status()
-                    print(f"✅ Added {len(task_ids)} chunks to GPU queue. Queue status: {queue_status}")
+                    print(f"[OK] Added {len(task_ids)} chunks to GPU queue. Queue status: {queue_status}")
                     
                     flash(f'Large video "{filename}" uploaded! Split into {len(chunk_videos)} chunks and queued for GPU processing. Results will be merged automatically.', 'info')
                 else:
                     flash('Failed to split video into chunks', 'error')
             else:
                 # Small video - process normally
-                print(f"🚀 Auto-starting person extraction for uploaded video: {filename}")
+                print(f"[START] Auto-starting person extraction for uploaded video: {filename}")
                 
                 # Processing options for auto-extraction
                 processing_options = {
@@ -362,7 +362,7 @@ def delete(id):
         
         # If video is processing, first try to cancel any active tasks
         if video.status == 'processing':
-            print(f"⚠️ Attempting to delete video {id} that is currently processing")
+            print(f"[WARNING] Attempting to delete video {id} that is currently processing")
             
             # Try to cancel Celery task if exists
             if hasattr(video, 'task_id') and video.task_id:
@@ -374,12 +374,12 @@ def delete(id):
                     task_result.revoke(terminate=True)
                     print(f"🛑 Cancelled Celery task {video.task_id} for video {video.id}")
                 except Exception as e:
-                    print(f"⚠️ Could not cancel Celery task: {e}")
+                    print(f"[WARNING] Could not cancel Celery task: {e}")
             
             # Force update status to allow deletion
             video.status = 'cancelled'
             db.session.commit()
-            print(f"🔄 Changed video {id} status from 'processing' to 'cancelled' for deletion")
+            print(f"[PROCESSING] Changed video {id} status from 'processing' to 'cancelled' for deletion")
         
         # Get all detected persons for this video before deletion
         detected_persons = DetectedPerson.query.filter_by(video_id=id).all()
@@ -390,15 +390,15 @@ def delete(id):
             if detection.person_id:
                 person_ids_to_check.add(detection.person_id)
         
-        print(f"📊 Found {len(person_ids_to_check)} unique persons in video {id}: {person_ids_to_check}")
+        print(f"[INFO] Found {len(person_ids_to_check)} unique persons in video {id}: {person_ids_to_check}")
         
         # Delete all detected persons first to avoid foreign key constraint issues
         try:
             deleted_count = DetectedPerson.query.filter_by(video_id=id).delete()
             db.session.commit()
-            print(f"🗑️ Deleted {deleted_count} detected persons for video {id}")
+            print(f"[DELETE] Deleted {deleted_count} detected persons for video {id}")
         except Exception as e:
-            print(f"⚠️ Error deleting detected persons: {e}")
+            print(f"[WARNING] Error deleting detected persons: {e}")
             db.session.rollback()
         
         # Check if these persons are still referenced by other videos
@@ -422,18 +422,18 @@ def delete(id):
                     try:
                         import shutil
                         shutil.rmtree(person_folder)
-                        print(f"🗑️ Deleted person folder: {person_folder} (no longer referenced)")
+                        print(f"[DELETE] Deleted person folder: {person_folder} (no longer referenced)")
                     except Exception as e:
-                        print(f"⚠️ Could not delete person folder {person_folder}: {e}")
+                        print(f"[WARNING] Could not delete person folder {person_folder}: {e}")
             else:
-                print(f"📌 Keeping person {person_id} folder (still referenced by {remaining_detections} detections)")
+                print(f"[PIN] Keeping person {person_id} folder (still referenced by {remaining_detections} detections)")
         
         # Update datasets that contained these deleted persons
         if persons_to_delete:
             from hr_management.blueprints.persons import update_datasets_after_person_deletion
             datasets_updated = update_datasets_after_person_deletion(persons_to_delete)
             if datasets_updated:
-                print(f"📊 Updated {len(datasets_updated)} datasets after person deletion")
+                print(f"[INFO] Updated {len(datasets_updated)} datasets after person deletion")
         
         # Delete physical files
         upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
@@ -444,9 +444,9 @@ def delete(id):
             if os.path.exists(file_path):
                 try:
                     os.remove(file_path)
-                    print(f"🗑️ Deleted original file: {file_path}")
+                    print(f"[DELETE] Deleted original file: {file_path}")
                 except Exception as e:
-                    print(f"⚠️ Could not delete original file: {e}")
+                    print(f"[WARNING] Could not delete original file: {e}")
         
         # Delete processed file if exists
         if video.processed_path:
@@ -454,9 +454,9 @@ def delete(id):
             if os.path.exists(processed_path):
                 try:
                     os.remove(processed_path)
-                    print(f"🗑️ Deleted processed file: {processed_path}")
+                    print(f"[DELETE] Deleted processed file: {processed_path}")
                 except Exception as e:
-                    print(f"⚠️ Could not delete processed file: {e}")
+                    print(f"[WARNING] Could not delete processed file: {e}")
         
         # Delete annotated video if exists
         if hasattr(video, 'annotated_video_path') and video.annotated_video_path:
@@ -465,9 +465,9 @@ def delete(id):
             if os.path.exists(annotated_path):
                 try:
                     os.remove(annotated_path)
-                    print(f"🗑️ Deleted annotated video: {annotated_path}")
+                    print(f"[DELETE] Deleted annotated video: {annotated_path}")
                 except Exception as e:
-                    print(f"⚠️ Could not delete annotated video: {e}")
+                    print(f"[WARNING] Could not delete annotated video: {e}")
         
         # Delete from database
         db.session.delete(video)
@@ -475,22 +475,22 @@ def delete(id):
         
         # Sync metadata for remaining persons
         if person_ids_to_check:
-            print("🔄 Synchronizing metadata for remaining persons...")
+            print("[PROCESSING] Synchronizing metadata for remaining persons...")
             try:
                 from hr_management.blueprints.persons import sync_metadata_with_database
                 sync_metadata_with_database()
-                print("✅ Metadata synchronization complete")
+                print("[OK] Metadata synchronization complete")
             except Exception as e:
-                print(f"⚠️ Could not sync metadata: {e}")
+                print(f"[WARNING] Could not sync metadata: {e}")
         
         flash(f'Video "{video.filename}" deleted successfully!', 'success')
-        print(f"✅ Successfully deleted video {id}: {video.filename}")
+        print(f"[OK] Successfully deleted video {id}: {video.filename}")
         
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"❌ Error deleting video {id}: {str(e)}")
-        print(f"📋 Error trace:\n{error_trace}")
+        print(f"[ERROR] Error deleting video {id}: {str(e)}")
+        print(f"[TRACE] Error trace:\n{error_trace}")
         
         if hasattr(current_app, 'db'):
             current_app.db.session.rollback()
@@ -628,7 +628,7 @@ def extract_ocr(id):
                     gpu_available = torch.cuda.is_available()
                     reader = Reader(['en'], gpu=gpu_available, verbose=False)
                     if gpu_available:
-                        print("🎮 Using GPU for OCR extraction")
+                        print("[GPU] Using GPU for OCR extraction")
                 except:
                     reader = Reader(['en'], gpu=False, verbose=False)
                 
@@ -836,10 +836,10 @@ def process_video(id):
         
         # Log retry attempt for failed videos
         if video.status == 'failed':
-            print(f"🔄 Retrying person extraction for failed video {video.id}: {video.filename}")
-            print(f"📝 Previous error: {video.error_message}")
+            print(f"[PROCESSING] Retrying person extraction for failed video {video.id}: {video.filename}")
+            print(f"[LOG] Previous error: {video.error_message}")
         else:
-            print(f"🚀 Starting person extraction for video {video.id}: {video.filename} (status: {video.status})")
+            print(f"[START] Starting person extraction for video {video.id}: {video.filename} (status: {video.status})")
         
         # Update video status to processing
         video.status = 'processing'
@@ -856,25 +856,25 @@ def process_video(id):
         db.session.commit()
         
         # CLEAR ALL EXISTING DETECTION DATA BEFORE RE-PROCESSING
-        print(f"🗑️ Clearing all existing detection data for video {video.id}")
+        print(f"[DELETE] Clearing all existing detection data for video {video.id}")
         try:
             DetectedPerson = current_app.DetectedPerson
             existing_detections = DetectedPerson.query.filter_by(video_id=video.id).all()
             
             if existing_detections:
                 detection_count = len(existing_detections)
-                print(f"   🔍 Found {detection_count} existing detections to delete")
+                print(f"   [SEARCH] Found {detection_count} existing detections to delete")
                 
                 for detection in existing_detections:
                     db.session.delete(detection)
                 
                 db.session.commit()
-                print(f"   ✅ Successfully deleted {detection_count} existing detections")
+                print(f"   [OK] Successfully deleted {detection_count} existing detections")
             else:
-                print(f"   📝 No existing detections found for video {video.id}")
+                print(f"   [LOG] No existing detections found for video {video.id}")
                 
         except Exception as e:
-            print(f"   ⚠️ Warning: Could not clear existing detections: {e}")
+            print(f"   [WARNING] Warning: Could not clear existing detections: {e}")
             # Continue processing anyway - this is not a critical error
         
         # Reset any previous processing state
@@ -902,7 +902,7 @@ def process_video(id):
                 video.processing_log = f"Enhanced GPU processing options: {processing_options} - Started at {datetime.utcnow()}"
                 db.session.commit()
                 
-                print(f"🚀 Starting enhanced GPU person detection for video {video.id}: {video.filename}")
+                print(f"[START] Starting enhanced GPU person detection for video {video.id}: {video.filename}")
                 start_enhanced_gpu_processing(video, processing_options, current_app._get_current_object())
                 flash(f'Enhanced person extraction started for "{video.filename}" with GPU acceleration.', 'info')
             else:
@@ -912,12 +912,12 @@ def process_video(id):
                 video.processing_log = f"Enhanced processing options: {processing_options} - Started at {datetime.utcnow()}"
                 db.session.commit()
                 
-                print(f"🚀 Starting enhanced person detection for video {video.id}: {video.filename}")
+                print(f"[START] Starting enhanced person detection for video {video.id}: {video.filename}")
                 start_enhanced_fallback_processing(video, processing_options, current_app._get_current_object())
                 flash(f'Enhanced person extraction started for "{video.filename}". This will create an annotated video with bounding boxes and extract person data folders.', 'info')
             
         except ImportError as import_error:
-            print(f"⚠️ Full enhanced detection not available: {import_error}")
+            print(f"[WARNING] Full enhanced detection not available: {import_error}")
             
             # Try fallback enhanced detection (works without AI dependencies)
             try:
@@ -933,12 +933,12 @@ def process_video(id):
                 video.processing_log = f"Enhanced processing (fallback mode): {processing_options} - Started at {datetime.utcnow()}"
                 db.session.commit()
                 
-                print(f"🔄 Starting enhanced detection fallback for video {video.id}: {video.filename}")
+                print(f"[PROCESSING] Starting enhanced detection fallback for video {video.id}: {video.filename}")
                 start_enhanced_fallback_processing(video, processing_options, current_app._get_current_object())
                 flash(f'Enhanced person extraction started for "{video.filename}" (demo mode - install AI dependencies for full functionality).', 'info')
                 
             except ImportError:
-                print(f"⚠️ Enhanced detection fallback not available. Using legacy processing...")
+                print(f"[WARNING] Enhanced detection fallback not available. Using legacy processing...")
                 # Final fallback to legacy processing
                 processing_options = {
                     'extract_persons': bool(extract_persons),
@@ -949,7 +949,7 @@ def process_video(id):
                 flash(f'Person extraction started for "{video.filename}" (legacy mode).', 'info')
         except Exception as e:
             # Handle other errors
-            print(f"❌ Error starting processing: {e}")
+            print(f"[ERROR] Error starting processing: {e}")
             video.status = 'failed'
             video.error_message = f'Failed to start processing: {str(e)}'
             db.session.commit()
@@ -1232,21 +1232,21 @@ def stream_video(filename):
     upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
     file_path = os.path.join(upload_folder, filename)
     
-    print(f"🎬 Stream request for: {filename}")
-    print(f"📁 Full path: {file_path}")
-    print(f"📊 File exists: {os.path.exists(file_path)}")
+    print(f"[ACTION] Stream request for: {filename}")
+    print(f"[FILE] Full path: {file_path}")
+    print(f"[INFO] File exists: {os.path.exists(file_path)}")
     
     if not os.path.exists(file_path):
-        print(f"❌ File not found: {file_path}")
+        print(f"[ERROR] File not found: {file_path}")
         return "Video file not found", 404
     
     # Log file size and permissions
     try:
         file_stats = os.stat(file_path)
-        print(f"📊 File size: {file_stats.st_size / (1024*1024):.2f} MB")
-        print(f"📊 File permissions: {oct(file_stats.st_mode)}")
+        print(f"[INFO] File size: {file_stats.st_size / (1024*1024):.2f} MB")
+        print(f"[INFO] File permissions: {oct(file_stats.st_mode)}")
     except Exception as e:
-        print(f"❌ Error getting file stats: {e}")
+        print(f"[ERROR] Error getting file stats: {e}")
     
     # Detect file format from header
     def detect_file_format(file_path):
@@ -1393,8 +1393,8 @@ def serve_video_static(filename):
     upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
     file_path = os.path.join(upload_folder, filename)
     
-    print(f"📁 Static serve request for: {filename}")
-    print(f"📊 File exists: {os.path.exists(file_path)}")
+    print(f"[FILE] Static serve request for: {filename}")
+    print(f"[INFO] File exists: {os.path.exists(file_path)}")
     
     if not os.path.exists(file_path):
         return f"File not found: {filename}", 404
@@ -1432,12 +1432,12 @@ def serve_annotated_video(filename):
                 break
                 
         if not full_path:
-            print(f"❌ Annotated video not found in any location:")
+            print(f"[ERROR] Annotated video not found in any location:")
             for path in possible_paths:
                 print(f"   - {path}")
             return "Annotated video file not found", 404
         
-        print(f"✅ Serving annotated video from: {full_path}")
+        print(f"[OK] Serving annotated video from: {full_path}")
         
         # Determine the directory and filename
         directory = os.path.dirname(full_path)
@@ -1448,13 +1448,13 @@ def serve_annotated_video(filename):
         if not mimetype:
             mimetype = 'video/mp4'  # Default to MP4
             
-        print(f"📹 Serving with mimetype: {mimetype}")
+        print(f"[VIDEO] Serving with mimetype: {mimetype}")
         
         # Use send_file for better compatibility
         return send_file(full_path, mimetype=mimetype, as_attachment=False)
         
     except Exception as e:
-        print(f"❌ Error serving annotated video: {e}")
+        print(f"[ERROR] Error serving annotated video: {e}")
         import traceback
         traceback.print_exc()
         return f"Error serving annotated video: {str(e)}", 500
@@ -1468,10 +1468,10 @@ def serve_detected_video(filename):
         outputs_dir = os.path.join('static', 'uploads')
         file_path = os.path.join(outputs_dir, filename)
         
-        print(f"🎯 Detected video request: {filename}")
-        print(f"📁 Looking in: {outputs_dir}")
-        print(f"📊 Full path: {file_path}")
-        print(f"✅ Exists: {os.path.exists(file_path)}")
+        print(f"[TARGET] Detected video request: {filename}")
+        print(f"[FILE] Looking in: {outputs_dir}")
+        print(f"[INFO] Full path: {file_path}")
+        print(f"[OK] Exists: {os.path.exists(file_path)}")
         
         if not os.path.exists(file_path):
             # Try without detected_ prefix if it was already included
@@ -1480,7 +1480,7 @@ def serve_detected_video(filename):
                 alt_path = os.path.join(outputs_dir, alt_filename)
                 if os.path.exists(alt_path):
                     file_path = alt_path
-                    print(f"✅ Found at alternate path: {alt_path}")
+                    print(f"[OK] Found at alternate path: {alt_path}")
                 else:
                     return f"Detected video not found: {filename}", 404
             else:
@@ -1534,7 +1534,7 @@ def serve_detected_video(filename):
         return send_file(file_path, mimetype='video/mp4', as_attachment=False)
         
     except Exception as e:
-        print(f"❌ Error serving detected video: {e}")
+        print(f"[ERROR] Error serving detected video: {e}")
         import traceback
         traceback.print_exc()
         return f"Error serving detected video: {str(e)}", 500
@@ -1549,15 +1549,15 @@ def stream_detected_video(filename):
     outputs_dir = os.path.join('static', 'uploads')
     file_path = os.path.join(outputs_dir, filename)
     
-    print(f"🎬 Stream detected video request: {filename}")
-    print(f"📁 Full path: {file_path}")
-    print(f"✅ Exists: {os.path.exists(file_path)}")
+    print(f"[ACTION] Stream detected video request: {filename}")
+    print(f"[FILE] Full path: {file_path}")
+    print(f"[OK] Exists: {os.path.exists(file_path)}")
     
     if not os.path.exists(file_path):
         # List files to help debug
         if os.path.exists(outputs_dir):
             files = [f for f in os.listdir(outputs_dir) if f.endswith('.mp4')]
-            print(f"📁 MP4 files in outputs: {files[:5]}")
+            print(f"[FILE] MP4 files in outputs: {files[:5]}")
         return f"Detected video not found: {filename}", 404
     
     # Use send_file for simplicity - Flask will handle range requests
@@ -1569,7 +1569,7 @@ def stream_detected_video(filename):
             conditional=True  # This enables range request support
         )
     except Exception as e:
-        print(f"❌ Error serving detected video: {e}")
+        print(f"[ERROR] Error serving detected video: {e}")
         return f"Error serving file: {str(e)}", 500
 
 @videos_bp.route('/api/<int:id>/processing-status')
@@ -1632,7 +1632,7 @@ def processing_status(id):
                         'celery_state': task_result.state
                     })
                     
-                    print(f"🔄 Person extraction progress for video {id}: {progress}% - {message}")
+                    print(f"[PROCESSING] Person extraction progress for video {id}: {progress}% - {message}")
                     
                 elif task_result.state == 'SUCCESS':
                     response.update({
@@ -1640,7 +1640,7 @@ def processing_status(id):
                         'progress_message': 'Person extraction completed!',
                         'celery_state': task_result.state
                     })
-                    print(f"✅ Person extraction completed for video {id}")
+                    print(f"[OK] Person extraction completed for video {id}")
                     
                 elif task_result.state == 'FAILURE':
                     error_msg = str(task_result.info) if task_result.info else 'Unknown error'
@@ -1658,7 +1658,7 @@ def processing_status(id):
                         'celery_state': task_result.state,
                         'error_message': error_msg
                     })
-                    print(f"❌ Person extraction failed for video {id}: {error_msg}")
+                    print(f"[ERROR] Person extraction failed for video {id}: {error_msg}")
                     
                 elif task_result.state == 'PENDING':
                     # Task is queued but not started yet
@@ -1676,14 +1676,14 @@ def processing_status(id):
                     })
                     
             except ImportError:
-                print(f"⚠️ Celery not available for status check")
+                print(f"[WARNING] Celery not available for status check")
                 response.update({
                     'progress': 0,
                     'progress_message': 'Celery not available',
                     'error_message': 'Celery worker not running'
                 })
             except Exception as e:
-                print(f"⚠️ Error checking Celery task status: {e}")
+                print(f"[WARNING] Error checking Celery task status: {e}")
                 
                 # If we can't check the task status and it's been a while, mark as failed
                 if video.processing_started_at:
@@ -1748,8 +1748,8 @@ def processing_status(id):
                 'processing_mode': 'fallback'
             })
             
-            print(f"🔄 Fallback processing progress for video {id}: {progress}% - {message}")
-            print(f"   📊 Database progress: {getattr(video, 'processing_progress', 'None')}")
+            print(f"[PROCESSING] Fallback processing progress for video {id}: {progress}% - {message}")
+            print(f"   [INFO] Database progress: {getattr(video, 'processing_progress', 'None')}")
             print(f"   📅 Started: {video.processing_started_at}")
             print(f"   🕒 Elapsed: {elapsed if 'elapsed' in locals() else 'Unknown'}")
     
@@ -1757,10 +1757,10 @@ def processing_status(id):
         if hasattr(video, 'processing_progress') and video.processing_progress:
             if response['progress'] == 0:  # Only update if we didn't get progress from Celery
                 response['progress'] = video.processing_progress
-                print(f"   🔄 Using database progress: {response['progress']}%")
+                print(f"   [PROCESSING] Using database progress: {response['progress']}%")
     
     print(f"📡 Processing API Response for video {id}: status={response['status']}, progress={response['progress']}%, message='{response['progress_message']}'")
-    print(f"   🔧 Response details: {response}")
+    print(f"   [CONFIG] Response details: {response}")
     return jsonify(response)
 
 @videos_bp.route('/api/conversion-tasks')
@@ -1850,17 +1850,17 @@ def cancel_processing(id):
                 print(f"🛑 Cancelled Celery task {video.task_id} for video {video.id}")
                 
             except Exception as e:
-                print(f"⚠️ Error cancelling Celery task: {e}")
+                print(f"[WARNING] Error cancelling Celery task: {e}")
         
         # Reset video to a processable state
         # If video was originally converted, set back to completed
         # If video was originally uploaded, set back to uploaded
         if video.processed_path:
             video.status = 'completed'
-            print(f"🔄 Reset converted video {video.id} to 'completed' status")
+            print(f"[PROCESSING] Reset converted video {video.id} to 'completed' status")
         else:
             video.status = 'uploaded'
-            print(f"🔄 Reset video {video.id} to 'uploaded' status")
+            print(f"[PROCESSING] Reset video {video.id} to 'uploaded' status")
         
         # Clear processing data
         video.processing_started_at = None
@@ -1871,7 +1871,7 @@ def cancel_processing(id):
         
         db.session.commit()
         
-        print(f"✅ Successfully cancelled processing for video {video.id}: {video.filename}")
+        print(f"[OK] Successfully cancelled processing for video {video.id}: {video.filename}")
         flash(f'Processing cancelled for "{video.filename}". You can now retry person extraction.', 'success')
         
         return redirect(url_for('videos.detail', id=id))
@@ -1927,7 +1927,7 @@ def force_reset(id):
         
         db.session.commit()
         
-        print(f"🔧 Force reset video {video.id}: {video.filename} from '{old_status}' to 'failed'")
+        print(f"[CONFIG] Force reset video {video.id}: {video.filename} from '{old_status}' to 'failed'")
         flash(f'Video "{video.filename}" has been reset. You can now delete or reprocess it.', 'success')
         
         return redirect(url_for('videos.detail', id=id))
@@ -1950,7 +1950,7 @@ def calibrate_coordinates(video_id):
         import json
         from datetime import datetime
         
-        print(f"🎯 Starting coordinate calibration for video {video_id}")
+        print(f"[TARGET] Starting coordinate calibration for video {video_id}")
         
         # Get request data
         data = request.get_json()
@@ -1958,7 +1958,7 @@ def calibrate_coordinates(video_id):
         frame_info = data.get('frameInfo')
         calibration_data = data.get('calibrationData')
         
-        print(f"📊 Calibration request: {len(calibration_data.get('detections', []))} detections")
+        print(f"[INFO] Calibration request: {len(calibration_data.get('detections', []))} detections")
         print(f"📐 Frame info: {frame_info.get('displayWidth')}x{frame_info.get('displayHeight')}")
         
         # Get video from database
@@ -1968,7 +1968,7 @@ def calibrate_coordinates(video_id):
         image_data = frame_data.split(',')[1]  # Remove data:image/jpeg;base64, prefix
         frame_bytes = base64.b64decode(image_data)
         
-        print(f"📸 Decoded frame: {len(frame_bytes)} bytes")
+        print(f"[CAMERA] Decoded frame: {len(frame_bytes)} bytes")
         
         # Use AI to re-detect persons in the browser frame
         calibration_result = perform_ai_coordinate_calibration(
@@ -1977,7 +1977,7 @@ def calibrate_coordinates(video_id):
             calibration_data.get('detections', [])
         )
         
-        print(f"🤖 AI calibration result: {calibration_result}")
+        print(f"[AI] AI calibration result: {calibration_result}")
         
         # Store calibration data for this video session
         store_calibration_offsets(video_id, calibration_result.get('offsets', {}))
@@ -1992,7 +1992,7 @@ def calibrate_coordinates(video_id):
         })
         
     except Exception as e:
-        print(f"❌ Calibration error: {str(e)}")
+        print(f"[ERROR] Calibration error: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e),
@@ -2004,16 +2004,16 @@ def perform_ai_coordinate_calibration(frame_bytes, frame_info, stored_detections
     Use AI models to re-detect persons in browser frame and calculate calibration offsets
     """
     try:
-        print("🤖 Starting AI coordinate calibration...")
+        print("[AI] Starting AI coordinate calibration...")
         
         # Try to import AI detection modules
         try:
             from ..processing.transformer_detection import detect_persons_sam2, detect_persons_detr
             from ..processing.real_detection import detect_persons_yolo
             AI_AVAILABLE = True
-            print("✅ AI models available for calibration")
+            print("[OK] AI models available for calibration")
         except ImportError as e:
-            print(f"⚠️ AI models not available: {e}, using calibration heuristics")
+            print(f"[WARNING] AI models not available: {e}, using calibration heuristics")
             AI_AVAILABLE = False
         
         if AI_AVAILABLE:
@@ -2026,11 +2026,11 @@ def perform_ai_coordinate_calibration(frame_bytes, frame_info, stored_detections
                 temp_path = temp_file.name
             
             try:
-                print(f"🔍 Processing frame with AI: {temp_path}")
+                print(f"[SEARCH] Processing frame with AI: {temp_path}")
                 
                 # Use YOLO for fast detection (most reliable for calibration)
                 ai_detections = detect_persons_yolo_frame(temp_path, frame_info)
-                print(f"🤖 AI found {len(ai_detections)} persons in browser frame")
+                print(f"[AI] AI found {len(ai_detections)} persons in browser frame")
                 
                 # Calculate calibration offsets by comparing stored vs AI-detected coordinates
                 offsets = calculate_calibration_offsets(stored_detections, ai_detections, frame_info)
@@ -2050,7 +2050,7 @@ def perform_ai_coordinate_calibration(frame_bytes, frame_info, stored_detections
         
         else:
             # Fallback: Use heuristic calibration based on common offset patterns
-            print("🔧 Using heuristic calibration (no AI available)")
+            print("[CONFIG] Using heuristic calibration (no AI available)")
             
             offsets = calculate_heuristic_offsets(stored_detections, frame_info)
             
@@ -2062,7 +2062,7 @@ def perform_ai_coordinate_calibration(frame_bytes, frame_info, stored_detections
             }
             
     except Exception as e:
-        print(f"❌ AI calibration failed: {e}")
+        print(f"[ERROR] AI calibration failed: {e}")
         # Return neutral offsets (no change)
         return {
             'offsets': {'offsetX': 0, 'offsetY': 0, 'scaleX': 1.0, 'scaleY': 1.0},
@@ -2080,7 +2080,7 @@ def detect_persons_yolo_frame(frame_path, frame_info):
         import cv2
         from ultralytics import YOLO
         
-        print("🎯 Loading YOLO model for calibration...")
+        print("[TARGET] Loading YOLO model for calibration...")
         
         # Load YOLO model (try multiple paths)
         model_paths = ['yolov8n.pt', 'models/yolov8n.pt', '/tmp/yolov8n.pt']
@@ -2089,7 +2089,7 @@ def detect_persons_yolo_frame(frame_path, frame_info):
         for path in model_paths:
             try:
                 model = YOLO(path)
-                print(f"✅ Loaded YOLO from: {path}")
+                print(f"[OK] Loaded YOLO from: {path}")
                 break
             except:
                 continue
@@ -2097,14 +2097,14 @@ def detect_persons_yolo_frame(frame_path, frame_info):
         if model is None:
             # Download if not found
             model = YOLO('models/yolov8n.pt')  # This will auto-download
-            print("📥 Downloaded YOLO model")
+            print("[LOAD] Downloaded YOLO model")
         
         # Read the frame
         frame = cv2.imread(frame_path)
         if frame is None:
             raise ValueError("Failed to load frame image")
         
-        print(f"🖼️ Processing frame: {frame.shape}")
+        print(f"[IMAGE] Processing frame: {frame.shape}")
         
         # Run YOLO detection (only detect persons - class 0)
         results = model(frame, classes=[0], verbose=False)
@@ -2129,21 +2129,21 @@ def detect_persons_yolo_frame(frame_path, frame_info):
                         }
                         detections.append(detection)
         
-        print(f"🎯 YOLO detected {len(detections)} persons in calibration frame")
+        print(f"[TARGET] YOLO detected {len(detections)} persons in calibration frame")
         return detections
         
     except Exception as e:
-        print(f"❌ YOLO detection failed: {e}")
+        print(f"[ERROR] YOLO detection failed: {e}")
         return []
 
 def calculate_calibration_offsets(stored_detections, ai_detections, frame_info):
     """
     Calculate offset corrections by comparing stored coordinates with AI-detected coordinates
     """
-    print("🔧 Calculating calibration offsets...")
+    print("[CONFIG] Calculating calibration offsets...")
     
     if not ai_detections or not stored_detections:
-        print("⚠️ Insufficient detection data for calibration")
+        print("[WARNING] Insufficient detection data for calibration")
         return {'offsetX': 0, 'offsetY': 0, 'scaleX': 1.0, 'scaleY': 1.0}
     
     # Match stored detections with AI detections using proximity
@@ -2177,10 +2177,10 @@ def calculate_calibration_offsets(stored_detections, ai_detections, frame_info):
                 'distance': best_distance
             })
     
-    print(f"📊 Found {len(matches)} coordinate matches for calibration")
+    print(f"[INFO] Found {len(matches)} coordinate matches for calibration")
     
     if len(matches) < 1:
-        print("⚠️ No coordinate matches found, using heuristic offsets")
+        print("[WARNING] No coordinate matches found, using heuristic offsets")
         return calculate_heuristic_offsets(stored_detections, frame_info)
     
     # Calculate average offsets
@@ -2223,14 +2223,14 @@ def calculate_calibration_offsets(stored_detections, ai_detections, frame_info):
         'scaleY': round(scale_y, 3)
     }
     
-    print(f"✅ Calculated AI-based offsets: {offsets}")
+    print(f"[OK] Calculated AI-based offsets: {offsets}")
     return offsets
 
 def calculate_heuristic_offsets(stored_detections, frame_info):
     """
     Calculate offsets using heuristic rules when AI detection is not available
     """
-    print("🔧 Calculating heuristic offsets...")
+    print("[CONFIG] Calculating heuristic offsets...")
     
     # Common offset patterns based on browser/video scaling differences
     display_width = frame_info.get('displayWidth', 800)
@@ -2281,7 +2281,7 @@ def calculate_heuristic_offsets(stored_detections, frame_info):
         'scaleY': scale_y
     }
     
-    print(f"✅ Heuristic offsets: {offsets}")
+    print(f"[OK] Heuristic offsets: {offsets}")
     return offsets
 
 def calculate_calibration_accuracy(stored_detections, ai_detections, offsets):
@@ -2320,7 +2320,7 @@ def calculate_calibration_accuracy(stored_detections, ai_detections, offsets):
     average_error = total_error / comparisons
     accuracy = max(0.0, 1.0 - (average_error / 100))  # Normalize error to 0-1 scale
     
-    print(f"📊 Calibration accuracy: {accuracy:.3f} (avg error: {average_error:.1f}px)")
+    print(f"[INFO] Calibration accuracy: {accuracy:.3f} (avg error: {average_error:.1f}px)")
     return accuracy
 
 def store_calibration_offsets(video_id, offsets):
@@ -2330,7 +2330,7 @@ def store_calibration_offsets(video_id, offsets):
     try:
         # For now, just store in memory/session
         # In production, could store in database for reuse
-        print(f"💾 Storing calibration offsets for video {video_id}: {offsets}")
+        print(f"[SAVE] Storing calibration offsets for video {video_id}: {offsets}")
         
         # Could implement persistent storage here:
         # - Store in database table for video-specific calibrations
@@ -2338,7 +2338,7 @@ def store_calibration_offsets(video_id, offsets):
         # - Apply to other videos with similar characteristics
         
     except Exception as e:
-        print(f"⚠️ Failed to store calibration offsets: {e}")
+        print(f"[WARNING] Failed to store calibration offsets: {e}")
 
 @videos_bp.route('/celery-status')
 @login_required
@@ -2360,9 +2360,9 @@ def celery_status():
         }
         
         if active_workers:
-            print(f"✅ Celery status check: {len(active_workers)} workers active")
+            print(f"[OK] Celery status check: {len(active_workers)} workers active")
         else:
-            print("⚠️ Celery status check: No workers detected")
+            print("[WARNING] Celery status check: No workers detected")
         
         return jsonify(status)
         
@@ -2373,7 +2373,7 @@ def celery_status():
             'error': 'Celery not installed'
         })
     except Exception as e:
-        print(f"❌ Error checking Celery status: {e}")
+        print(f"[ERROR] Error checking Celery status: {e}")
         return jsonify({
             'workers_available': False,
             'celery_available': False,
@@ -2472,10 +2472,10 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                 # Re-fetch the video object in this thread's session
                 video_obj = Video.query.get(video.id)
                 if not video_obj:
-                    print(f"❌ Video {video.id} not found in database")
+                    print(f"[ERROR] Video {video.id} not found in database")
                     return
                 
-                print(f"🚀 Starting GPU-accelerated person extraction for video {video_obj.id}: {video_obj.filename}")
+                print(f"[START] Starting GPU-accelerated person extraction for video {video_obj.id}: {video_obj.filename}")
                 
                 # Get video path
                 upload_folder = app.config.get('UPLOAD_FOLDER', 'static/uploads')
@@ -2485,10 +2485,10 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                 if not os.path.exists(video_path):
                     raise FileNotFoundError(f"Video file not found: {video_path}")
                 
-                print(f"✅ Video file exists: {video_path} ({os.path.getsize(video_path)} bytes)")
+                print(f"[OK] Video file exists: {video_path} ({os.path.getsize(video_path)} bytes)")
                 
                 # Step 1: Clear existing detections
-                print(f"🗑️ Step 1/5: Clearing existing detection data for video {video_obj.id}")
+                print(f"[DELETE] Step 1/5: Clearing existing detection data for video {video_obj.id}")
                 video_obj.processing_progress = 5
                 db.session.commit()
                 
@@ -2498,20 +2498,20 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                     for detection in existing_detections:
                         db.session.delete(detection)
                     db.session.commit()
-                    print(f"   ✅ Deleted {detection_count} existing detections")
+                    print(f"   [OK] Deleted {detection_count} existing detections")
                 
                 # Step 2: Run GPU-accelerated person detection
-                print(f"🤖 Step 2/5: Running GPU-accelerated person detection...")
+                print(f"[AI] Step 2/5: Running GPU-accelerated person detection...")
                 video_obj.processing_progress = 20
                 db.session.commit()
                 
                 # Import GPU-optimized detection module
                 try:
                     from processing.gpu_enhanced_detection import gpu_person_detection_task
-                    print("🎮 Using GPU-accelerated detection")
+                    print("[GPU] Using GPU-accelerated detection")
                     gpu_available = True
                 except ImportError:
-                    print("⚠️ GPU detection module not found, falling back to CPU detection")
+                    print("[WARNING] GPU detection module not found, falling back to CPU detection")
                     gpu_available = False
                     try:
                         from processing.enhanced_detection import enhanced_person_detection_task as gpu_person_detection_task
@@ -2527,7 +2527,7 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                     'num_workers': 4 if gpu_available else 2
                 }
                 
-                print(f"🎮 GPU Config: {gpu_config}")
+                print(f"[GPU] GPU Config: {gpu_config}")
                 
                 # Get video ID before calling task to avoid lazy loading
                 video_id = video_obj.id
@@ -2550,10 +2550,10 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                 video_obj.processing_progress = 60
                 db.session.commit()
                 
-                print(f"🎯 GPU detection completed - found {len(result['detections'])} tracked detections")
+                print(f"[TARGET] GPU detection completed - found {len(result['detections'])} tracked detections")
                 
                 # Step 3: Save detections to database
-                print(f"💾 Step 3/5: Saving {len(result['detections'])} detections...")
+                print(f"[SAVE] Step 3/5: Saving {len(result['detections'])} detections...")
                 video_obj.processing_progress = 75
                 db.session.commit()
                 
@@ -2584,10 +2584,10 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                     db,
                     DetectedPerson
                 )
-                print(f"✅ Saved {saved_count} detections with OCR data")
+                print(f"[OK] Saved {saved_count} detections with OCR data")
                 
                 # Step 4: Update video metadata
-                print(f"📊 Step 4/5: Updating video metadata")
+                print(f"[INFO] Step 4/5: Updating video metadata")
                 video_obj.processing_progress = 90
                 
                 if 'processing_summary' in result:
@@ -2609,7 +2609,7 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                             
                         video_obj.annotated_video_path = relative_path
                         video_obj.processed_path = relative_path  # Use annotated video as processed video
-                        print(f"📁 Stored annotated video path: {relative_path}")
+                        print(f"[FILE] Stored annotated video path: {relative_path}")
                 
                 # Save OCR data if available
                 if result.get('ocr_data'):
@@ -2618,12 +2618,12 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                     video_obj.ocr_video_date = ocr_data.get('video_date')
                     video_obj.ocr_extraction_done = True
                     video_obj.ocr_extraction_confidence = ocr_data.get('confidence', 0.0)
-                    print(f"🔤 Saved OCR data - Location: {video_obj.ocr_location}, Date: {video_obj.ocr_video_date}")
+                    print(f"[TEXT] Saved OCR data - Location: {video_obj.ocr_location}, Date: {video_obj.ocr_video_date}")
                 
                 db.session.commit()
                 
                 # Step 5: Complete processing
-                print(f"✅ Step 5/5: GPU processing completed for video {video_obj.id}")
+                print(f"[OK] Step 5/5: GPU processing completed for video {video_obj.id}")
                 video_obj.status = 'completed'
                 video_obj.processing_progress = 100
                 video_obj.processing_completed_at = datetime.utcnow()
@@ -2638,15 +2638,15 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                 db.session.commit()
                 
                 print(f"🎉 GPU-accelerated processing completed successfully!")
-                print(f"📊 Results: {unique_persons} unique persons, {len(result['detections'])} detections")
-                print(f"📁 Annotated video ready for playback: {result.get('annotated_video_path', 'N/A')}")
+                print(f"[INFO] Results: {unique_persons} unique persons, {len(result['detections'])} detections")
+                print(f"[FILE] Annotated video ready for playback: {result.get('annotated_video_path', 'N/A')}")
                 
             except Exception as e:
                 import traceback
                 
                 error_trace = traceback.format_exc()
-                print(f"❌ GPU processing failed for video {video.id}: {e}")
-                print(f"📋 Full error trace:\n{error_trace}")
+                print(f"[ERROR] GPU processing failed for video {video.id}: {e}")
+                print(f"[TRACE] Full error trace:\n{error_trace}")
                 
                 try:
                     db = app.db
@@ -2659,14 +2659,14 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                         video_obj.processing_completed_at = datetime.utcnow()
                         db.session.commit()
                 except Exception as db_error:
-                    print(f"❌ Failed to update database: {db_error}")
+                    print(f"[ERROR] Failed to update database: {db_error}")
     
     # Start background thread
     print(f"🧵 Starting GPU processing thread for video {video.id}...")
     thread = threading.Thread(target=gpu_process_in_background)
     thread.daemon = True
     thread.start()
-    print(f"✅ GPU processing thread started")
+    print(f"[OK] GPU processing thread started")
 
 def start_enhanced_fallback_processing(video, processing_options, app):
     """Start enhanced processing with person tracking and video annotation"""
@@ -2687,52 +2687,52 @@ def start_enhanced_fallback_processing(video, processing_options, app):
                 # Re-fetch the video object in this thread's session
                 video_obj = Video.query.get(video.id)
                 if not video_obj:
-                    print(f"❌ Video {video.id} not found in database")
+                    print(f"[ERROR] Video {video.id} not found in database")
                     return
                 
-                print(f"🚀 Starting enhanced processing for video {video_obj.id}: {video_obj.filename}")
+                print(f"[START] Starting enhanced processing for video {video_obj.id}: {video_obj.filename}")
                 
                 # Get video path
                 upload_folder = app.config.get('UPLOAD_FOLDER', 'static/uploads')
                 if video_obj.processed_path:
                     video_path = os.path.join(upload_folder, video_obj.processed_path)
-                    print(f"📁 Using converted video: {video_path}")
+                    print(f"[FILE] Using converted video: {video_path}")
                 else:
                     video_path = os.path.join(upload_folder, video_obj.file_path)
-                    print(f"📁 Using original video: {video_path}")
+                    print(f"[FILE] Using original video: {video_path}")
                 
                 # Check if video file exists
                 if not os.path.exists(video_path):
                     raise FileNotFoundError(f"Video file not found: {video_path}")
                 
-                print(f"✅ Video file exists: {video_path} ({os.path.getsize(video_path)} bytes)")
+                print(f"[OK] Video file exists: {video_path} ({os.path.getsize(video_path)} bytes)")
                 
                 # Step 1: Clear existing detections
-                print(f"🗑️ Step 1/5: Clearing existing detection data for video {video_obj.id}")
+                print(f"[DELETE] Step 1/5: Clearing existing detection data for video {video_obj.id}")
                 video_obj.processing_progress = 5
                 db.session.commit()
                 
                 existing_detections = DetectedPerson.query.filter_by(video_id=video_obj.id).all()
                 if existing_detections:
                     detection_count = len(existing_detections)
-                    print(f"   🔍 Found {detection_count} existing detections to delete")
+                    print(f"   [SEARCH] Found {detection_count} existing detections to delete")
                     for detection in existing_detections:
                         db.session.delete(detection)
                     db.session.commit()
-                    print(f"   ✅ Successfully deleted {detection_count} existing detections")
+                    print(f"   [OK] Successfully deleted {detection_count} existing detections")
                 
                 # Step 2: Run enhanced person detection with tracking
-                print(f"🤖 Step 2/5: Running enhanced person detection with tracking...")
+                print(f"[AI] Step 2/5: Running enhanced person detection with tracking...")
                 video_obj.processing_progress = 20
                 db.session.commit()
                 
                 # Import the correct enhanced detection module based on available dependencies
                 try:
                     from processing.enhanced_detection import enhanced_person_detection_task
-                    print("🤖 Using full AI-powered enhanced detection")
+                    print("[AI] Using full AI-powered enhanced detection")
                 except ImportError:
                     from processing.enhanced_detection_fallback import enhanced_person_detection_task
-                    print("🔄 Using fallback enhanced detection (demo mode)")
+                    print("[PROCESSING] Using fallback enhanced detection (demo mode)")
                 
                 result = enhanced_person_detection_task(video_path)
                 
@@ -2742,10 +2742,10 @@ def start_enhanced_fallback_processing(video, processing_options, app):
                 video_obj.processing_progress = 60
                 db.session.commit()
                 
-                print(f"🎯 Enhanced detection completed - found {len(result['detections'])} tracked detections")
+                print(f"[TARGET] Enhanced detection completed - found {len(result['detections'])} tracked detections")
                 
                 # Step 3: Save tracked detections to database with person_id and track_id
-                print(f"💾 Step 3/5: Saving {len(result['detections'])} tracked detections to database")
+                print(f"[SAVE] Step 3/5: Saving {len(result['detections'])} tracked detections to database")
                 video_obj.processing_progress = 75
                 db.session.commit()
                 
@@ -2765,10 +2765,10 @@ def start_enhanced_fallback_processing(video, processing_options, app):
                     db.session.add(detection)
                 
                 db.session.commit()
-                print(f"✅ Saved {len(result['detections'])} tracked detections to database")
+                print(f"[OK] Saved {len(result['detections'])} tracked detections to database")
                 
                 # Step 4: Update video metadata with processing summary
-                print(f"📊 Step 4/5: Updating video metadata")
+                print(f"[INFO] Step 4/5: Updating video metadata")
                 video_obj.processing_progress = 90
                 
                 if 'processing_summary' in result:
@@ -2783,7 +2783,7 @@ def start_enhanced_fallback_processing(video, processing_options, app):
                             # Convert to relative path that can be served
                             relative_path = annotated_path.replace('processing/outputs/', '')
                             video_obj.annotated_video_path = relative_path
-                            print(f"📁 Stored annotated video path: {relative_path}")
+                            print(f"[FILE] Stored annotated video path: {relative_path}")
                     
                     # Store enhanced processing info
                     if video_obj.processing_log:
@@ -2800,7 +2800,7 @@ def start_enhanced_fallback_processing(video, processing_options, app):
                 db.session.commit()
                 
                 # Step 5: Complete processing
-                print(f"✅ Step 5/5: Enhanced processing completed for video {video_obj.id}")
+                print(f"[OK] Step 5/5: Enhanced processing completed for video {video_obj.id}")
                 video_obj.status = 'completed'
                 video_obj.processing_progress = 100
                 video_obj.processing_completed_at = datetime.utcnow()
@@ -2815,15 +2815,15 @@ def start_enhanced_fallback_processing(video, processing_options, app):
                 db.session.commit()
                 
                 print(f"🎉 Enhanced processing completed successfully!")
-                print(f"📊 Results: {unique_persons} unique persons, {len(result['detections'])} total detections")
-                print(f"📁 Annotated video: {result.get('annotated_video_path', 'N/A')}")
+                print(f"[INFO] Results: {unique_persons} unique persons, {len(result['detections'])} total detections")
+                print(f"[FILE] Annotated video: {result.get('annotated_video_path', 'N/A')}")
                 
             except Exception as e:
                 import traceback
                 
                 error_trace = traceback.format_exc()
-                print(f"❌ Enhanced processing failed for video {video.id}: {e}")
-                print(f"📋 Full error trace:\n{error_trace}")
+                print(f"[ERROR] Enhanced processing failed for video {video.id}: {e}")
+                print(f"[TRACE] Full error trace:\n{error_trace}")
                 
                 try:
                     # Get database and models from app context
@@ -2837,16 +2837,16 @@ def start_enhanced_fallback_processing(video, processing_options, app):
                         video_obj.error_message = f'Enhanced processing failed: {str(e)}'
                         video_obj.processing_completed_at = datetime.utcnow()
                         db.session.commit()
-                        print(f"💾 Updated video {video.id} status to failed")
+                        print(f"[SAVE] Updated video {video.id} status to failed")
                 except Exception as db_error:
-                    print(f"❌ Failed to update database status: {db_error}")
+                    print(f"[ERROR] Failed to update database status: {db_error}")
     
     # Start background thread
     print(f"🧵 Starting enhanced processing thread for video {video.id}...")
     thread = threading.Thread(target=enhanced_process_in_background)
     thread.daemon = True
     thread.start()
-    print(f"✅ Enhanced processing thread started for video {video.id}")
+    print(f"[OK] Enhanced processing thread started for video {video.id}")
 
 def start_fallback_processing(video, processing_options, app):
     """Start processing in a background thread when Celery is not available"""
@@ -2866,28 +2866,28 @@ def start_fallback_processing(video, processing_options, app):
                 # Re-fetch the video object in this thread's session to avoid session issues
                 video_obj = Video.query.get(video.id)
                 if not video_obj:
-                    print(f"❌ Video {video.id} not found in database")
+                    print(f"[ERROR] Video {video.id} not found in database")
                     return
                 
-                print(f"🔄 Starting fallback processing for video {video_obj.id} in background thread...")
+                print(f"[PROCESSING] Starting fallback processing for video {video_obj.id} in background thread...")
                 
                 # Get video path
                 upload_folder = app.config.get('UPLOAD_FOLDER', 'static/uploads')
                 if video_obj.processed_path:
                     video_path = os.path.join(upload_folder, video_obj.processed_path)
-                    print(f"📁 Using converted video: {video_path}")
+                    print(f"[FILE] Using converted video: {video_path}")
                 else:
                     video_path = os.path.join(upload_folder, video_obj.file_path)
-                    print(f"📁 Using original video: {video_path}")
+                    print(f"[FILE] Using original video: {video_path}")
                 
                 # Check if video file exists
                 if not os.path.exists(video_path):
                     raise FileNotFoundError(f"Video file not found: {video_path}")
                 
-                print(f"✅ Video file exists: {video_path} ({os.path.getsize(video_path)} bytes)")
+                print(f"[OK] Video file exists: {video_path} ({os.path.getsize(video_path)} bytes)")
                 
                 # Step 1: Extract video metadata
-                print(f"🔍 Step 1/4: Extracting metadata for video {video_obj.id}")
+                print(f"[SEARCH] Step 1/4: Extracting metadata for video {video_obj.id}")
                 video_obj.processing_progress = 10
                 db.session.commit()
                 
@@ -2899,28 +2899,28 @@ def start_fallback_processing(video, processing_options, app):
                 video_obj.processing_progress = 25
                 db.session.commit()
                 
-                print(f"📊 Video metadata: duration={metadata.get('duration')}s, fps={metadata.get('fps')}, resolution={metadata.get('resolution')}")
+                print(f"[INFO] Video metadata: duration={metadata.get('duration')}s, fps={metadata.get('fps')}, resolution={metadata.get('resolution')}")
                 
                 # CLEAR ALL EXISTING DETECTION DATA BEFORE RE-PROCESSING (Fallback mode)
-                print(f"🗑️ [Fallback] Clearing all existing detection data for video {video_obj.id}")
+                print(f"[DELETE] [Fallback] Clearing all existing detection data for video {video_obj.id}")
                 try:
                     DetectedPerson = app.DetectedPerson
                     existing_detections = DetectedPerson.query.filter_by(video_id=video_obj.id).all()
                     
                     if existing_detections:
                         detection_count = len(existing_detections)
-                        print(f"   🔍 Found {detection_count} existing detections to delete")
+                        print(f"   [SEARCH] Found {detection_count} existing detections to delete")
                         
                         for detection in existing_detections:
                             db.session.delete(detection)
                         
                         db.session.commit()
-                        print(f"   ✅ Successfully deleted {detection_count} existing detections")
+                        print(f"   [OK] Successfully deleted {detection_count} existing detections")
                     else:
-                        print(f"   📝 No existing detections found for video {video_obj.id}")
+                        print(f"   [LOG] No existing detections found for video {video_obj.id}")
                         
                 except Exception as e:
-                    print(f"   ⚠️ Warning: Could not clear existing detections: {e}")
+                    print(f"   [WARNING] Warning: Could not clear existing detections: {e}")
                     # Continue processing anyway - this is not a critical error
                 
                 # Step 2: Detect persons
@@ -2929,14 +2929,14 @@ def start_fallback_processing(video, processing_options, app):
                 db.session.commit()
                 
                 from processing.standalone_tasks import detect_persons_in_video
-                print(f"🔄 Starting person detection...")
+                print(f"[PROCESSING] Starting person detection...")
                 detections = detect_persons_in_video(video_path)
                 video_obj.processing_progress = 70
                 db.session.commit()
                 
-                print(f"🎯 Found {len(detections)} person detections")
+                print(f"[TARGET] Found {len(detections)} person detections")
                 
-                # Step 3: Save detections to database                print(f"💾 Step 3/4: Saving {len(detections)} detections to database")
+                # Step 3: Save detections to database                print(f"[SAVE] Step 3/4: Saving {len(detections)} detections to database")
                 video_obj.processing_progress = 80
                 db.session.commit()
                 
@@ -2947,7 +2947,7 @@ def start_fallback_processing(video, processing_options, app):
                 db.session.commit()
                 
                 # Step 4: Complete processing
-                print(f"✅ Step 4/4: Person extraction completed for video {video_obj.id}")
+                print(f"[OK] Step 4/4: Person extraction completed for video {video_obj.id}")
                 video_obj.status = 'completed'
                 video_obj.processing_progress = 100
                 video_obj.processing_completed_at = datetime.utcnow()
@@ -2966,8 +2966,8 @@ def start_fallback_processing(video, processing_options, app):
                 import traceback
                 
                 error_trace = traceback.format_exc()
-                print(f"❌ Fallback processing failed for video {video.id}: {e}")
-                print(f"📋 Full error trace:\n{error_trace}")
+                print(f"[ERROR] Fallback processing failed for video {video.id}: {e}")
+                print(f"[TRACE] Full error trace:\n{error_trace}")
                 
                 try:
                     # Get database and models from app context
@@ -2981,16 +2981,16 @@ def start_fallback_processing(video, processing_options, app):
                         video_obj.error_message = f'Processing failed: {str(e)}'
                         video_obj.processing_completed_at = datetime.utcnow()
                         db.session.commit()
-                        print(f"💾 Updated video {video.id} status to failed")
+                        print(f"[SAVE] Updated video {video.id} status to failed")
                 except Exception as db_error:
-                    print(f"❌ Failed to update database status: {db_error}")
+                    print(f"[ERROR] Failed to update database status: {db_error}")
     
     # Start background thread
     print(f"🧵 Starting background thread for video {video.id} fallback processing...")
     thread = threading.Thread(target=process_in_background)
     thread.daemon = True
     thread.start()
-    print(f"✅ Background thread started for video {video.id}")
+    print(f"[OK] Background thread started for video {video.id}")
     
     print(f"🧵 Started fallback processing thread for video {video.id}")
 
@@ -3077,9 +3077,9 @@ if SOCKETIO_AVAILABLE:
             if hasattr(current_app, 'extensions') and 'socketio' in current_app.extensions:
                 socketio = current_app.extensions['socketio']
                 register_socketio_events(socketio)
-                print("✅ WebSocket events registered for video processing")
+                print("[OK] WebSocket events registered for video processing")
         except Exception as e:
-            print(f"⚠️ Failed to register WebSocket events: {e}")
+            print(f"[WARNING] Failed to register WebSocket events: {e}")
 
 else:
     def init_socketio_events():
@@ -3108,7 +3108,7 @@ def process_video_chunk(video_path, chunk_info, app):
             'use_gpu': True
         })
         
-        print(f"🎮 Processing chunk {chunk_info['index']+1}/{chunk_info['total']} in GPU queue")
+        print(f"[GPU] Processing chunk {chunk_info['index']+1}/{chunk_info['total']} in GPU queue")
         
         # Start processing
         start_enhanced_gpu_processing(chunk_video, processing_options, app)
@@ -3125,7 +3125,7 @@ def process_video_chunk(video_path, chunk_info, app):
             completed_chunks = [c for c in all_chunks if c.status == 'completed']
             
             if len(completed_chunks) == len(all_chunks):
-                print(f"✅ All {len(all_chunks)} chunks completed for parent video {parent_video_id}")
+                print(f"[OK] All {len(all_chunks)} chunks completed for parent video {parent_video_id}")
                 
                 # Trigger merge process
                 from processing.video_chunk_manager import VideoChunkManager
@@ -3141,14 +3141,14 @@ def process_video_chunk(video_path, chunk_info, app):
                     )
                     
                     if success:
-                        print(f"✅ Successfully merged results for parent video {parent_video_id}")
+                        print(f"[OK] Successfully merged results for parent video {parent_video_id}")
                     else:
-                        print(f"❌ Failed to merge results for parent video {parent_video_id}")
+                        print(f"[ERROR] Failed to merge results for parent video {parent_video_id}")
         
         return {'status': 'completed', 'chunk_id': chunk_info['video_id']}
         
     except Exception as e:
-        print(f"❌ Error processing chunk: {e}")
+        print(f"[ERROR] Error processing chunk: {e}")
         import traceback
         traceback.print_exc()
         return {'status': 'failed', 'error': str(e)}

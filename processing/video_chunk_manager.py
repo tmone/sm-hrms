@@ -88,7 +88,7 @@ class VideoChunkManager:
                 '-y',  # Overwrite
                 str(chunk_path)
             ]
-            logger.info(f"📋 Creating chunk {i+1}/{num_chunks} with stream copy (no re-encoding)")
+            logger.info(f"[TRACE] Creating chunk {i+1}/{num_chunks} with stream copy (no re-encoding)")
             
             try:
                 logger.info(f"Creating chunk {i+1}/{num_chunks}: {chunk_filename}")
@@ -110,7 +110,7 @@ class VideoChunkManager:
                 try:
                     subprocess.run(cmd_alt, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
                     chunk_paths.append(str(chunk_path))
-                    logger.info(f"✅ Chunk {i+1} created with alternative method")
+                    logger.info(f"[OK] Chunk {i+1} created with alternative method")
                 except subprocess.CalledProcessError as e2:
                     # Last resort: try with re-encoding if copy fails
                     logger.warning(f"Stream copy failed, trying with re-encoding for chunk {i}")
@@ -129,7 +129,7 @@ class VideoChunkManager:
                     try:
                         subprocess.run(cmd_encode, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
                         chunk_paths.append(str(chunk_path))
-                        logger.info(f"✅ Chunk {i+1} created with re-encoding")
+                        logger.info(f"[OK] Chunk {i+1} created with re-encoding")
                     except subprocess.CalledProcessError as e3:
                         logger.error(f"All methods failed for chunk {i}: {e3.stderr}")
                     

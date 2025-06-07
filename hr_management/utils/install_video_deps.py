@@ -23,7 +23,7 @@ def install_package(package):
         return False
 
 def main():
-    print("🎥 Video Processing Dependencies Installer")
+    print("[MOVIE] Video Processing Dependencies Installer")
     print("=" * 50)
     
     # Required packages for video conversion
@@ -40,44 +40,44 @@ def main():
     to_install = []
     
     # Check what's already installed
-    print("🔍 Checking current installations...")
+    print("[SEARCH] Checking current installations...")
     for import_name, pip_name in packages:
         if check_package(import_name):
-            print(f"✅ {pip_name} - Already installed")
+            print(f"[OK] {pip_name} - Already installed")
             installed.append(pip_name)
         else:
-            print(f"❌ {pip_name} - Not installed")
+            print(f"[ERROR] {pip_name} - Not installed")
             to_install.append(pip_name)
     
     if not to_install:
         print("\n🎉 All video processing dependencies are already installed!")
         return
     
-    print(f"\n📦 Installing {len(to_install)} missing packages...")
+    print(f"\n[PACKAGE] Installing {len(to_install)} missing packages...")
     
     failed = []
     for package in to_install:
-        print(f"\n📥 Installing {package}...")
+        print(f"\n[LOAD] Installing {package}...")
         if install_package(package):
-            print(f"✅ {package} installed successfully")
+            print(f"[OK] {package} installed successfully")
         else:
-            print(f"❌ Failed to install {package}")
+            print(f"[ERROR] Failed to install {package}")
             failed.append(package)
     
     print("\n" + "=" * 50)
-    print("📊 Installation Summary:")
-    print(f"✅ Already installed: {len(installed)}")
-    print(f"📥 Successfully installed: {len(to_install) - len(failed)}")
-    print(f"❌ Failed to install: {len(failed)}")
+    print("[INFO] Installation Summary:")
+    print(f"[OK] Already installed: {len(installed)}")
+    print(f"[LOAD] Successfully installed: {len(to_install) - len(failed)}")
+    print(f"[ERROR] Failed to install: {len(failed)}")
     
     if failed:
-        print(f"\n⚠️ Failed packages: {', '.join(failed)}")
-        print("💡 Try installing manually:")
+        print(f"\n[WARNING] Failed packages: {', '.join(failed)}")
+        print("[TIP] Try installing manually:")
         for package in failed:
             print(f"   pip install {package}")
     else:
         print("\n🎉 All video processing dependencies installed successfully!")
-        print("🚀 You can now convert IMKH and other video formats!")
+        print("[START] You can now convert IMKH and other video formats!")
 
 if __name__ == "__main__":
     main()

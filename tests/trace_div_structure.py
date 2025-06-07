@@ -28,7 +28,7 @@ def trace_div_structure(filename):
                 opened_at, class_name = div_stack.pop()
                 depth -= 1
             else:
-                print(f"❌ Extra closing div at line {line_num}")
+                print(f"[ERROR] Extra closing div at line {line_num}")
                 print(f"   Line: {line.strip()}")
                 print(f"\nCurrent div stack:")
                 for ln, cn in div_stack[-5:]:
@@ -36,11 +36,11 @@ def trace_div_structure(filename):
                 return
     
     if div_stack:
-        print(f"❌ {len(div_stack)} unclosed divs:")
+        print(f"[ERROR] {len(div_stack)} unclosed divs:")
         for line_num, class_name in div_stack:
             print(f"   Line {line_num}: <div class='{class_name}'>")
     else:
-        print("✅ All divs are properly closed!")
+        print("[OK] All divs are properly closed!")
 
 if __name__ == '__main__':
     trace_div_structure('templates/videos/detail.html')

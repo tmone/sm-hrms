@@ -16,10 +16,10 @@ def backup_database(db_path):
     try:
         import shutil
         shutil.copy2(db_path, backup_path)
-        print(f"✅ Database backed up to: {backup_path}")
+        print(f"[OK] Database backed up to: {backup_path}")
         return backup_path
     except Exception as e:
-        print(f"⚠️ Warning: Could not create backup: {e}")
+        print(f"[WARNING] Warning: Could not create backup: {e}")
         return None
 
 def check_column_exists(db_path):
@@ -36,19 +36,19 @@ def check_column_exists(db_path):
         
         has_annotated_path = 'annotated_video_path' in columns
         
-        print(f"📊 Current columns in videos: {len(columns)} columns")
+        print(f"[INFO] Current columns in videos: {len(columns)} columns")
         print(f"   - annotated_video_path exists: {has_annotated_path}")
         
         return has_annotated_path
         
     except Exception as e:
-        print(f"❌ Error checking columns: {e}")
+        print(f"[ERROR] Error checking columns: {e}")
         return False
 
 def add_annotated_video_path_column(db_path):
     """Add annotated_video_path column to videos table"""
     try:
-        print("🔧 Adding annotated_video_path column to videos table...")
+        print("[CONFIG] Adding annotated_video_path column to videos table...")
         
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -59,7 +59,7 @@ def add_annotated_video_path_column(db_path):
         if not has_annotated_path:
             print("   Adding annotated_video_path column...")
             cursor.execute("ALTER TABLE videos ADD COLUMN annotated_video_path VARCHAR(500)")
-            print("   ✅ annotated_video_path column added")
+            print("   [OK] annotated_video_path column added")
         else:
             print("   ℹ️ annotated_video_path column already exists")
         
@@ -67,17 +67,17 @@ def add_annotated_video_path_column(db_path):
         conn.commit()
         conn.close()
         
-        print("✅ Database migration completed successfully!")
+        print("[OK] Database migration completed successfully!")
         return True
         
     except Exception as e:
-        print(f"❌ Migration failed: {e}")
+        print(f"[ERROR] Migration failed: {e}")
         return False
 
 def verify_migration(db_path):
     """Verify that the migration was successful"""
     try:
-        print("🔍 Verifying migration...")
+        print("[SEARCH] Verifying migration...")
         
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -90,18 +90,18 @@ def verify_migration(db_path):
         column_names = [col[1] for col in columns]
         
         if 'annotated_video_path' in column_names:
-            print("✅ Migration verification successful!")
-            print("   📊 Table structure updated:")
+            print("[OK] Migration verification successful!")
+            print("   [INFO] Table structure updated:")
             for col in columns:
                 if col[1] == 'annotated_video_path':
-                    print(f"      ✅ {col[1]} ({col[2]})")
+                    print(f"      [OK] {col[1]} ({col[2]})")
             return True
         else:
-            print("❌ Migration verification failed!")
+            print("[ERROR] Migration verification failed!")
             return False
             
     except Exception as e:
-        print(f"❌ Verification error: {e}")
+        print(f"[ERROR] Verification error: {e}")
         return False
     finally:
         if 'conn' in locals():
@@ -126,20 +126,20 @@ def main():
             break
     
     if not db_path:
-        print("❌ Database file not found!")
+        print("[ERROR] Database file not found!")
         print("   Checked paths:")
         for path in possible_db_paths:
             print(f"   - {path}")
         print("\nPlease run this script from the project root directory.")
         return False
     
-    print(f"📁 Found database: {db_path}")
+    print(f"[FILE] Found database: {db_path}")
     
     # Check current schema
     has_annotated_path = check_column_exists(db_path)
     
     if has_annotated_path:
-        print("✅ Database already has annotated_video_path column!")
+        print("[OK] Database already has annotated_video_path column!")
         return True
     
     # Create backup
@@ -156,16 +156,16 @@ def main():
             print("The video previewer will automatically show annotated videos when available.")
             
             if backup_path:
-                print(f"\n💾 Backup saved at: {backup_path}")
+                print(f"\n[SAVE] Backup saved at: {backup_path}")
             
             return True
         else:
-            print("\n❌ Migration verification failed!")
+            print("\n[ERROR] Migration verification failed!")
             return False
     else:
-        print("\n❌ Migration failed!")
+        print("\n[ERROR] Migration failed!")
         if backup_path:
-            print(f"💾 You can restore from backup: {backup_path}")
+            print(f"[SAVE] You can restore from backup: {backup_path}")
         return False
 
 if __name__ == "__main__":

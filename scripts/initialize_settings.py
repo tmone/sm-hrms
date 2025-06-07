@@ -35,7 +35,7 @@ def initialize_settings():
             for setting in settings:
                 print(f"  - {setting.key}: {setting.value} ({setting.value_type})")
         
-        print("\n✅ Settings initialized successfully!")
+        print("\n[OK] Settings initialized successfully!")
         print("\nYou can now access settings at: http://localhost:5001/settings/")
 
 if __name__ == '__main__':

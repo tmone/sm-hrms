@@ -95,7 +95,7 @@ class FFmpegVideoWriter:
                     # Get file size
                     if os.path.exists(self.output_path):
                         size_mb = os.path.getsize(self.output_path) / (1024 * 1024)
-                        print(f"✅ Video saved: {self.output_path} ({size_mb:.1f} MB)")
+                        print(f"[OK] Video saved: {self.output_path} ({size_mb:.1f} MB)")
                         print(f"   Frames: {self.frame_count}, Codec: {self.codec}, CRF: {self.crf}")
                 
             except Exception as e:
@@ -130,13 +130,13 @@ def create_video_writer(output_path, fps, width, height, use_ffmpeg=True):
         try:
             result = subprocess.run(['ffmpeg', '-version'], capture_output=True)
             if result.returncode == 0:
-                print("✅ Using FFmpeg for video encoding (better compression)")
+                print("[OK] Using FFmpeg for video encoding (better compression)")
                 return FFmpegVideoWriter(output_path, fps, width, height, crf=23)
         except:
-            print("⚠️  FFmpeg not found, falling back to OpenCV")
+            print("[WARNING]  FFmpeg not found, falling back to OpenCV")
     
     # Fallback to OpenCV
-    print("📹 Using OpenCV VideoWriter")
+    print("[VIDEO] Using OpenCV VideoWriter")
     
     # Try H.264 first
     fourcc = cv2.VideoWriter_fourcc(*'H264')
@@ -153,7 +153,7 @@ def create_video_writer(output_path, fps, width, height, use_ffmpeg=True):
         writer = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height), True)
         if writer.isOpened():
             writer.set(cv2.VIDEOWRITER_PROP_QUALITY, 85)
-            print(f"✅ Using {codec} codec")
+            print(f"[OK] Using {codec} codec")
             return writer
     
     # Last resort - XVID in AVI
@@ -162,7 +162,7 @@ def create_video_writer(output_path, fps, width, height, use_ffmpeg=True):
     writer = cv2.VideoWriter(output_avi, fourcc, fps, (width, height), True)
     
     if writer.isOpened():
-        print("⚠️  Using XVID codec in AVI container")
+        print("[WARNING]  Using XVID codec in AVI container")
         return writer
     
     raise Exception("Could not create video writer with any codec")

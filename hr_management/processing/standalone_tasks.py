@@ -10,33 +10,33 @@ from datetime import datetime
 try:
     import cv2
     CV2_AVAILABLE = True
-    print("✅ OpenCV available for video processing")
+    print("[OK] OpenCV available for video processing")
 except ImportError:
     CV2_AVAILABLE = False
-    print("⚠️ OpenCV not available. Video processing will use mock data.")
+    print("[WARNING] OpenCV not available. Video processing will use mock data.")
 
 # Check for SAM/SAM2 availability
 try:
     import torch
     TORCH_AVAILABLE = True
-    print("✅ PyTorch available for AI models")
+    print("[OK] PyTorch available for AI models")
 except ImportError:
     TORCH_AVAILABLE = False
-    print("⚠️ PyTorch not available. AI model features disabled.")
+    print("[WARNING] PyTorch not available. AI model features disabled.")
 
 # Display system capabilities
-print(f"🖥️ System capabilities: CV2={CV2_AVAILABLE}, PyTorch={TORCH_AVAILABLE}")
+print(f"[MONITOR] System capabilities: CV2={CV2_AVAILABLE}, PyTorch={TORCH_AVAILABLE}")
 
 def extract_video_metadata(filepath):
     """Extract metadata from video file using real backends"""
-    print(f"📊 Extracting metadata from: {filepath}")
+    print(f"[INFO] Extracting metadata from: {filepath}")
     
     # Use real detection module for metadata extraction
     try:
         from .real_detection import extract_video_metadata_real
         return extract_video_metadata_real(filepath)
     except ImportError:
-        print("⚠️ Real detection module not available, using fallback")
+        print("[WARNING] Real detection module not available, using fallback")
     
     if not CV2_AVAILABLE:
         # Return mock metadata when OpenCV is not available
@@ -45,7 +45,7 @@ def extract_video_metadata(filepath):
         else:
             file_size = 0
             
-        print("⚠️ OpenCV not available, using mock metadata")
+        print("[WARNING] OpenCV not available, using mock metadata")
         return {
             'duration': 60.0,  # Mock 1 minute duration
             'fps': 25.0,
@@ -83,7 +83,7 @@ def extract_video_metadata(filepath):
         'file_size': os.path.getsize(filepath)
     }
     
-    print(f"📊 Extracted metadata: {metadata}")
+    print(f"[INFO] Extracted metadata: {metadata}")
     return metadata
 
 def detect_persons_in_video(filepath):
@@ -95,38 +95,38 @@ def detect_persons_in_video(filepath):
         # First try transformer and SAM models
         from .transformer_detection import detect_persons_with_best_model, get_best_available_detector
         detector = get_best_available_detector()
-        print(f"🤖 Attempting to use {detector.upper()} for person detection")
+        print(f"[AI] Attempting to use {detector.upper()} for person detection")
         
-        print(f"🚀 Using REAL AI model: {detector}")
+        print(f"[START] Using REAL AI model: {detector}")
         return detect_persons_with_best_model(filepath)
         
     except ImportError as e:
-        print(f"⚠️ Transformer/SAM models not available: {e}")
+        print(f"[WARNING] Transformer/SAM models not available: {e}")
     except Exception as e:
-        print(f"⚠️ Transformer/SAM detection failed: {e}")
+        print(f"[WARNING] Transformer/SAM detection failed: {e}")
     
     # Fallback to traditional models
     try:
         from .real_detection import detect_persons_real, get_best_available_detector as get_fallback_detector
         detector = get_fallback_detector()
-        print(f"🔄 Falling back to {detector.upper()} detection")
+        print(f"[PROCESSING] Falling back to {detector.upper()} detection")
         
         if detector != "mock":
-            print(f"🚀 Using fallback AI model: {detector}")
+            print(f"[START] Using fallback AI model: {detector}")
             return detect_persons_real(filepath)
         else:
-            print("⚠️ No AI models available")
+            print("[WARNING] No AI models available")
     except ImportError as e:
-        print(f"⚠️ Fallback detection not available: {e}")
+        print(f"[WARNING] Fallback detection not available: {e}")
     except Exception as e:
-        print(f"⚠️ Fallback detection failed: {e}")
+        print(f"[WARNING] Fallback detection failed: {e}")
     
     # Only use enhanced mock if no real models available
-    raise RuntimeError("❌ NO REAL AI MODELS AVAILABLE! Please install: pip install torch transformers segment-anything ultralytics")
+    raise RuntimeError("[ERROR] NO REAL AI MODELS AVAILABLE! Please install: pip install torch transformers segment-anything ultralytics")
     
     # Enhanced fallback detection
     if not CV2_AVAILABLE:
-        print("⚠️ OpenCV not available, creating ENHANCED mock person detections...")
+        print("[WARNING] OpenCV not available, creating ENHANCED mock person detections...")
         # Return enhanced mock detections when OpenCV is not available
         detections = []
         
@@ -134,7 +134,7 @@ def detect_persons_in_video(filepath):
         file_size = os.path.getsize(filepath) if os.path.exists(filepath) else 1000000
         num_persons = min(15, max(3, int(file_size / 100000000)))  # 3-15 persons based on file size
         
-        print(f"📊 File size: {file_size} bytes -> generating {num_persons} mock detections")
+        print(f"[INFO] File size: {file_size} bytes -> generating {num_persons} mock detections")
         
         for i in range(num_persons):
             person_code = f"PERSON-{i+1:04d}"
@@ -158,7 +158,7 @@ def detect_persons_in_video(filepath):
             detections.append(detection)
             print(f"👤 Enhanced mock detected person {person_code} at {start_time:.1f}s (conf: {detection['confidence']:.2f})")
         
-        print(f"🎯 Enhanced mock person detection completed: {len(detections)} persons found")
+        print(f"[TARGET] Enhanced mock person detection completed: {len(detections)} persons found")
         return detections
     
     # Check if file exists
@@ -173,7 +173,7 @@ def detect_persons_in_video(filepath):
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
-    print(f"📊 Video properties: FPS={fps}, Total frames={total_frames}")
+    print(f"[INFO] Video properties: FPS={fps}, Total frames={total_frames}")
     
     detections = []
     person_counter = 1
@@ -187,7 +187,7 @@ def detect_persons_in_video(filepath):
         # Log progress every 100 frames
         if frame_number % 100 == 0:
             progress = (frame_number / min(total_frames, 300)) * 100
-            print(f"🔄 Processing frame {frame_number}/{min(total_frames, 300)} ({progress:.1f}%)")
+            print(f"[PROCESSING] Processing frame {frame_number}/{min(total_frames, 300)} ({progress:.1f}%)")
         
         # Simulate person detection (replace with actual detection logic)
         # This would use YOLO, SAM, or other detection models
@@ -231,15 +231,15 @@ def detect_persons_in_video(filepath):
             break
     
     cap.release()
-    print(f"🎯 Person detection completed: {len(detections)} persons found")
+    print(f"[TARGET] Person detection completed: {len(detections)} persons found")
     return detections
 
 def detect_persons_with_sam(filepath):
     """Detect persons using SAM (Segment Anything Model) - Future implementation"""
-    print(f"🤖 SAM-based person detection for: {filepath}")
+    print(f"[AI] SAM-based person detection for: {filepath}")
     
     if not TORCH_AVAILABLE:
-        print("⚠️ PyTorch not available, falling back to basic detection")
+        print("[WARNING] PyTorch not available, falling back to basic detection")
         return detect_persons_in_video(filepath)
     
     # TODO: Implement actual SAM/SAM2 person detection
@@ -255,10 +255,10 @@ def detect_persons_with_sam(filepath):
 
 def save_detections_to_db(video_id, detections, fps, db=None, DetectedPerson=None):
     """Save detection results to database"""
-    print(f"💾 Saving {len(detections)} detections to database for video {video_id}")
+    print(f"[SAVE] Saving {len(detections)} detections to database for video {video_id}")
     
     if not db or not DetectedPerson:
-        print("⚠️ Database connection not available, skipping save")
+        print("[WARNING] Database connection not available, skipping save")
         return
     
     try:
@@ -306,10 +306,10 @@ def save_detections_to_db(video_id, detections, fps, db=None, DetectedPerson=Non
             print(f"   💿 Queued detections for person {detection['person_code']} ({start_frame}-{end_frame})")
         
         db.session.commit()
-        print(f"✅ Successfully saved detection frames to database")
+        print(f"[OK] Successfully saved detection frames to database")
         
     except Exception as e:
-        print(f"❌ Error saving detections to database: {e}")
+        print(f"[ERROR] Error saving detections to database: {e}")
         if db:
             db.session.rollback()
         raise
@@ -319,7 +319,7 @@ def extract_faces_from_detection(video_filepath, detection, dataset_path):
     print(f"👤 Extracting faces for {detection.person_code} from {video_filepath}")
     
     if not CV2_AVAILABLE:
-        print("⚠️ OpenCV not available, skipping face extraction")
+        print("[WARNING] OpenCV not available, skipping face extraction")
         return 0
     
     # Create person directory
@@ -371,5 +371,5 @@ def extract_faces_from_detection(video_filepath, detection, dataset_path):
         faces_extracted += 1
     
     cap.release()
-    print(f"✅ Extracted {faces_extracted} face images for {detection.person_code}")
+    print(f"[OK] Extracted {faces_extracted} face images for {detection.person_code}")
     return faces_extracted

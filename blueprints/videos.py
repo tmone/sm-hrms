@@ -13,7 +13,7 @@ try:
     SOCKETIO_AVAILABLE = True
 except ImportError:
     SOCKETIO_AVAILABLE = False
-    print("⚠️ Flask-SocketIO not available for real-time progress updates")
+    print("[WARNING] Flask-SocketIO not available for real-time progress updates")
 
 videos_bp = Blueprint('videos', __name__)
 
@@ -549,8 +549,8 @@ def convert_video(id):
                     output_path = os.path.join(upload_folder, output_filename)
                     
                     # Convert video (prefer moviepy/opencv over ffmpeg for easier installation)
-                    print(f"🔄 Starting manual conversion: {input_path} -> {output_path}")
-                    print(f"📊 Available methods: {available_methods}")
+                    print(f"[PROCESSING] Starting manual conversion: {input_path} -> {output_path}")
+                    print(f"[INFO] Available methods: {available_methods}")
                     
                     success, output_file, message = processor.convert_video(
                         input_path,
@@ -559,7 +559,7 @@ def convert_video(id):
                         quality='medium'
                     )
                     
-                    print(f"🎯 Manual conversion result: success={success}, message={message}")
+                    print(f"[TARGET] Manual conversion result: success={success}, message={message}")
                     
                     if success:
                         # Update video record
@@ -641,9 +641,9 @@ def conversion_status(id):
                 'progress_message': task.message,
                 'task_id': task.task_id
             })
-            print(f"🔄 API: Sending progress for video {id}: {task.progress}% - {task.message}")
+            print(f"[PROCESSING] API: Sending progress for video {id}: {task.progress}% - {task.message}")
         else:
-            print(f"⚠️ API: No conversion task found for video {id}")
+            print(f"[WARNING] API: No conversion task found for video {id}")
             response.update({
                 'progress': 0.0,
                 'progress_message': 'No active conversion task found'
@@ -845,7 +845,7 @@ def start_auto_conversion(video, input_path, upload_folder, app):
     video.error_message = None
     app.db.session.commit()
     
-    print(f"🔄 Video {video.id} status updated to 'converting' with task {task_id[:8]}")
+    print(f"[PROCESSING] Video {video.id} status updated to 'converting' with task {task_id[:8]}")
     
     # Create processor
     processor = VideoProcessor()
@@ -855,9 +855,9 @@ def start_auto_conversion(video, input_path, upload_folder, app):
     success = conversion_manager.start_conversion(task_id, app, conversion_processor)
     
     if success:
-        print(f"✅ Auto-conversion task {task_id[:8]} started for video: {video.filename}")
+        print(f"[OK] Auto-conversion task {task_id[:8]} started for video: {video.filename}")
     else:
-        print(f"❌ Failed to start auto-conversion task for video: {video.filename}")
+        print(f"[ERROR] Failed to start auto-conversion task for video: {video.filename}")
         video.status = 'failed'
         video.error_message = 'Failed to start conversion task'
         app.db.session.commit()
@@ -944,9 +944,9 @@ if SOCKETIO_AVAILABLE:
             if hasattr(current_app, 'extensions') and 'socketio' in current_app.extensions:
                 socketio = current_app.extensions['socketio']
                 register_socketio_events(socketio)
-                print("✅ WebSocket events registered for video processing")
+                print("[OK] WebSocket events registered for video processing")
         except Exception as e:
-            print(f"⚠️ Failed to register WebSocket events: {e}")
+            print(f"[WARNING] Failed to register WebSocket events: {e}")
 
 else:
     def init_socketio_events():

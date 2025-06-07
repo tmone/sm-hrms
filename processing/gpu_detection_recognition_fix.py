@@ -24,7 +24,7 @@ def add_recognition_to_person_extraction():
                             recognized_id = result['person_id']
                             confidence = result['confidence']
                             
-                            print(f"🎯 Recognized {recognized_id} with confidence {confidence:.2f}")
+                            print(f"[TARGET] Recognized {recognized_id} with confidence {confidence:.2f}")
                             
                             # Use the recognized ID instead of the assigned one
                             person_id_str = recognized_id
@@ -49,7 +49,7 @@ def add_recognition_to_person_extraction():
 
 # To fix GPU detection, you need to:
 
-print("🔧 GPU Detection Recognition Fix\n")
+print("[CONFIG] GPU Detection Recognition Fix\n")
 
 print("The issue: GPU detection assigns new IDs without trying recognition\n")
 
@@ -61,12 +61,12 @@ try:
     from processing.simple_person_recognition_inference import SimplePersonRecognitionInference
     _recognizer = SimplePersonRecognitionInference()
     if _recognizer.inference is None:
-        print("⚠️ Recognition model not loaded - will create new IDs for all persons")
+        print("[WARNING] Recognition model not loaded - will create new IDs for all persons")
         _recognizer = None
     else:
-        print("✅ Recognition model loaded for GPU detection")
+        print("[OK] Recognition model loaded for GPU detection")
 except Exception as e:
-    print(f"⚠️ Recognition not available: {e}")
+    print(f"[WARNING] Recognition not available: {e}")
     _recognizer = None
 """)
 
@@ -83,7 +83,7 @@ print("""
                             person_dir = persons_dir / person_id_str
                             person_dir.mkdir(parents=True, exist_ok=True)
                             recognized = True
-                            print(f"🎯 Recognized {person_id_str} with confidence {result['confidence']:.2f}")
+                            print(f"[TARGET] Recognized {person_id_str} with confidence {result['confidence']:.2f}")
                     except Exception as e:
                         pass  # Continue with assigned ID
                 

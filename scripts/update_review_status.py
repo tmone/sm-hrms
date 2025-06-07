@@ -13,13 +13,13 @@ import json
 
 def update_review_status():
     """Update review status for all persons"""
-    print("📊 Updating review status...\n")
+    print("[INFO] Updating review status...\n")
     
     persons_dir = Path("processing/outputs/persons")
     datasets_dir = Path("datasets")
     
     if not persons_dir.exists():
-        print("❌ No persons directory found")
+        print("[ERROR] No persons directory found")
         return
     
     updated_count = 0
@@ -95,13 +95,13 @@ def update_review_status():
             json.dump(review_status, f, indent=2)
         
         if unconfirmed > 0:
-            print(f"⚠️  {person_id}: {unconfirmed} unconfirmed, {confirmed} confirmed")
+            print(f"[WARNING]  {person_id}: {unconfirmed} unconfirmed, {confirmed} confirmed")
         else:
-            print(f"✅ {person_id}: All {confirmed} images confirmed")
+            print(f"[OK] {person_id}: All {confirmed} images confirmed")
         
         updated_count += 1
     
-    print(f"\n✅ Updated {updated_count} person folders")
+    print(f"\n[OK] Updated {updated_count} person folders")
 
 if __name__ == "__main__":
     update_review_status()

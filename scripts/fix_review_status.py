@@ -100,11 +100,11 @@ def fix_review_status_for_person(person_dir):
 
 def fix_all_review_statuses():
     """Fix review status for all persons"""
-    print("🔧 Fixing review statuses...\n")
+    print("[CONFIG] Fixing review statuses...\n")
     
     persons_dir = Path("processing/outputs/persons")
     if not persons_dir.exists():
-        print("❌ No persons directory found")
+        print("[ERROR] No persons directory found")
         return
     
     fixed_count = 0
@@ -119,16 +119,16 @@ def fix_all_review_statuses():
         
         if result['unconfirmed'] == 0 and result['total'] > 0:
             all_confirmed_count += 1
-            print(f"✅ {person_dir.name}: All {result['confirmed']} images confirmed")
+            print(f"[OK] {person_dir.name}: All {result['confirmed']} images confirmed")
         elif result['unconfirmed'] > 0:
-            print(f"⚠️  {person_dir.name}: {result['unconfirmed']} unconfirmed, {result['confirmed']} confirmed")
+            print(f"[WARNING]  {person_dir.name}: {result['unconfirmed']} unconfirmed, {result['confirmed']} confirmed")
         else:
-            print(f"📁 {person_dir.name}: No images")
+            print(f"[FILE] {person_dir.name}: No images")
     
-    print(f"\n📊 Summary:")
+    print(f"\n[INFO] Summary:")
     print(f"   Fixed: {fixed_count} persons")
     print(f"   All confirmed: {all_confirmed_count} persons")
-    print(f"\n✅ Review statuses fixed!")
+    print(f"\n[OK] Review statuses fixed!")
 
 if __name__ == "__main__":
     fix_all_review_statuses()

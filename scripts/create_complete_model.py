@@ -65,11 +65,11 @@ def create_complete_model():
         metadata = json.load(f)
     
     print("\nMetadata includes:")
-    print(f"- Confusion matrix: {'✓' if 'confusion_matrix' in metadata else '✗'}")
-    print(f"- Classification report: {'✓' if 'classification_report' in metadata else '✗'}")
-    print(f"- CV scores: {'✓' if 'cv_scores' in metadata else '✗'}")
-    print(f"- Iteration results: {'✓' if 'iteration_results' in metadata else '✗'}")
-    print(f"- Person accuracies: {'✓' if 'final_person_accuracies' in metadata else '✗'}")
+    print(f"- Confusion matrix: {'[CHECK]' if 'confusion_matrix' in metadata else '✗'}")
+    print(f"- Classification report: {'[CHECK]' if 'classification_report' in metadata else '✗'}")
+    print(f"- CV scores: {'[CHECK]' if 'cv_scores' in metadata else '✗'}")
+    print(f"- Iteration results: {'[CHECK]' if 'iteration_results' in metadata else '✗'}")
+    print(f"- Person accuracies: {'[CHECK]' if 'final_person_accuracies' in metadata else '✗'}")
     
     return results
 

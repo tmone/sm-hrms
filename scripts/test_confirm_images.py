@@ -18,21 +18,21 @@ def test_confirm_images(person_id="PERSON-0001", num_images=5):
     
     person_dir = Path("processing/outputs/persons") / person_id
     if not person_dir.exists():
-        print(f"❌ Person {person_id} not found")
+        print(f"[ERROR] Person {person_id} not found")
         return
     
     # Get some images to confirm
     images = list(person_dir.glob("*.jpg"))[:num_images]
     if not images:
-        print("❌ No images found")
+        print("[ERROR] No images found")
         return
     
-    print(f"📸 Found {len(images)} images to confirm")
+    print(f"[CAMERA] Found {len(images)} images to confirm")
     
     # Create dataset directory
     dataset_dir = Path("datasets") / person_id
     dataset_dir.mkdir(parents=True, exist_ok=True)
-    print(f"📁 Created dataset directory: {dataset_dir}")
+    print(f"[FILE] Created dataset directory: {dataset_dir}")
     
     # Copy images to dataset
     copied = 0
@@ -41,11 +41,11 @@ def test_confirm_images(person_id="PERSON-0001", num_images=5):
         try:
             shutil.copy2(img_path, dest_path)
             copied += 1
-            print(f"   ✅ Copied {img_path.name}")
+            print(f"   [OK] Copied {img_path.name}")
         except Exception as e:
-            print(f"   ❌ Failed to copy {img_path.name}: {e}")
+            print(f"   [ERROR] Failed to copy {img_path.name}: {e}")
     
-    print(f"\n✅ Copied {copied} images to dataset")
+    print(f"\n[OK] Copied {copied} images to dataset")
     
     # Update review status
     review_status_path = person_dir / "review_status.json"
@@ -78,7 +78,7 @@ def test_confirm_images(person_id="PERSON-0001", num_images=5):
     with open(review_status_path, 'w') as f:
         json.dump(review_status, f, indent=2)
     
-    print(f"\n📊 Review status updated:")
+    print(f"\n[INFO] Review status updated:")
     print(f"   Total images: {total}")
     print(f"   Confirmed: {confirmed}")
     print(f"   Unconfirmed: {total - confirmed}")
@@ -95,7 +95,7 @@ def test_confirm_images(person_id="PERSON-0001", num_images=5):
     with open(dataset_meta_path, 'w') as f:
         json.dump(dataset_meta, f, indent=2)
     
-    print(f"\n✅ Test complete! Check the persons page - {person_id} should now show:")
+    print(f"\n[OK] Test complete! Check the persons page - {person_id} should now show:")
     print(f"   - Reduced unconfirmed count")
     print(f"   - Some images marked as confirmed in review page")
 

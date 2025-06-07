@@ -18,9 +18,9 @@ def test_remove_multiple_fix():
     try:
         print("\n1. Testing with empty list of person IDs...")
         result = update_datasets_after_person_deletion([])
-        print("✅ Empty list handled correctly")
+        print("[OK] Empty list handled correctly")
     except Exception as e:
-        print(f"❌ Error with empty list: {type(e).__name__}: {str(e)}")
+        print(f"[ERROR] Error with empty list: {type(e).__name__}: {str(e)}")
         return
     
     # Test with non-existent person IDs
@@ -28,9 +28,9 @@ def test_remove_multiple_fix():
         print("\n2. Testing with non-existent person IDs...")
         fake_ids = ["PERSON-9999", "PERSON-8888"]
         result = update_datasets_after_person_deletion(fake_ids)
-        print(f"✅ Non-existent IDs handled correctly. Updated datasets: {len(result)}")
+        print(f"[OK] Non-existent IDs handled correctly. Updated datasets: {len(result)}")
     except Exception as e:
-        print(f"❌ Error with non-existent IDs: {type(e).__name__}: {str(e)}")
+        print(f"[ERROR] Error with non-existent IDs: {type(e).__name__}: {str(e)}")
         return
     
     # Test with a mix of existing and non-existing IDs (if we have any persons)
@@ -59,14 +59,14 @@ def test_remove_multiple_fix():
                             # In production, this would be called after actual person deletion
                             break
         
-        print("\n✅ All tests passed! The KeyError issue has been fixed.")
-        print("\n📝 Summary of fix:")
+        print("\n[OK] All tests passed! The KeyError issue has been fixed.")
+        print("\n[LOG] Summary of fix:")
         print("   - Added checks for field existence before updating")
         print("   - Handles datasets with missing total_* fields gracefully")
         print("   - Updates all relevant totals when they exist")
         
     except Exception as e:
-        print(f"❌ Unexpected error: {type(e).__name__}: {str(e)}")
+        print(f"[ERROR] Unexpected error: {type(e).__name__}: {str(e)}")
         import traceback
         traceback.print_exc()
 

@@ -28,10 +28,10 @@ def convert_video_to_web_format(input_path, output_path=None):
     try:
         result = subprocess.run(['ffmpeg', '-version'], capture_output=True)
         if result.returncode != 0:
-            print("❌ FFmpeg not found. Please install FFmpeg for web-compatible video conversion.")
+            print("[ERROR] FFmpeg not found. Please install FFmpeg for web-compatible video conversion.")
             return None
     except:
-        print("❌ FFmpeg not found. Please install FFmpeg.")
+        print("[ERROR] FFmpeg not found. Please install FFmpeg.")
         print("   Windows: Download from https://ffmpeg.org/download.html")
         print("   Or use: winget install ffmpeg")
         return None
@@ -57,9 +57,9 @@ def convert_video_to_web_format(input_path, output_path=None):
         str(output_path)
     ]
     
-    print(f"🎬 Converting video to web format...")
-    print(f"📁 Input: {input_path}")
-    print(f"📁 Output: {output_path}")
+    print(f"[ACTION] Converting video to web format...")
+    print(f"[FILE] Input: {input_path}")
+    print(f"[FILE] Output: {output_path}")
     
     try:
         # Run FFmpeg
@@ -83,18 +83,18 @@ def convert_video_to_web_format(input_path, output_path=None):
             input_size = input_path.stat().st_size / (1024 * 1024)
             output_size = output_path.stat().st_size / (1024 * 1024)
             
-            print(f"\n✅ Conversion successful!")
-            print(f"📊 Input size: {input_size:.1f} MB")
-            print(f"📊 Output size: {output_size:.1f} MB")
-            print(f"📊 Compression ratio: {input_size/output_size:.1f}x")
+            print(f"\n[OK] Conversion successful!")
+            print(f"[INFO] Input size: {input_size:.1f} MB")
+            print(f"[INFO] Output size: {output_size:.1f} MB")
+            print(f"[INFO] Compression ratio: {input_size/output_size:.1f}x")
             
             return output_path
         else:
-            print(f"\n❌ Conversion failed with code {process.returncode}")
+            print(f"\n[ERROR] Conversion failed with code {process.returncode}")
             return None
             
     except Exception as e:
-        print(f"\n❌ Error during conversion: {e}")
+        print(f"\n[ERROR] Error during conversion: {e}")
         return None
 
 def batch_convert_to_web(directory, pattern="*_annotated_*.mp4"):
@@ -118,7 +118,7 @@ def batch_convert_to_web(directory, pattern="*_annotated_*.mp4"):
             converted.append(result)
     
     print(f"\n{'='*60}")
-    print(f"✅ Converted {len(converted)}/{len(videos)} videos successfully")
+    print(f"[OK] Converted {len(converted)}/{len(videos)} videos successfully")
     
     return converted
 
@@ -132,7 +132,7 @@ if __name__ == "__main__":
         
         result = convert_video_to_web_format(input_path, output_path)
         if result:
-            print(f"\n✅ Web-compatible video: {result}")
+            print(f"\n[OK] Web-compatible video: {result}")
     else:
         # Convert all videos in outputs directory
         print("Converting all annotated videos to web format...")

@@ -38,4 +38,4 @@ for old, new in replacements:
 with open(template_path, 'w', encoding='utf-8') as f:
     f.write(content)
     
-print("✅ Fixed video preview template URLs")
+print("[OK] Fixed video preview template URLs")

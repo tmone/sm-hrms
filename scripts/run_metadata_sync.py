@@ -37,9 +37,9 @@ def main():
     with app.app_context():
         try:
             sync_metadata_with_database()
-            print("\n✅ Metadata synchronization completed successfully!")
+            print("\n[OK] Metadata synchronization completed successfully!")
         except Exception as e:
-            print(f"\n❌ Error during synchronization: {str(e)}")
+            print(f"\n[ERROR] Error during synchronization: {str(e)}")
             import traceback
             traceback.print_exc()
 

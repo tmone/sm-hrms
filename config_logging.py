@@ -3,10 +3,12 @@ Logging configuration for HRM system
 Separates logs into different files and controls console output
 """
 import os
+import sys
 import logging
 import logging.handlers
 from datetime import datetime
 from pathlib import Path
+import codecs
 
 # Create logs directory
 LOGS_DIR = Path("logs")
@@ -46,7 +48,7 @@ LOGGING_CONFIG = {
     'handlers': {
         # Console handler - only important messages
         'console': {
-            'class': 'logging.StreamHandler',
+            'class': 'config_logging.UnicodeStreamHandler',
             'level': 'WARNING',  # Only warnings and errors on console
             'formatter': 'console',
             'filters': ['important_only']
@@ -166,6 +168,24 @@ LOGGING_CONFIG = {
 }
 
 
+class UnicodeStreamHandler(logging.StreamHandler):
+    """Stream handler that safely handles Unicode characters on Windows"""
+    
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            stream = self.stream
+            # On Windows, encode with 'replace' to avoid Unicode errors
+            if sys.platform == 'win32' and hasattr(stream, 'buffer'):
+                stream.buffer.write((msg + self.terminator).encode('utf-8', errors='replace'))
+                stream.buffer.flush()
+            else:
+                stream.write(msg + self.terminator)
+                self.flush()
+        except Exception:
+            self.handleError(record)
+
+
 class ImportantOnlyFilter(logging.Filter):
     """Filter to only show important messages on console"""
     
@@ -199,7 +219,7 @@ def setup_logging():
     progress_logger.propagate = False
     
     # Add only console handler for progress
-    console_handler = logging.StreamHandler()
+    console_handler = UnicodeStreamHandler()
     console_handler.setFormatter(logging.Formatter('%(message)s'))
     progress_logger.addHandler(console_handler)
     

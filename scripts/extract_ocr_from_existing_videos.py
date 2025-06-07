@@ -23,7 +23,7 @@ def extract_ocr_for_video(video_id):
     """Extract OCR data for a single video"""
     video = Video.query.get(video_id)
     if not video:
-        print(f"❌ Video {video_id} not found")
+        print(f"[ERROR] Video {video_id} not found")
         return False
     
     print(f"\nProcessing video: {video.filename}")

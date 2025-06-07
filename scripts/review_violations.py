@@ -75,7 +75,7 @@ def interactive_review(violations_report: dict):
                     'action': 'merge_tracks',
                     'person_id': violation['person_id']
                 }
-                logger.info("✅ Will merge all tracks as same person")
+                logger.info("[OK] Will merge all tracks as same person")
                 break
                 
             elif choice == '2':
@@ -86,21 +86,21 @@ def interactive_review(violations_report: dict):
                 for j, track_id in enumerate(violation['track_ids']):
                     new_id = f"{violation['person_id']}_v{j+1}"
                     decisions[f"violation_{i}"]['track_mapping'][track_id] = new_id
-                logger.info("✅ Will assign new IDs to each detection")
+                logger.info("[OK] Will assign new IDs to each detection")
                 break
                 
             elif choice == '3':
                 decisions[f"violation_{i}"] = {
                     'action': 'use_highest_confidence'
                 }
-                logger.info("✅ Will keep detection with highest confidence")
+                logger.info("[OK] Will keep detection with highest confidence")
                 break
                 
             elif choice == '4':
                 decisions[f"violation_{i}"] = {
                     'action': 'use_longest_track'
                 }
-                logger.info("✅ Will keep detection with longest track history")
+                logger.info("[OK] Will keep detection with longest track history")
                 break
                 
             elif choice == '5':
@@ -117,7 +117,7 @@ def interactive_review(violations_report: dict):
                     'action': 'manual_assignment',
                     'track_assignments': track_assignments
                 }
-                logger.info("✅ Manual assignments recorded")
+                logger.info("[OK] Manual assignments recorded")
                 break
                 
             elif choice == '6':
@@ -169,7 +169,7 @@ def apply_decisions(violations_report: dict, decisions: dict, output_dir: str):
             'timestamp': str(Path(violations_report.get('timestamp', '')))
         }, f, indent=2)
     
-    logger.info(f"\n✅ Decisions saved to {decisions_file}")
+    logger.info(f"\n[OK] Decisions saved to {decisions_file}")
     logger.info("Next step: Re-run processing with these decisions to apply final IDs")
 
 

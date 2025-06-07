@@ -153,3 +153,4 @@ Thumbs.db
 processing/outputs/
 datasets/
 models/
+processing/checkpoints/

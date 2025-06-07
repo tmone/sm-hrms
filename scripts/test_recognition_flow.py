@@ -21,12 +21,12 @@ def test_recognition_modules():
         recognizer = SimplePersonRecognitionInference()
         
         if recognizer.inference is None:
-            print("   ❌ Recognition model failed to load")
+            print("   [ERROR] Recognition model failed to load")
         else:
-            print("   ✅ Recognition model loaded")
+            print("   [OK] Recognition model loaded")
             
     except Exception as e:
-        print(f"   ❌ Failed to import: {e}")
+        print(f"   [ERROR] Failed to import: {e}")
         
     # 2. Test SharedStateManager
     print("\n2. Testing ImprovedSharedStateManagerV3...")
@@ -34,12 +34,12 @@ def test_recognition_modules():
         from processing.shared_state_manager_improved import ImprovedSharedStateManagerV3
         state_manager = ImprovedSharedStateManagerV3()
         
-        print(f"   ✅ SharedStateManager created")
+        print(f"   [OK] SharedStateManager created")
         print(f"   - Starting person counter: {state_manager.person_counter}")
         print(f"   - Recognized mappings: {state_manager.recognized_to_person_id}")
         
     except Exception as e:
-        print(f"   ❌ Failed to import: {e}")
+        print(f"   [ERROR] Failed to import: {e}")
         
     # 3. Test PersonIDManager
     print("\n3. Testing PersonIDManager...")
@@ -47,7 +47,7 @@ def test_recognition_modules():
         from processing.person_id_manager import get_person_id_manager
         person_id_manager = get_person_id_manager()
         
-        print(f"   ✅ PersonIDManager created")
+        print(f"   [OK] PersonIDManager created")
         print(f"   - Next person ID: PERSON-{person_id_manager.next_person_id:04d}")
         print(f"   - Loaded mappings: {len(person_id_manager.recognized_to_person_id)}")
         
@@ -58,7 +58,7 @@ def test_recognition_modules():
                 print(f"     {name} -> {pid}")
                 
     except Exception as e:
-        print(f"   ❌ Failed to import: {e}")
+        print(f"   [ERROR] Failed to import: {e}")
         
     # 4. Test recognition model files
     print("\n4. Checking recognition model files...")
@@ -85,9 +85,9 @@ def test_recognition_modules():
             for file_name, description in required_files.items():
                 file_path = model_dir / file_name
                 if file_path.exists():
-                    print(f"   ✅ {file_name}: {description}")
+                    print(f"   [OK] {file_name}: {description}")
                 else:
-                    print(f"   ❌ {file_name}: {description} - MISSING")
+                    print(f"   [ERROR] {file_name}: {description} - MISSING")
                     
             # Check metadata
             metadata_path = model_dir / 'metadata.json'
@@ -129,12 +129,12 @@ def test_recognition_modules():
         
         # Check if it reused existing ID
         if final_id == test_recognized_id:
-            print(f"   ✅ Successfully reused existing person ID!")
+            print(f"   [OK] Successfully reused existing person ID!")
         else:
-            print(f"   ❌ Created new ID instead of reusing {test_recognized_id}")
+            print(f"   [ERROR] Created new ID instead of reusing {test_recognized_id}")
             
     except Exception as e:
-        print(f"   ❌ Flow test failed: {e}")
+        print(f"   [ERROR] Flow test failed: {e}")
         import traceback
         traceback.print_exc()
 

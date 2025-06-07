@@ -155,14 +155,14 @@ def remove_similar_images_from_person(person_dir, dry_run=True):
 
 def process_all_persons(dry_run=True):
     """Process all person directories to remove similar images"""
-    print("🔍 Removing similar images to improve training performance\n")
+    print("[SEARCH] Removing similar images to improve training performance\n")
     
     if dry_run:
-        print("🏃 DRY RUN MODE - No files will be actually removed\n")
+        print("[PERSON] DRY RUN MODE - No files will be actually removed\n")
     
     persons_dir = Path("processing/outputs/persons")
     if not persons_dir.exists():
-        print("❌ No persons directory found")
+        print("[ERROR] No persons directory found")
         return
     
     total_removed = 0
@@ -173,20 +173,20 @@ def process_all_persons(dry_run=True):
         if not person_dir.is_dir() or not person_dir.name.startswith("PERSON-"):
             continue
         
-        print(f"\n📁 Processing {person_dir.name}...")
+        print(f"\n[FILE] Processing {person_dir.name}...")
         removed = remove_similar_images_from_person(person_dir, dry_run)
         
         if removed > 0:
             total_removed += removed
             persons_processed += 1
-            print(f"  ✅ Would remove {removed} similar images")
+            print(f"  [OK] Would remove {removed} similar images")
     
-    print(f"\n📊 Summary:")
+    print(f"\n[INFO] Summary:")
     print(f"   Persons processed: {persons_processed}")
     print(f"   Similar images found: {total_removed}")
     
     if dry_run and total_removed > 0:
-        print(f"\n💡 To actually remove similar images, run:")
+        print(f"\n[TIP] To actually remove similar images, run:")
         print(f"   python {__file__} --remove")
 
 def main():

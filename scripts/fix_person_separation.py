@@ -21,19 +21,19 @@ def analyze_person_folder():
     person_folder = persons_dir / 'PERSON-0058'
     
     if not person_folder.exists():
-        print("❌ PERSON-0058 folder not found!")
+        print("[ERROR] PERSON-0058 folder not found!")
         return
     
     # Load metadata
     metadata_path = person_folder / 'metadata.json'
     if not metadata_path.exists():
-        print("❌ No metadata found!")
+        print("[ERROR] No metadata found!")
         return
     
     with open(metadata_path, 'r') as f:
         metadata = json.load(f)
     
-    print(f"📊 Analyzing PERSON-0058:")
+    print(f"[INFO] Analyzing PERSON-0058:")
     print(f"  Total detections: {metadata.get('total_detections', 0)}")
     print(f"  Total images: {len(metadata.get('images', []))}")
     print(f"  Duration: {metadata.get('last_appearance', 0) - metadata.get('first_appearance', 0):.1f}s")
@@ -43,11 +43,11 @@ def analyze_person_folder():
     print(f"  Image files: {len(images)}")
     
     if len(images) > 10:
-        print("\n⚠️  This folder contains many images - likely multiple people grouped together!")
+        print("\n[WARNING]  This folder contains many images - likely multiple people grouped together!")
         print("  Recommendation: Use the Split Person feature in the UI to separate them")
     
     # Sample some images to show
-    print("\n📸 Sample images:")
+    print("\n[CAMERA] Sample images:")
     for i, img_path in enumerate(images[:5]):
         print(f"  {i+1}. {img_path.name}")
 
@@ -62,19 +62,19 @@ def create_person_clusters_by_location():
     
     metadata_path = person_folder / 'metadata.json'
     if not metadata_path.exists():
-        print("❌ No metadata found!")
+        print("[ERROR] No metadata found!")
         return
     
     with open(metadata_path, 'r') as f:
         metadata = json.load(f)
     
     # Group detections by spatial location
-    print("\n🔍 Analyzing spatial distribution of detections...")
+    print("\n[SEARCH] Analyzing spatial distribution of detections...")
     
     # This would need the actual detection data with bounding boxes
     # For now, we'll provide recommendations
     
-    print("\n📋 Recommendations to fix this issue:")
+    print("\n[TRACE] Recommendations to fix this issue:")
     print("1. Use the 'Split Person' feature in the web UI:")
     print("   - Open PERSON-0058 in the persons list")
     print("   - Click 'Split Person' button")
@@ -104,7 +104,7 @@ def suggest_manual_split():
     
     # Show image distribution over time
     if images:
-        print("\n📊 Image distribution:")
+        print("\n[INFO] Image distribution:")
         # Extract frame numbers from filenames
         frame_numbers = []
         for img in images:
@@ -138,7 +138,7 @@ def suggest_manual_split():
 
 def main():
     """Main function."""
-    print("🔧 Person Separation Analysis")
+    print("[CONFIG] Person Separation Analysis")
     print("="*50)
     
     # Analyze current situation
@@ -153,7 +153,7 @@ def main():
     print("1. The tracking parameters were too permissive")
     print("2. People appeared in similar locations across frames")
     print("3. No appearance-based matching was used")
-    print("\n✅ This has been improved for future videos with:")
+    print("\n[OK] This has been improved for future videos with:")
     print("1. Better tracking parameters")
     print("2. Appearance-based matching (when GPU is available)")
     print("3. Stricter person separation logic")

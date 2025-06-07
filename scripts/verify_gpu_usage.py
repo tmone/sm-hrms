@@ -10,7 +10,7 @@ import sys
 
 def monitor_gpu_usage(duration=10):
     """Monitor GPU usage for specified duration"""
-    print("🔍 Monitoring GPU usage...")
+    print("[SEARCH] Monitoring GPU usage...")
     print("-" * 60)
     
     gpu_usage = []
@@ -68,20 +68,20 @@ def monitor_gpu_usage(duration=10):
         avg_mem = sum(s['mem_used'] for s in gpu_usage) / len(gpu_usage)
         max_mem = max(s['mem_used'] for s in gpu_usage)
         
-        print(f"📊 GPU Usage Summary:")
+        print(f"[INFO] GPU Usage Summary:")
         print(f"  Average GPU Utilization: {avg_util:.1f}%")
         print(f"  Peak GPU Utilization: {max_util}%")
         print(f"  Average Memory Usage: {avg_mem:.0f} MB")
         print(f"  Peak Memory Usage: {max_mem} MB")
         
         if avg_util > 50:
-            print("  ✅ GPU is being actively used!")
+            print("  [OK] GPU is being actively used!")
         elif avg_util > 10:
-            print("  ⚠️  GPU usage is low - may not be fully utilized")
+            print("  [WARNING]  GPU usage is low - may not be fully utilized")
         else:
-            print("  ❌ GPU appears to be idle - check configuration")
+            print("  [ERROR] GPU appears to be idle - check configuration")
     else:
-        print("❌ No GPU usage data collected")
+        print("[ERROR] No GPU usage data collected")
 
 def test_gpu_processing():
     """Test if GPU is being used for YOLO inference"""
@@ -101,7 +101,7 @@ def test_gpu_processing():
             print(f"GPU: {torch.cuda.get_device_name(0)}")
             print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
         else:
-            print("⚠️  CUDA not available - GPU processing disabled")
+            print("[WARNING]  CUDA not available - GPU processing disabled")
             return
         
         # Load YOLO model
@@ -110,13 +110,13 @@ def test_gpu_processing():
         
         # Move to GPU
         model.to('cuda:0')
-        print("✅ Model loaded on GPU")
+        print("[OK] Model loaded on GPU")
         
         # Create test batch
         batch_size = 8
         test_frames = [np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8) for _ in range(batch_size)]
         
-        print(f"\n🏃 Running inference on {batch_size} frames...")
+        print(f"\n[PERSON] Running inference on {batch_size} frames...")
         
         # Start GPU monitoring
         monitor_thread = threading.Thread(target=lambda: monitor_gpu_usage(5))
@@ -135,11 +135,11 @@ def test_gpu_processing():
         # Wait for monitoring to complete
         monitor_thread.join()
         
-        print(f"\n⏱️  Inference time: {inference_time:.2f}s")
-        print(f"📊 FPS: {batch_size / inference_time:.1f}")
+        print(f"\n[TIMER]  Inference time: {inference_time:.2f}s")
+        print(f"[INFO] FPS: {batch_size / inference_time:.1f}")
         
         # Compare with CPU
-        print("\n🔄 Comparing with CPU inference...")
+        print("\n[PROCESSING] Comparing with CPU inference...")
         model.to('cpu')
         start_time = time.time()
         results_cpu = model.predict(
@@ -153,7 +153,7 @@ def test_gpu_processing():
         print(f"GPU speedup: {cpu_time * batch_size / inference_time:.1f}x")
         
     except Exception as e:
-        print(f"❌ Error testing GPU: {e}")
+        print(f"[ERROR] Error testing GPU: {e}")
         import traceback
         traceback.print_exc()
 
@@ -166,16 +166,16 @@ if __name__ == "__main__":
     try:
         result = subprocess.run(['nvidia-smi', '--version'], capture_output=True)
         if result.returncode != 0:
-            print("❌ nvidia-smi not found - cannot monitor GPU usage")
+            print("[ERROR] nvidia-smi not found - cannot monitor GPU usage")
             print("Make sure NVIDIA drivers are installed")
             sys.exit(1)
     except:
-        print("❌ nvidia-smi not found - cannot monitor GPU usage")
+        print("[ERROR] nvidia-smi not found - cannot monitor GPU usage")
         sys.exit(1)
     
     # Test GPU processing
     test_gpu_processing()
     
     print("\n" + "=" * 60)
-    print("✅ GPU verification complete!")
+    print("[OK] GPU verification complete!")
     print("=" * 60)

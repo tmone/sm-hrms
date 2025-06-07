@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-print("🔍 Tracing Video Processing Flow\n")
+print("[SEARCH] Tracing Video Processing Flow\n")
 
 # Find which processing script is being used
 print("1. Checking processing files...")
@@ -23,7 +23,7 @@ processing_files = [
 
 for file_path in processing_files:
     if Path(file_path).exists():
-        print(f"   ✓ Found: {file_path}")
+        print(f"   [CHECK] Found: {file_path}")
         
         # Check if it has recognition
         with open(file_path) as f:
@@ -40,8 +40,8 @@ for file_path in processing_files:
 
 print("\n2. Based on your output:")
 print("   - Creates PERSON-0022, PERSON-0023 (new IDs)")
-print("   - Shows '📸 Extracting person images'")
-print("   - Shows '🎯 GPU detection completed'")
+print("   - Shows '[CAMERA] Extracting person images'")
+print("   - Shows '[TARGET] GPU detection completed'")
 print("   - NO recognition messages")
 
 print("\n3. This suggests GPU detection is being used...")

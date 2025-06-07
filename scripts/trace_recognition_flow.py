@@ -14,7 +14,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-print("🔍 Tracing Recognition Flow\n")
+print("[SEARCH] Tracing Recognition Flow\n")
 
 # 1. Check what's actually being used in chunked processor
 print("1. Checking chunked_video_processor.py imports...")
@@ -25,12 +25,12 @@ if chunked_path.exists():
     
     # Check recognition imports
     if 'SimplePersonRecognitionInference' in content:
-        print("   ✓ Uses SimplePersonRecognitionInference")
+        print("   [CHECK] Uses SimplePersonRecognitionInference")
     else:
         print("   ✗ Does NOT use SimplePersonRecognitionInference")
         
     if 'use_recognition=True' in content:
-        print("   ✓ Recognition is enabled")
+        print("   [CHECK] Recognition is enabled")
     else:
         print("   ✗ Recognition might be disabled")
 
@@ -38,12 +38,12 @@ if chunked_path.exists():
 print("\n2. Checking SimplePersonRecognitionInference...")
 simple_rec_path = Path('processing/simple_person_recognition_inference.py')
 if simple_rec_path.exists():
-    print("   ✓ File exists")
+    print("   [CHECK] File exists")
     
     # Try to import it
     try:
         from processing.simple_person_recognition_inference import SimplePersonRecognitionInference
-        print("   ✓ Can import")
+        print("   [CHECK] Can import")
         
         # Try to create instance
         recognizer = SimplePersonRecognitionInference()
@@ -84,7 +84,7 @@ try:
     from hr_management.processing.person_recognition_inference_simple import PersonRecognitionInferenceSimple
     
     inference = PersonRecognitionInferenceSimple('refined_quick_20250606_054446')
-    print("   ✓ PersonRecognitionInferenceSimple loaded!")
+    print("   [CHECK] PersonRecognitionInferenceSimple loaded!")
     
 except Exception as e:
     print(f"   ✗ Cannot load PersonRecognitionInferenceSimple: {e}")
@@ -101,7 +101,7 @@ except Exception as e:
     except Exception as e2:
         print(f"   ✗ Cannot read model file: {e2}")
 
-print("\n💡 Summary:")
+print("\n[TIP] Summary:")
 print("If recognition is not working, it's likely because:")
 print("1. The model file is incompatible with current Python/library versions")
 print("2. The recognition is not being called during processing")

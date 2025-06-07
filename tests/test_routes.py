@@ -9,11 +9,11 @@ def test_route(url, expected_status=200, description=""):
     """Test a single route"""
     try:
         response = requests.get(url, allow_redirects=False, timeout=5)
-        status = "✅" if response.status_code == expected_status else "❌"
+        status = "[OK]" if response.status_code == expected_status else "[ERROR]"
         print(f"{status} {url} - {response.status_code} ({description})")
         return response.status_code == expected_status
     except Exception as e:
-        print(f"❌ {url} - ERROR: {e}")
+        print(f"[ERROR] {url} - ERROR: {e}")
         return False
 
 def main():
@@ -53,7 +53,7 @@ def main():
         print("🎉 All routes are working correctly!")
         return 0
     else:
-        print("⚠️ Some routes have issues")
+        print("[WARNING] Some routes have issues")
         return 1
 
 if __name__ == "__main__":

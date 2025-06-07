@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 import sys
 
-print("📋 Recognition Logging Guide\n")
+print("[TRACE] Recognition Logging Guide\n")
 
 print("1. To see recognition logs during video processing, set logging level:")
 print("   - In your main application, add:")
@@ -15,15 +15,15 @@ print("     logging.basicConfig(level=logging.INFO)")
 print("     ```")
 
 print("\n2. When processing a video, you should now see:")
-print("   ❌ Recognition model created but inference is None")
-print("   ⚠️ RECOGNITION DISABLED - All persons will get NEW PERSON-XXXX IDs!")
-print("   ⚠️ Recognition is DISABLED - creating new IDs for ALL persons")
-print("   📊 Resolving IDs: 0 recognized groups, X unrecognized persons")
-print("   🆕 Creating new PERSON ID: PERSON-XXXX for unrecognized person")
+print("   [ERROR] Recognition model created but inference is None")
+print("   [WARNING] RECOGNITION DISABLED - All persons will get NEW PERSON-XXXX IDs!")
+print("   [WARNING] Recognition is DISABLED - creating new IDs for ALL persons")
+print("   [INFO] Resolving IDs: 0 recognized groups, X unrecognized persons")
+print("   [NEW] Creating new PERSON ID: PERSON-XXXX for unrecognized person")
 
 print("\n3. If recognition WAS working, you would see:")
-print("   ✅ Recognition model loaded successfully")
-print("   🎯 Frame 100: Recognized PERSON-0001 with confidence 0.95")
+print("   [OK] Recognition model loaded successfully")
+print("   [TARGET] Frame 100: Recognized PERSON-0001 with confidence 0.95")
 print("   PersonIDManager assigned PERSON-0001 for recognized person PERSON-0001")
 
 print("\n4. Current Status:")
@@ -54,6 +54,6 @@ print(f"   Python version: {sys.version}")
 print("\n7. The model was likely trained with different versions")
 print("   which is why you get: 'No module named numpy._core'")
 
-print("\n💡 Quick Test:")
+print("\n[TIP] Quick Test:")
 print("   Run a video through processing and check the console/logs")
 print("   You should see the warning messages about recognition being disabled")

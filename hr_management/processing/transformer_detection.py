@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Check available backends
-print("🔍 Checking state-of-the-art AI model backends...")
+print("[SEARCH] Checking state-of-the-art AI model backends...")
 
 # Core dependencies
 try:
@@ -21,59 +21,59 @@ try:
     import torchvision
     from torchvision import transforms
     TORCH_AVAILABLE = True
-    print("✅ PyTorch + TorchVision available")
+    print("[OK] PyTorch + TorchVision available")
 except ImportError:
     TORCH_AVAILABLE = False
-    print("❌ PyTorch not available")
+    print("[ERROR] PyTorch not available")
 
 # Transformers (Hugging Face)
 try:
     from transformers import AutoImageProcessor, AutoModel, pipeline
     import transformers
     TRANSFORMERS_AVAILABLE = True
-    print("✅ Hugging Face Transformers available")
+    print("[OK] Hugging Face Transformers available")
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
-    print("❌ Transformers not available")
+    print("[ERROR] Transformers not available")
 
 # SAM (Segment Anything)
 try:
     from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
     SAM_AVAILABLE = True
-    print("✅ SAM (Segment Anything) available")
+    print("[OK] SAM (Segment Anything) available")
 except ImportError:
     SAM_AVAILABLE = False
-    print("❌ SAM not available")
+    print("[ERROR] SAM not available")
 
 # SAM2 (Segment Anything 2)
 try:
     import sam2
     from sam2.sam2_image_predictor import SAM2ImagePredictor
     SAM2_AVAILABLE = True
-    print("✅ SAM2 (Segment Anything 2) available")
+    print("[OK] SAM2 (Segment Anything 2) available")
 except ImportError:
     SAM2_AVAILABLE = False
-    print("❌ SAM2 not available")
+    print("[ERROR] SAM2 not available")
 
 # YOLO (Ultralytics)
 try:
     from ultralytics import YOLO
     YOLO_AVAILABLE = True
-    print("✅ YOLO (Ultralytics) available")
+    print("[OK] YOLO (Ultralytics) available")
 except ImportError:
     YOLO_AVAILABLE = False
-    print("❌ YOLO not available")
+    print("[ERROR] YOLO not available")
 
 # OpenCV
 try:
     import cv2
     CV2_AVAILABLE = True
-    print("✅ OpenCV available")
+    print("[OK] OpenCV available")
 except ImportError:
     CV2_AVAILABLE = False
-    print("❌ OpenCV not available")
+    print("[ERROR] OpenCV not available")
 
-print(f"🖥️ AI capabilities: TORCH={TORCH_AVAILABLE}, TRANSFORMERS={TRANSFORMERS_AVAILABLE}, SAM={SAM_AVAILABLE}, SAM2={SAM2_AVAILABLE}, YOLO={YOLO_AVAILABLE}, CV2={CV2_AVAILABLE}")
+print(f"[MONITOR] AI capabilities: TORCH={TORCH_AVAILABLE}, TRANSFORMERS={TRANSFORMERS_AVAILABLE}, SAM={SAM_AVAILABLE}, SAM2={SAM2_AVAILABLE}, YOLO={YOLO_AVAILABLE}, CV2={CV2_AVAILABLE}")
 
 # Global model cache
 _model_cache = {}
@@ -97,7 +97,7 @@ def get_best_available_detector():
 
 def detect_persons_transformer(filepath):
     """Detect persons using Transformer models (DETR, RT-DETR)"""
-    print("🤖 Using Transformer models for person detection")
+    print("[AI] Using Transformer models for person detection")
     
     if not TRANSFORMERS_AVAILABLE or not TORCH_AVAILABLE:
         raise RuntimeError("Transformers not available")
@@ -105,7 +105,7 @@ def detect_persons_transformer(filepath):
     try:
         # Load DETR model for object detection
         if "detr" not in _model_cache:
-            print("📥 Loading DETR transformer model...")
+            print("[LOAD] Loading DETR transformer model...")
             # Use Facebook's DETR model
             model_name = "facebook/detr-resnet-50"
             processor = AutoImageProcessor.from_pretrained(model_name)
@@ -121,7 +121,7 @@ def detect_persons_transformer(filepath):
                 "model": model,
                 "detector": detector
             }
-            print("✅ DETR transformer model loaded")
+            print("[OK] DETR transformer model loaded")
         
         detector = _model_cache["detr"]["detector"]
         
@@ -136,7 +136,7 @@ def detect_persons_transformer(filepath):
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        print(f"📊 Processing {total_frames} frames with DETR transformer")
+        print(f"[INFO] Processing {total_frames} frames with DETR transformer")
         
         frame_number = 0
         sample_rate = max(1, int(fps // 1))  # Sample every second
@@ -147,7 +147,7 @@ def detect_persons_transformer(filepath):
                 break
             
             if frame_number % sample_rate == 0:
-                print(f"🔄 DETR processing frame {frame_number}/{total_frames} ({(frame_number/total_frames)*100:.1f}%)")
+                print(f"[PROCESSING] DETR processing frame {frame_number}/{total_frames} ({(frame_number/total_frames)*100:.1f}%)")
                 
                 # Convert BGR to RGB
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -199,16 +199,16 @@ def detect_persons_transformer(filepath):
                 break
         
         cap.release()
-        print(f"🤖 DETR transformer detection completed: {len(detections)} persons found")
+        print(f"[AI] DETR transformer detection completed: {len(detections)} persons found")
         return detections
         
     except Exception as e:
-        print(f"❌ DETR detection failed: {e}")
+        print(f"[ERROR] DETR detection failed: {e}")
         raise
 
 def detect_persons_sam2(filepath):
     """Detect persons using SAM2 (Segment Anything 2)"""
-    print("🎯 Using SAM2 for person segmentation")
+    print("[TARGET] Using SAM2 for person segmentation")
     
     if not SAM2_AVAILABLE or not TORCH_AVAILABLE:
         raise RuntimeError("SAM2 not available")
@@ -216,12 +216,12 @@ def detect_persons_sam2(filepath):
     try:
         # Load SAM2 model
         if "sam2" not in _model_cache:
-            print("📥 Loading SAM2 model...")
+            print("[LOAD] Loading SAM2 model...")
             
             # Download SAM2 checkpoint if not exists
             checkpoint_path = "sam2_hiera_large.pt"
             if not os.path.exists(checkpoint_path):
-                print("📥 Downloading SAM2 checkpoint...")
+                print("[LOAD] Downloading SAM2 checkpoint...")
                 # You would download the checkpoint here
                 # For now, use a smaller model
                 checkpoint_path = "sam2_hiera_tiny.pt"
@@ -230,7 +230,7 @@ def detect_persons_sam2(filepath):
             predictor = SAM2ImagePredictor.from_pretrained("facebook/sam2-hiera-large")
             
             _model_cache["sam2"] = predictor
-            print("✅ SAM2 model loaded")
+            print("[OK] SAM2 model loaded")
         
         predictor = _model_cache["sam2"]
         
@@ -242,7 +242,7 @@ def detect_persons_sam2(filepath):
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        print(f"📊 Processing {total_frames} frames with SAM2")
+        print(f"[INFO] Processing {total_frames} frames with SAM2")
         
         frame_number = 0
         sample_rate = max(1, int(fps * 2))  # Sample every 2 seconds (SAM2 is heavy)
@@ -253,7 +253,7 @@ def detect_persons_sam2(filepath):
                 break
             
             if frame_number % sample_rate == 0:
-                print(f"🔄 SAM2 processing frame {frame_number}/{total_frames}")
+                print(f"[PROCESSING] SAM2 processing frame {frame_number}/{total_frames}")
                 
                 # Convert BGR to RGB
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -324,16 +324,16 @@ def detect_persons_sam2(filepath):
                 break
         
         cap.release()
-        print(f"🎯 SAM2 detection completed: {len(detections)} persons found")
+        print(f"[TARGET] SAM2 detection completed: {len(detections)} persons found")
         return detections
         
     except Exception as e:
-        print(f"❌ SAM2 detection failed: {e}")
+        print(f"[ERROR] SAM2 detection failed: {e}")
         raise
 
 def detect_persons_sam(filepath):
     """Detect persons using SAM (Segment Anything)"""
-    print("🎯 Using SAM for person segmentation")
+    print("[TARGET] Using SAM for person segmentation")
     
     if not SAM_AVAILABLE or not TORCH_AVAILABLE:
         raise RuntimeError("SAM not available")
@@ -341,12 +341,12 @@ def detect_persons_sam(filepath):
     try:
         # Load SAM model
         if "sam" not in _model_cache:
-            print("📥 Loading SAM model...")
+            print("[LOAD] Loading SAM model...")
             
             # Download SAM checkpoint if not exists
             checkpoint_path = "sam_vit_h_4b8939.pth"
             if not os.path.exists(checkpoint_path):
-                print("📥 Downloading SAM checkpoint...")
+                print("[LOAD] Downloading SAM checkpoint...")
                 # Use smaller model for faster processing
                 model_type = "vit_b"
                 checkpoint_path = "sam_vit_b_01ec64.pth"
@@ -361,7 +361,7 @@ def detect_persons_sam(filepath):
             mask_generator = SamAutomaticMaskGenerator(sam)
             
             _model_cache["sam"] = mask_generator
-            print("✅ SAM model loaded")
+            print("[OK] SAM model loaded")
         
         mask_generator = _model_cache["sam"]
         
@@ -381,7 +381,7 @@ def detect_persons_sam(filepath):
                 break
             
             if frame_number % sample_rate == 0:
-                print(f"🔄 SAM processing frame {frame_number}")
+                print(f"[PROCESSING] SAM processing frame {frame_number}")
                 
                 # Convert BGR to RGB
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -437,16 +437,16 @@ def detect_persons_sam(filepath):
                 break
         
         cap.release()
-        print(f"🎯 SAM detection completed: {len(detections)} persons found")
+        print(f"[TARGET] SAM detection completed: {len(detections)} persons found")
         return detections
         
     except Exception as e:
-        print(f"❌ SAM detection failed: {e}")
+        print(f"[ERROR] SAM detection failed: {e}")
         raise
 
 def detect_persons_yolo_v8(filepath):
     """Detect persons using YOLOv8 (Ultralytics)"""
-    print("⚡ Using YOLOv8 for person detection")
+    print("[FAST] Using YOLOv8 for person detection")
     
     if not YOLO_AVAILABLE:
         raise RuntimeError("YOLO not available")
@@ -454,19 +454,19 @@ def detect_persons_yolo_v8(filepath):
     try:
         # Load YOLOv8 model
         if "yolo" not in _model_cache:
-            print("📥 Loading YOLOv8 model...")
+            print("[LOAD] Loading YOLOv8 model...")
             model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'yolov8n.pt')
             model = YOLO(model_path)  # nano model for speed
             
             # Configure GPU if available
             if TORCH_AVAILABLE and torch.cuda.is_available():
                 model.to('cuda')
-                print(f"🚀 YOLOv8 model loaded on GPU: {torch.cuda.get_device_name(0)}")
+                print(f"[START] YOLOv8 model loaded on GPU: {torch.cuda.get_device_name(0)}")
             else:
-                print("⚠️ YOLOv8 model loaded on CPU (CUDA not available)")
+                print("[WARNING] YOLOv8 model loaded on CPU (CUDA not available)")
                 
             _model_cache["yolo"] = model
-            print("✅ YOLOv8 model configured")
+            print("[OK] YOLOv8 model configured")
         
         model = _model_cache["yolo"]
         
@@ -478,7 +478,7 @@ def detect_persons_yolo_v8(filepath):
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        print(f"📊 Processing {total_frames} frames with YOLOv8")
+        print(f"[INFO] Processing {total_frames} frames with YOLOv8")
         
         frame_number = 0
         sample_rate = max(1, int(fps // 2))  # Sample every 0.5 seconds
@@ -489,7 +489,7 @@ def detect_persons_yolo_v8(filepath):
                 break
             
             if frame_number % sample_rate == 0:
-                print(f"🔄 YOLOv8 processing frame {frame_number}/{total_frames}")
+                print(f"[PROCESSING] YOLOv8 processing frame {frame_number}/{total_frames}")
                 
                 # Run YOLO detection
                 device = 'cuda' if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
@@ -542,22 +542,22 @@ def detect_persons_yolo_v8(filepath):
                 break
         
         cap.release()
-        print(f"⚡ YOLOv8 detection completed: {len(detections)} persons found")
+        print(f"[FAST] YOLOv8 detection completed: {len(detections)} persons found")
         return detections
         
     except Exception as e:
-        print(f"❌ YOLOv8 detection failed: {e}")
+        print(f"[ERROR] YOLOv8 detection failed: {e}")
         raise
 
 def detect_persons_with_best_model(filepath):
     """Detect persons using the best available model"""
-    print(f"🚀 Starting REAL person detection for: {filepath}")
+    print(f"[START] Starting REAL person detection for: {filepath}")
     
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"Video file not found: {filepath}")
     
     detector_type = get_best_available_detector()
-    print(f"🤖 Using {detector_type.upper()} for person detection")
+    print(f"[AI] Using {detector_type.upper()} for person detection")
     
     if detector_type == "sam2":
         return detect_persons_sam2(filepath)

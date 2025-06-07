@@ -28,10 +28,10 @@ def test_video_navigation():
         ).first()
         
         if not video:
-            print("❌ No completed video with OCR data found")
+            print("[ERROR] No completed video with OCR data found")
             return
         
-        print(f"\n✅ Found video: {video.filename}")
+        print(f"\n[OK] Found video: {video.filename}")
         print(f"   - ID: {video.id}")
         print(f"   - Location: {video.ocr_location}")
         print(f"   - Date: {video.ocr_video_date}")
@@ -40,7 +40,7 @@ def test_video_navigation():
         # Get detections for this video
         detections = DetectedPerson.query.filter_by(video_id=video.id).all()
         
-        print(f"\n📊 Detections found: {len(detections)}")
+        print(f"\n[INFO] Detections found: {len(detections)}")
         
         # Group by person
         persons = {}
@@ -53,7 +53,7 @@ def test_video_navigation():
         print(f"\n👥 Unique persons: {len(persons)}")
         
         # Show navigation URLs for first 3 persons
-        print("\n🔗 Sample Navigation URLs:")
+        print("\n[LINK] Sample Navigation URLs:")
         for i, (person_id, person_detections) in enumerate(list(persons.items())[:3]):
             if person_detections:
                 first_detection = min(person_detections, key=lambda d: d.timestamp if d.timestamp else float('inf'))
@@ -64,7 +64,7 @@ def test_video_navigation():
                     print(f"   - Navigation URL: {url}")
                     print(f"   - Total detections: {len(person_detections)}")
         
-        print("\n✅ Video navigation URLs are correctly formatted!")
+        print("\n[OK] Video navigation URLs are correctly formatted!")
         print("\nTo test in browser:")
         print("1. Go to http://localhost:5001/attendance/daily")
         print("2. Click on any 'View' button in the Actions column")

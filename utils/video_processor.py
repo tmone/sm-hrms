@@ -28,16 +28,16 @@ class VideoProcessor:
         try:
             import moviepy.editor as mp
             self.moviepy_available = True
-            logger.info("✅ MoviePy available")
+            logger.info("[OK] MoviePy available")
         except ImportError:
-            logger.warning("⚠️ MoviePy not available")
+            logger.warning("[WARNING] MoviePy not available")
         
         try:
             import cv2
             self.opencv_available = True
-            logger.info("✅ OpenCV available")
+            logger.info("[OK] OpenCV available")
         except ImportError:
-            logger.warning("⚠️ OpenCV not available")
+            logger.warning("[WARNING] OpenCV not available")
         
         try:
             import subprocess
@@ -45,9 +45,9 @@ class VideoProcessor:
                                   capture_output=True, timeout=5)
             if result.returncode == 0:
                 self.ffmpeg_available = True
-                logger.info("✅ FFmpeg available")
+                logger.info("[OK] FFmpeg available")
         except:
-            logger.warning("⚠️ FFmpeg not available")
+            logger.warning("[WARNING] FFmpeg not available")
     
     def get_available_methods(self):
         """Get list of available conversion methods"""
@@ -68,19 +68,19 @@ class VideoProcessor:
         try:
             import moviepy.editor as mp
             
-            logger.info(f"🎬 Converting with MoviePy: {input_path}")
+            logger.info(f"[ACTION] Converting with MoviePy: {input_path}")
             
             # Load video with error handling for problematic formats
             try:
                 video = mp.VideoFileClip(input_path)
             except Exception as load_error:
-                logger.error(f"❌ MoviePy could not load video: {load_error}")
+                logger.error(f"[ERROR] MoviePy could not load video: {load_error}")
                 # Try with different backend
                 try:
                     video = mp.VideoFileClip(input_path, audio=False)  # Try without audio
-                    logger.info("📹 Loaded video without audio track")
+                    logger.info("[VIDEO] Loaded video without audio track")
                 except Exception as load_error2:
-                    logger.error(f"❌ MoviePy failed completely: {load_error2}")
+                    logger.error(f"[ERROR] MoviePy failed completely: {load_error2}")
                     return False
             
             # Get conversion settings
@@ -116,7 +116,7 @@ class VideoProcessor:
             return True
             
         except Exception as e:
-            logger.error(f"❌ MoviePy conversion failed: {e}")
+            logger.error(f"[ERROR] MoviePy conversion failed: {e}")
             return False
     
     def convert_with_opencv(self, input_path, output_path, **kwargs):
@@ -128,12 +128,12 @@ class VideoProcessor:
             import cv2
             import os
             
-            logger.info(f"🎥 Converting with OpenCV: {input_path}")
+            logger.info(f"[MOVIE] Converting with OpenCV: {input_path}")
             
             # Open input video
             cap = cv2.VideoCapture(input_path)
             if not cap.isOpened():
-                logger.error("❌ Could not open input video with OpenCV")
+                logger.error("[ERROR] Could not open input video with OpenCV")
                 return False
             
             # Get video properties
@@ -142,7 +142,7 @@ class VideoProcessor:
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             
-            logger.info(f"📊 Video properties: {width}x{height}, {fps}fps, {total_frames} frames")
+            logger.info(f"[INFO] Video properties: {width}x{height}, {fps}fps, {total_frames} frames")
             
             # Try different codecs for better compatibility
             codecs = [
@@ -160,16 +160,16 @@ class VideoProcessor:
                     
                     # Test if writer is properly initialized
                     if out and out.isOpened():
-                        logger.info(f"✅ Using codec: {codec_desc}")
+                        logger.info(f"[OK] Using codec: {codec_desc}")
                         break
                     else:
                         out = None
                 except Exception as codec_error:
-                    logger.warning(f"⚠️ Codec {codec_desc} failed: {codec_error}")
+                    logger.warning(f"[WARNING] Codec {codec_desc} failed: {codec_error}")
                     continue
             
             if not out or not out.isOpened():
-                logger.error("❌ Could not initialize video writer with any codec")
+                logger.error("[ERROR] Could not initialize video writer with any codec")
                 cap.release()
                 return False
             
@@ -188,7 +188,7 @@ class VideoProcessor:
                 # Log progress every 10% or 1000 frames
                 if frame_count - last_log_frame >= 1000 or (total_frames > 0 and frame_count % max(1, total_frames // 10) == 0):
                     progress = (frame_count / total_frames * 100) if total_frames > 0 else 0
-                    logger.info(f"🔄 Processed {frame_count} frames ({progress:.1f}%)")
+                    logger.info(f"[PROCESSING] Processed {frame_count} frames ({progress:.1f}%)")
                     last_log_frame = frame_count
             
             # Release everything
@@ -198,14 +198,14 @@ class VideoProcessor:
             
             # Verify output file was created and has content
             if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                logger.info(f"✅ OpenCV conversion complete: {frame_count} frames written")
+                logger.info(f"[OK] OpenCV conversion complete: {frame_count} frames written")
                 return True
             else:
-                logger.error("❌ Output file was not created or is empty")
+                logger.error("[ERROR] Output file was not created or is empty")
                 return False
             
         except Exception as e:
-            logger.error(f"❌ OpenCV conversion failed: {e}")
+            logger.error(f"[ERROR] OpenCV conversion failed: {e}")
             try:
                 if 'cap' in locals():
                     cap.release()
@@ -224,7 +224,7 @@ class VideoProcessor:
         try:
             import subprocess
             
-            logger.info(f"⚙️ Converting with FFmpeg: {input_path}")
+            logger.info(f"[SETTINGS] Converting with FFmpeg: {input_path}")
             
             quality = kwargs.get('quality', 'medium')
             fps = kwargs.get('fps', 24)
@@ -258,17 +258,17 @@ class VideoProcessor:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
             if result.returncode == 0:
-                logger.info("✅ FFmpeg conversion successful")
+                logger.info("[OK] FFmpeg conversion successful")
                 return True
             else:
-                logger.error(f"❌ FFmpeg error: {result.stderr}")
+                logger.error(f"[ERROR] FFmpeg error: {result.stderr}")
                 return False
                 
         except subprocess.TimeoutExpired:
-            logger.error("❌ FFmpeg conversion timed out")
+            logger.error("[ERROR] FFmpeg conversion timed out")
             return False
         except Exception as e:
-            logger.error(f"❌ FFmpeg conversion failed: {e}")
+            logger.error(f"[ERROR] FFmpeg conversion failed: {e}")
             return False
     
     def convert_video(self, input_path, output_path=None, method='auto', **kwargs):
@@ -319,7 +319,7 @@ class VideoProcessor:
         elif method == 'ffmpeg' and not self.ffmpeg_available:
             return False, None, "FFmpeg not available"
         
-        logger.info(f"🔄 Starting conversion using {method}")
+        logger.info(f"[PROCESSING] Starting conversion using {method}")
         start_time = time.time()
         
         try:
@@ -337,14 +337,14 @@ class VideoProcessor:
             
             if success and output_path.exists():
                 file_size = output_path.stat().st_size
-                logger.info(f"✅ Conversion completed in {elapsed:.1f}s")
-                logger.info(f"📊 Output size: {file_size / 1024 / 1024:.1f} MB")
+                logger.info(f"[OK] Conversion completed in {elapsed:.1f}s")
+                logger.info(f"[INFO] Output size: {file_size / 1024 / 1024:.1f} MB")
                 return True, str(output_path), f"Conversion successful ({elapsed:.1f}s)"
             else:
                 return False, None, "Conversion failed - output file not created"
                 
         except Exception as e:
-            logger.error(f"❌ Conversion error: {e}")
+            logger.error(f"[ERROR] Conversion error: {e}")
             return False, None, f"Conversion error: {str(e)}"
     
     def get_video_info(self, video_path):
@@ -411,15 +411,15 @@ def install_dependencies():
         'numpy>=1.21.0'
     ]
     
-    print("📦 Installing video processing dependencies...")
+    print("[PACKAGE] Installing video processing dependencies...")
     
     for package in packages:
         try:
             print(f"Installing {package}...")
             subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
-            print(f"✅ {package} installed")
+            print(f"[OK] {package} installed")
         except subprocess.CalledProcessError as e:
-            print(f"❌ Failed to install {package}: {e}")
+            print(f"[ERROR] Failed to install {package}: {e}")
     
     print("🎉 Installation complete!")
 
@@ -427,7 +427,7 @@ if __name__ == "__main__":
     # Test the video processor
     processor = VideoProcessor()
     
-    print("🎥 Video Processor Test")
+    print("[MOVIE] Video Processor Test")
     print("=" * 30)
     print(f"Available methods: {processor.get_available_methods()}")
     
@@ -435,15 +435,15 @@ if __name__ == "__main__":
     test_file = "../static/uploads/4a5b80c6-1959-4032-8ad1-f375408b1f43_TANG_TRET_84A_Tret_84A_Tret_20250512085459_20250512091458_472401.mp4"
     
     if os.path.exists(test_file):
-        print(f"\n🔍 Testing with: {test_file}")
+        print(f"\n[SEARCH] Testing with: {test_file}")
         
         # Get video info
         info = processor.get_video_info(test_file)
-        print(f"📊 Video info: {info}")
+        print(f"[INFO] Video info: {info}")
         
         # Test conversion (if libraries available)
         if processor.get_available_methods():
-            print("\n🔄 Testing conversion...")
+            print("\n[PROCESSING] Testing conversion...")
             success, output_path, message = processor.convert_video(
                 test_file, 
                 quality='medium'
@@ -452,7 +452,7 @@ if __name__ == "__main__":
             print(f"Output: {output_path}")
             print(f"Message: {message}")
         else:
-            print("\n⚠️ No conversion libraries available")
+            print("\n[WARNING] No conversion libraries available")
             print("Run: pip install -r requirements.txt")
     else:
-        print(f"\n⚠️ Test file not found: {test_file}")
+        print(f"\n[WARNING] Test file not found: {test_file}")

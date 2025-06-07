@@ -39,7 +39,7 @@ def test_attendance_list_api():
             
             # Test 2: Check if login is required
             if response.status_code == 401 or response.status_code == 302:
-                print("\n   ⚠️  Login required. Attempting to login...")
+                print("\n   [WARNING]  Login required. Attempting to login...")
                 
                 # Try to login with default credentials
                 login_data = {
@@ -51,7 +51,7 @@ def test_attendance_list_api():
                                            follow_redirects=False)
                 
                 if login_response.status_code in [302, 200]:
-                    print("   ✅ Login successful")
+                    print("   [OK] Login successful")
                     
                     # Retry the API request
                     print("\n2. Retrying API request after login:")
@@ -71,7 +71,7 @@ def test_attendance_list_api():
                     else:
                         print(f"   Error: {response.data.decode()}")
                 else:
-                    print(f"   ❌ Login failed: {login_response.status_code}")
+                    print(f"   [ERROR] Login failed: {login_response.status_code}")
 
 if __name__ == "__main__":
     test_attendance_list_api()

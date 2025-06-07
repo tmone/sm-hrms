@@ -38,14 +38,14 @@ else:
 print("\n4. Import test:")
 try:
     from processing.person_id_manager import PersonIDManager
-    print("   ✅ Can import PersonIDManager")
+    print("   [OK] Can import PersonIDManager")
 except Exception as e:
-    print(f"   ❌ Cannot import PersonIDManager: {e}")
+    print(f"   [ERROR] Cannot import PersonIDManager: {e}")
     
 try:
     from processing.shared_state_manager_improved import ImprovedSharedStateManagerV3
-    print("   ✅ Can import ImprovedSharedStateManagerV3")
+    print("   [OK] Can import ImprovedSharedStateManagerV3")
 except Exception as e:
-    print(f"   ❌ Cannot import ImprovedSharedStateManagerV3: {e}")
+    print(f"   [ERROR] Cannot import ImprovedSharedStateManagerV3: {e}")
 
-print("\n✅ Basic checks complete!")
+print("\n[OK] Basic checks complete!")

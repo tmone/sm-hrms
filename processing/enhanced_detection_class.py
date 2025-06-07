@@ -34,7 +34,7 @@ class EnhancedDetection:
                 import torch
                 if torch.cuda.is_available():
                     self.model.to('cuda')
-                    logger.info(f"✅ YOLO model loaded on GPU")
+                    logger.info(f"[OK] YOLO model loaded on GPU")
                 else:
                     logger.warning("GPU requested but CUDA not available, using CPU")
                     self.use_gpu = False

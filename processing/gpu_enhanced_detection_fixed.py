@@ -13,7 +13,7 @@ def extract_persons_data_gpu_fixed(video_path, person_tracks, persons_dir, ui_st
     """
     Extract person images with recognition BEFORE folder creation
     """
-    print(f"📸 Extracting person data to {persons_dir}")
+    print(f"[CAMERA] Extracting person data to {persons_dir}")
     
     # Validate and merge potential duplicate tracks
     from .gpu_enhanced_detection import validate_and_merge_tracks
@@ -21,7 +21,7 @@ def extract_persons_data_gpu_fixed(video_path, person_tracks, persons_dir, ui_st
     
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print(f"❌ Failed to open video for person extraction: {video_path}")
+        print(f"[ERROR] Failed to open video for person extraction: {video_path}")
         return 0
     
     extracted_count = 0
@@ -32,7 +32,7 @@ def extract_persons_data_gpu_fixed(video_path, person_tracks, persons_dir, ui_st
         recognition_confidence = 0.0
         
         if ui_style_recognizer and len(detections) > 0:
-            print(f"🔍 Attempting recognition for person {person_id}...")
+            print(f"[SEARCH] Attempting recognition for person {person_id}...")
             
             # Try recognition on up to 3 frames for better accuracy
             for i, detection in enumerate(detections[:3]):
@@ -81,24 +81,24 @@ def extract_persons_data_gpu_fixed(video_path, person_tracks, persons_dir, ui_st
                                         recognition_confidence = first_person['confidence']
                             
                             if recognized_person_id:
-                                print(f"✅ Recognized as {recognized_person_id} with {recognition_confidence:.2%} confidence")
+                                print(f"[OK] Recognized as {recognized_person_id} with {recognition_confidence:.2%} confidence")
                                 break
                                 
                         except Exception as e:
-                            print(f"⚠️ Recognition error: {e}")
+                            print(f"[WARNING] Recognition error: {e}")
         
         # Now determine the final person_id to use
         if recognized_person_id:
             # Use recognized ID
             final_person_id = recognized_person_id
-            print(f"🎯 Using recognized ID: {final_person_id} (was {person_id})")
+            print(f"[TARGET] Using recognized ID: {final_person_id} (was {person_id})")
         else:
             # Use original ID
             if isinstance(person_id, int):
                 final_person_id = f"PERSON-{person_id:04d}"
             else:
                 final_person_id = str(person_id)
-            print(f"🆕 Using new ID: {final_person_id}")
+            print(f"[NEW] Using new ID: {final_person_id}")
         
         # Create folder with correct ID
         person_dir = persons_dir / final_person_id
@@ -170,8 +170,8 @@ def extract_persons_data_gpu_fixed(video_path, person_tracks, persons_dir, ui_st
                 json.dump(person_metadata, f, indent=2)
             
             extracted_count += 1
-            print(f"✅ Created {final_person_id} folder with {len(person_metadata['images'])} images")
+            print(f"[OK] Created {final_person_id} folder with {len(person_metadata['images'])} images")
     
     cap.release()
-    print(f"📸 Extracted {extracted_count} persons with valid images")
+    print(f"[CAMERA] Extracted {extracted_count} persons with valid images")
     return extracted_count

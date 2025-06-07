@@ -7,12 +7,12 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-print("🔍 Diagnosing Recognition Difference\n")
+print("[SEARCH] Diagnosing Recognition Difference\n")
 
 print("1. UI Test Results:")
-print("   ✅ Model: refined_quick_20250606_054446")
-print("   ✅ Recognized: PERSON-0019 with 80.4% confidence")
-print("   ✅ This proves the model WORKS!\n")
+print("   [OK] Model: refined_quick_20250606_054446")
+print("   [OK] Recognized: PERSON-0019 with 80.4% confidence")
+print("   [OK] This proves the model WORKS!\n")
 
 print("2. Checking how UI loads the model...")
 
@@ -29,7 +29,7 @@ if ui_path.exists():
         
         # Check what it imports
         if 'PersonRecognitionInferenceSimple' in content:
-            print("   ✅ UI uses PersonRecognitionInferenceSimple")
+            print("   [OK] UI uses PersonRecognitionInferenceSimple")
         else:
             print("   Uses different recognition class")
 
@@ -48,21 +48,21 @@ print("   Test 1 - UI import path:")
 try:
     from hr_management.processing.person_recognition_inference_simple import PersonRecognitionInferenceSimple
     inference = PersonRecognitionInferenceSimple('refined_quick_20250606_054446', confidence_threshold=0.6)
-    print("   ✅ UI import works!")
+    print("   [OK] UI import works!")
     print(f"   Model loaded: {inference.model is not None}")
     print(f"   Scaler loaded: {inference.scaler is not None}")
 except Exception as e:
-    print(f"   ❌ UI import failed: {e}")
+    print(f"   [ERROR] UI import failed: {e}")
 
 # Test 2: Video processing import path
 print("\n   Test 2 - Video processing import path:")
 try:
     from processing.simple_person_recognition_inference import SimplePersonRecognitionInference
     recognizer = SimplePersonRecognitionInference()
-    print("   ✅ Video import works!")
+    print("   [OK] Video import works!")
     print(f"   Inference loaded: {recognizer.inference is not None}")
 except Exception as e:
-    print(f"   ❌ Video import failed: {e}")
+    print(f"   [ERROR] Video import failed: {e}")
 
 print("\n5. Solution:")
 print("   The issue is likely that the video processing is failing to load")

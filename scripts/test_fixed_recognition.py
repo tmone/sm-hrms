@@ -22,7 +22,7 @@ def test_fixed_recognition():
         from processing.person_id_manager import get_person_id_manager
         
         person_id_manager = get_person_id_manager()
-        print(f"   ✅ PersonIDManager loaded")
+        print(f"   [OK] PersonIDManager loaded")
         print(f"   - Next person ID: PERSON-{person_id_manager.next_person_id:04d}")
         print(f"   - Loaded mappings: {len(person_id_manager.recognized_to_person_id)}")
         
@@ -34,7 +34,7 @@ def test_fixed_recognition():
                     print(f"     {name} -> {pid}")
                     
     except Exception as e:
-        print(f"   ❌ Failed: {e}")
+        print(f"   [ERROR] Failed: {e}")
         
     # 2. Test SharedStateManager
     print("\n2. Testing ImprovedSharedStateManagerV3...")
@@ -42,11 +42,11 @@ def test_fixed_recognition():
         from processing.shared_state_manager_improved import ImprovedSharedStateManagerV3
         
         state_manager = ImprovedSharedStateManagerV3()
-        print(f"   ✅ SharedStateManager loaded")
+        print(f"   [OK] SharedStateManager loaded")
         print(f"   - Recognized mappings: {len(state_manager.recognized_to_person_id)}")
         
     except Exception as e:
-        print(f"   ❌ Failed: {e}")
+        print(f"   [ERROR] Failed: {e}")
         
     # 3. Test recognition flow
     print("\n3. Testing recognition flow...")
@@ -74,7 +74,7 @@ def test_fixed_recognition():
                     recognizer = SimplePersonRecognitionInference()
                     
                     if recognizer.inference is not None:
-                        print("   ✅ Recognition model loaded")
+                        print("   [OK] Recognition model loaded")
                         
                         # Test prediction
                         result = recognizer.predict_single(img)
@@ -85,16 +85,16 @@ def test_fixed_recognition():
                             print(f"     - Confidence: {result['confidence']:.2f}")
                             
                             if result['person_id'] == test_person_id:
-                                print(f"   ✅ Correctly recognized {test_person_id}!")
+                                print(f"   [OK] Correctly recognized {test_person_id}!")
                             else:
-                                print(f"   ⚠️  Recognized as {result['person_id']} instead of {test_person_id}")
+                                print(f"   [WARNING]  Recognized as {result['person_id']} instead of {test_person_id}")
                         else:
-                            print("   ❌ No recognition result")
+                            print("   [ERROR] No recognition result")
                     else:
-                        print("   ❌ Recognition model failed to load")
+                        print("   [ERROR] Recognition model failed to load")
                         
                 except Exception as e:
-                    print(f"   ❌ Recognition test failed: {e}")
+                    print(f"   [ERROR] Recognition test failed: {e}")
                     import traceback
                     traceback.print_exc()
                     
@@ -140,11 +140,11 @@ def test_fixed_recognition():
                 print(f"     {unknown_id} (recognized: {det_info.recognized_id}) -> {person_id}")
                 
     except Exception as e:
-        print(f"   ❌ Flow test failed: {e}")
+        print(f"   [ERROR] Flow test failed: {e}")
         import traceback
         traceback.print_exc()
         
-    print("\n✅ Testing complete!")
+    print("\n[OK] Testing complete!")
 
 if __name__ == "__main__":
     test_fixed_recognition()

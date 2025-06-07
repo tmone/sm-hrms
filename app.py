@@ -1,5 +1,13 @@
 import os
 import sys
+
+# Fix Unicode output on Windows before anything else
+try:
+    from utils.fix_unicode_output import fix_unicode_output
+    fix_unicode_output()
+except Exception as e:
+    print(f"Warning: Could not fix Unicode output: {e}")
+
 from flask import Flask
 
 # Set up logging before anything else
@@ -585,7 +593,7 @@ def create_app(config_name=None):
         
         # Initialize default settings
         SystemSettings.initialize_defaults()
-        print("✅ System settings initialized")
+        print("[OK] System settings initialized")
         
         # Create demo admin user if it doesn't exist
         admin = Employee.query.filter_by(email='admin@stepmedia.com').first()
@@ -600,11 +608,11 @@ def create_app(config_name=None):
             )
             db.session.add(admin)
             db.session.commit()
-            print("✅ Demo admin user created: admin@stepmedia.com")
+            print("[OK] Demo admin user created: admin@stepmedia.com")
       # Add a simple test route
     @app.route('/test')
     def test():
-        return "<h1>✅ App is working!</h1><p><a href='/auth/login'>Go to Login</a></p>"
+        return "<h1>[OK] App is working!</h1><p><a href='/auth/login'>Go to Login</a></p>"
     
     # Add static file serving for uploads
     @app.route('/static/uploads/<path:filename>')
@@ -627,14 +635,14 @@ def create_app(config_name=None):
     try:
         from hr_management.blueprints.auth import auth_bp
         app.register_blueprint(auth_bp, url_prefix='/auth')
-        print("✅ Auth blueprint registered")
+        print("[OK] Auth blueprint registered")
     except ImportError as e:
         blueprint_errors.append(f"Auth blueprint: {e}")
         
     try:
         from hr_management.blueprints.dashboard import dashboard_bp
         app.register_blueprint(dashboard_bp, url_prefix='/')
-        print("✅ Dashboard blueprint registered")
+        print("[OK] Dashboard blueprint registered")
     except ImportError as e:
         blueprint_errors.append(f"Dashboard blueprint: {e}")
         
@@ -656,7 +664,7 @@ def create_app(config_name=None):
             module = __import__(module_name, fromlist=[blueprint_name])
             blueprint = getattr(module, blueprint_name)
             app.register_blueprint(blueprint, url_prefix=url_prefix)
-            print(f"✅ {display_name} blueprint registered")
+            print(f"[OK] {display_name} blueprint registered")
         except ImportError as e:
             blueprint_errors.append(f"{display_name} blueprint: {e}")
         except AttributeError as e:
@@ -666,19 +674,19 @@ def create_app(config_name=None):
         from hr_management.blueprints import gpu_management_bp
         if gpu_management_bp is not None:
             app.register_blueprint(gpu_management_bp, url_prefix='/gpu')
-            print("✅ GPU Management blueprint registered")
+            print("[OK] GPU Management blueprint registered")
         else:
             blueprint_errors.append("GPU Management blueprint: Dependencies not available")
     except ImportError as e:
         blueprint_errors.append(f"GPU Management blueprint: {e}")
     
     if blueprint_errors:
-        print("⚠️  Some blueprints failed to load:")
+        print("[WARNING]  Some blueprints failed to load:")
         for error in blueprint_errors:
             print(f"   - {error}")
         print("The application will run with limited functionality")
     else:
-        print("✅ All blueprints registered successfully")
+        print("[OK] All blueprints registered successfully")
     
     return app
 
@@ -727,20 +735,20 @@ def main():
     try:
         from processing.chunk_merge_monitor import get_chunk_monitor
         monitor = get_chunk_monitor(app)
-        print("✅ Chunk merge monitor started")
+        print("[OK] Chunk merge monitor started")
     except Exception as e:
-        print(f"⚠️ Could not start chunk merge monitor: {e}")
+        print(f"[WARNING] Could not start chunk merge monitor: {e}")
         
     # Start scheduled cleanup service
     try:
         from processing.scheduled_cleanup import start_scheduled_cleanup
         cleanup_service = start_scheduled_cleanup(cleanup_interval_hours=6)  # Run every 6 hours
-        print("✅ Scheduled cleanup service started (runs every 6 hours)")
+        print("[OK] Scheduled cleanup service started (runs every 6 hours)")
         
         # Run immediate cleanup on startup to clean any leftover files
         cleanup_service.run_immediate()
     except Exception as e:
-        print(f"⚠️ Could not start scheduled cleanup: {e}")
+        print(f"[WARNING] Could not start scheduled cleanup: {e}")
     
     # Start the application
     try:

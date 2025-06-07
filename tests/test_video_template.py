@@ -52,11 +52,11 @@ def test_template_syntax():
                 total_detections=total_detections
             )
             
-            print("✅ Template renders successfully with mock data!")
+            print("[OK] Template renders successfully with mock data!")
             return True
             
         except Exception as e:
-            print(f"❌ Template rendering failed: {e}")
+            print(f"[ERROR] Template rendering failed: {e}")
             import traceback
             traceback.print_exc()
             return False

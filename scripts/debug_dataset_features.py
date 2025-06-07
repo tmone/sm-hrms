@@ -14,10 +14,10 @@ def debug_dataset(dataset_name):
     dataset_path = Path('datasets/person_recognition') / dataset_name
     
     if not dataset_path.exists():
-        print(f"❌ Dataset not found: {dataset_path}")
+        print(f"[ERROR] Dataset not found: {dataset_path}")
         return
     
-    print(f"🔍 Debugging dataset: {dataset_name}")
+    print(f"[SEARCH] Debugging dataset: {dataset_name}")
     print(f"   Path: {dataset_path}")
     
     # Check dataset info
@@ -25,7 +25,7 @@ def debug_dataset(dataset_name):
     if info_path.exists():
         with open(info_path) as f:
             info = json.load(f)
-        print(f"\n📊 Dataset Info:")
+        print(f"\n[INFO] Dataset Info:")
         print(f"   Created: {info.get('created_at', 'Unknown')}")
         print(f"   Total persons: {len(info.get('persons', {}))}")
         print(f"   Total images: {info.get('total_images', 0)}")
@@ -39,7 +39,7 @@ def debug_dataset(dataset_name):
             print(f"      - Success: {person_data.get('success', False)}")
     
     # Check directory structure
-    print(f"\n📁 Directory structure:")
+    print(f"\n[FILE] Directory structure:")
     for subdir in ['images', 'features', 'faces', 'embeddings']:
         subdir_path = dataset_path / subdir
         if subdir_path.exists():
@@ -81,16 +81,16 @@ def debug_dataset(dataset_name):
                                     features = data['features']
                                     print(f"   {person_dir.name}: Feature shape = {features.shape if hasattr(features, 'shape') else len(features)}")
                     except Exception as e:
-                        print(f"   ⚠️  Error reading {feature_file.name}: {e}")
+                        print(f"   [WARNING]  Error reading {feature_file.name}: {e}")
                     person_features += 1
                 
                 if person_features > 0:
                     print(f"      Valid: {person_valid}/{person_features}")
         
-        print(f"\n📊 Total features: {total_features}")
+        print(f"\n[INFO] Total features: {total_features}")
         print(f"   Valid features: {valid_features}")
     else:
-        print(f"\n⚠️  No features directory found!")
+        print(f"\n[WARNING]  No features directory found!")
 
 
 if __name__ == '__main__':

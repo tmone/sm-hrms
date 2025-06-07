@@ -20,21 +20,21 @@ try:
     YOLO_AVAILABLE = True
 except ImportError:
     YOLO_AVAILABLE = False
-    print("⚠️ YOLO not available")
+    print("[WARNING] YOLO not available")
 
 try:
     import torch
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
-    print("⚠️ PyTorch not available")
+    print("[WARNING] PyTorch not available")
 
 def process_video_with_enhanced_detection(video_path, output_base_dir="static/uploads"):
     """
     Process video with enhanced person detection and tracking
     Creates annotated video and person datasets
     """
-    print(f"🎬 Starting enhanced video processing: {video_path}")
+    print(f"[ACTION] Starting enhanced video processing: {video_path}")
     
     # Setup output directories
     video_name = os.path.splitext(os.path.basename(video_path))[0]
@@ -52,7 +52,7 @@ def process_video_with_enhanced_detection(video_path, output_base_dir="static/up
         
         # Step 2: Create annotated video with bounding boxes
         annotated_video_path = create_annotated_video(video_path, person_tracks, output_dir)
-        print(f"🎥 Created annotated video: {annotated_video_path}")
+        print(f"[MOVIE] Created annotated video: {annotated_video_path}")
         
         # Step 3: Extract person images and metadata
         extract_persons_data(video_path, person_tracks, persons_dir)
@@ -71,7 +71,7 @@ def process_video_with_enhanced_detection(video_path, output_base_dir="static/up
         }
         
     except Exception as e:
-        print(f"❌ Enhanced detection failed: {e}")
+        print(f"[ERROR] Enhanced detection failed: {e}")
         return {
             'success': False,
             'error': str(e),
@@ -83,7 +83,7 @@ def detect_and_track_persons(video_path):
     """
     Detect persons and track them across frames to identify unique individuals
     """
-    print(f"🔍 Detecting and tracking persons in: {video_path}")
+    print(f"[SEARCH] Detecting and tracking persons in: {video_path}")
     
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video file not found: {video_path}")
@@ -95,7 +95,7 @@ def detect_and_track_persons(video_path):
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
-    print(f"📊 Video info: {total_frames} frames at {fps} FPS")
+    print(f"[INFO] Video info: {total_frames} frames at {fps} FPS")
     
     # Initialize person tracker
     person_tracker = PersonTracker()
@@ -110,7 +110,7 @@ def detect_and_track_persons(video_path):
         
         # Process every N frames for efficiency
         if frame_number % process_every_n_frames == 0:
-            print(f"🔄 Processing frame {frame_number}/{total_frames} ({frame_number/total_frames*100:.1f}%)")
+            print(f"[PROCESSING] Processing frame {frame_number}/{total_frames} ({frame_number/total_frames*100:.1f}%)")
             
             # Detect persons in current frame
             detections = detect_persons_in_frame(frame, frame_number, fps)
@@ -129,7 +129,7 @@ def detect_and_track_persons(video_path):
     
     # Get final person tracks
     person_tracks = person_tracker.get_tracks()
-    print(f"🎯 Tracking completed: {len(person_tracks)} unique persons identified")
+    print(f"[TARGET] Tracking completed: {len(person_tracks)} unique persons identified")
     
     return person_tracks
 
@@ -143,7 +143,7 @@ def detect_persons_in_frame(frame, frame_number, fps):
         try:
             # Load YOLO model (cached after first load)
             if not hasattr(detect_persons_in_frame, 'model'):
-                print("📥 Loading YOLO model for person detection...")
+                print("[LOAD] Loading YOLO model for person detection...")
                 detect_persons_in_frame.model = YOLO('yolov8n.pt')
             
             model = detect_persons_in_frame.model
@@ -169,7 +169,7 @@ def detect_persons_in_frame(frame, frame_number, fps):
                             MIN_BBOX_WIDTH = 128
                             
                             if bbox_width < MIN_BBOX_WIDTH:
-                                print(f"⚠️ Skipping person: bbox width {bbox_width}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                                print(f"[WARNING] Skipping person: bbox width {bbox_width}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
                                 continue
                             
                             # Convert to our detection format
@@ -188,7 +188,7 @@ def detect_persons_in_frame(frame, frame_number, fps):
                             detections.append(detection)
             
         except Exception as e:
-            print(f"⚠️ YOLO detection failed: {e}")
+            print(f"[WARNING] YOLO detection failed: {e}")
     
     # Fallback to mock detections if YOLO unavailable
     if not detections and not YOLO_AVAILABLE:
@@ -369,12 +369,12 @@ def create_annotated_video(video_path, person_tracks, output_dir):
         frame_number += 1
         
         if frame_number % 100 == 0:
-            print(f"📝 Annotated {frame_number} frames")
+            print(f"[LOG] Annotated {frame_number} frames")
     
     cap.release()
     out.release()
     
-    print(f"✅ Annotated video created: {output_path}")
+    print(f"[OK] Annotated video created: {output_path}")
     return output_path
 
 def draw_detection_box(frame, detection):
@@ -465,7 +465,7 @@ def extract_persons_data(video_path, person_tracks, persons_dir):
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
         
-        print(f"   📁 {person_id}: {images_extracted} images, {len(track['frames'])} frames")
+        print(f"   [FILE] {person_id}: {images_extracted} images, {len(track['frames'])} frames")
     
     cap.release()
 
@@ -494,7 +494,7 @@ def generate_processing_summary(person_tracks, output_dir):
     with open(summary_path, 'w') as f:
         json.dump(summary, f, indent=2)
     
-    print(f"📋 Processing summary saved: {summary_path}")
+    print(f"[TRACE] Processing summary saved: {summary_path}")
     return summary
 
 # Integration function for the existing system
@@ -503,7 +503,7 @@ def enhanced_person_detection_task(video_path):
     Enhanced person detection task for integration with existing workflow
     """
     try:
-        print(f"🚀 Starting enhanced person detection for: {video_path}")
+        print(f"[START] Starting enhanced person detection for: {video_path}")
         
         result = process_video_with_enhanced_detection(video_path)
         
@@ -523,12 +523,12 @@ def enhanced_person_detection_task(video_path):
                     detections_for_db.append(detection)
             
             result['detections_for_db'] = detections_for_db
-            print(f"✅ Enhanced detection completed: {len(detections_for_db)} detections")
+            print(f"[OK] Enhanced detection completed: {len(detections_for_db)} detections")
         
         return result
         
     except Exception as e:
-        print(f"❌ Enhanced detection failed: {e}")
+        print(f"[ERROR] Enhanced detection failed: {e}")
         return {
             'success': False,
             'error': str(e),

@@ -71,7 +71,7 @@ class ImprovedPersonTracker:
                                     default_model, 
                                     confidence_threshold=self.recognition_threshold
                                 )
-                                logger.info(f"✅ Default model loaded successfully: {default_model}")
+                                logger.info(f"[OK] Default model loaded successfully: {default_model}")
                             except Exception as e:
                                 logger.error(f"Failed to load recognition model: {e}")
                                 self.recognition_model = None
@@ -152,7 +152,7 @@ class ImprovedPersonTracker:
             if result.get('persons') and len(result['persons']) > 0:
                 person = result['persons'][0]
                 if person['confidence'] >= self.recognition_threshold and person['person_id'] != 'unknown':
-                    logger.info(f"🎯 Frame {frame_number}: Recognized {person['person_id']} with confidence {person['confidence']:.2f}")
+                    logger.info(f"[TARGET] Frame {frame_number}: Recognized {person['person_id']} with confidence {person['confidence']:.2f}")
                     return person['person_id'], person['confidence']
             
             return None
@@ -294,13 +294,13 @@ class ImprovedPersonTracker:
                 # Determine person ID
                 if recognized_person_id:
                     person_id_str = recognized_person_id
-                    logger.info(f"✅ Creating track with recognized person ID: {person_id_str} (confidence: {recognition_confidence:.2f})")
+                    logger.info(f"[OK] Creating track with recognized person ID: {person_id_str} (confidence: {recognition_confidence:.2f})")
                 else:
                     # Only create new person ID if not recognized
                     person_id = self.next_person_id
                     self.next_person_id += 1
                     person_id_str = f"PERSON-{person_id:04d}"
-                    logger.info(f"🆕 Creating new person ID: {person_id_str}")
+                    logger.info(f"[NEW] Creating new person ID: {person_id_str}")
                 
                 self.tracks[track_id] = {
                     'first_frame': frame_number,

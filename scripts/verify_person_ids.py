@@ -56,12 +56,12 @@ def verify_person_ids(video_id):
         # Issue 1: Missing person_id
         missing_pid = [d for d in detections if d.person_id is None]
         if missing_pid:
-            print(f"⚠️  {len(missing_pid)} detections have no person_id")
+            print(f"[WARNING]  {len(missing_pid)} detections have no person_id")
         
         # Issue 2: Non-numeric person_id
         non_numeric = [d for d in detections if d.person_id and not str(d.person_id).isdigit()]
         if non_numeric:
-            print(f"⚠️  {len(non_numeric)} detections have non-numeric person_id")
+            print(f"[WARNING]  {len(non_numeric)} detections have non-numeric person_id")
         
         # Show sample detections
         print("\nSample detections (first 10):")
@@ -107,9 +107,9 @@ def fix_person_ids(video_id):
         
         if fixed_count > 0:
             db.session.commit()
-            print(f"✅ Fixed {fixed_count} person IDs")
+            print(f"[OK] Fixed {fixed_count} person IDs")
         else:
-            print("✅ All person IDs are already in correct format")
+            print("[OK] All person IDs are already in correct format")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

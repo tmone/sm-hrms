@@ -84,7 +84,7 @@ def main():
                             # Update database
                             video.processed_path = f"{base_name}_web.mp4"
                             converted_count += 1
-                            print(f"  ✅ Converted to H.264: {web_path}")
+                            print(f"  [OK] Converted to H.264: {web_path}")
             
             # Check annotated video
             if video.annotated_video_path:
@@ -98,10 +98,10 @@ def main():
                         temp_path = str(annotated_path) + '.tmp'
                         if convert_to_h264(annotated_path, temp_path):
                             os.replace(temp_path, annotated_path)
-                            print(f"  ✅ Converted annotated video to H.264")
+                            print(f"  [OK] Converted annotated video to H.264")
         
         db.session.commit()
-        print(f"\n✅ Converted {converted_count} videos to H.264")
+        print(f"\n[OK] Converted {converted_count} videos to H.264")
 
 
 if __name__ == "__main__":

@@ -85,7 +85,7 @@ def test_basic_violation_detection():
     assert len(violation.track_ids) == 2
     assert len(violation.positions) == 2
     
-    logger.info(f"✅ Violation correctly detected: {violation.person_id} "
+    logger.info(f"[OK] Violation correctly detected: {violation.person_id} "
                f"appears {len(violation.track_ids)} times in frame {violation.frame_num}")
     
     # Test frame summary
@@ -95,7 +95,7 @@ def test_basic_violation_detection():
     assert summary['recognized_persons']['mary'] == 1
     assert len(summary['violations']) == 1
     
-    logger.info(f"✅ Frame summary correct: {summary}")
+    logger.info(f"[OK] Frame summary correct: {summary}")
     
     return True
 
@@ -130,7 +130,7 @@ def test_violation_resolution():
     assert id3 in resolutions and resolutions[id3] == 'remove'
     assert id1 not in resolutions  # Not marked for removal = kept
     
-    logger.info(f"✅ Confidence-based resolution correct: kept {id1} (0.95), "
+    logger.info(f"[OK] Confidence-based resolution correct: kept {id1} (0.95), "
                f"removed {id2} (0.75) and {id3} (0.85)")
     
     # Finalize with auto-resolve
@@ -142,7 +142,7 @@ def test_violation_resolution():
     assert id3 not in mapping  # Removed
     assert id4 in mapping  # Normal detection kept
     
-    logger.info(f"✅ Final mapping correct: {len(mapping)} IDs (2 removed)")
+    logger.info(f"[OK] Final mapping correct: {len(mapping)} IDs (2 removed)")
     
     return True
 
@@ -175,7 +175,7 @@ def test_multiple_frame_violations():
     assert 10 in violation_frames and violation_frames[10] == "employee_001"
     assert 20 in violation_frames and violation_frames[20] == "employee_002"
     
-    logger.info(f"✅ Multiple violations detected correctly: "
+    logger.info(f"[OK] Multiple violations detected correctly: "
                f"{len(violations)} violations in frames {list(violation_frames.keys())}")
     
     # Get statistics
@@ -193,7 +193,7 @@ def test_multiple_frame_violations():
     # Clean up
     if os.path.exists(report_path):
         os.remove(report_path)
-        logger.info(f"✅ Violations report exported and cleaned up")
+        logger.info(f"[OK] Violations report exported and cleaned up")
     
     return True
 
@@ -228,7 +228,7 @@ def test_edge_cases():
     
     assert len(unrecognized_violations) == 0, "Unrecognized persons should not create violations"
     
-    logger.info(f"✅ Edge cases handled correctly")
+    logger.info(f"[OK] Edge cases handled correctly")
     
     return True
 
@@ -249,13 +249,13 @@ def main():
         try:
             if test_func():
                 passed += 1
-                logger.info(f"✅ {test_func.__name__} PASSED\n")
+                logger.info(f"[OK] {test_func.__name__} PASSED\n")
             else:
                 failed += 1
-                logger.error(f"❌ {test_func.__name__} FAILED\n")
+                logger.error(f"[ERROR] {test_func.__name__} FAILED\n")
         except Exception as e:
             failed += 1
-            logger.error(f"❌ {test_func.__name__} FAILED with exception: {e}\n")
+            logger.error(f"[ERROR] {test_func.__name__} FAILED with exception: {e}\n")
             import traceback
             traceback.print_exc()
     

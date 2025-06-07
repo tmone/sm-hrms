@@ -75,7 +75,7 @@ class ConversionManager:
                 task.progress = progress
                 task.message = message
                 
-                print(f"🔄 Task {task_id[:8]}: {progress:.1f}% - {message}")
+                print(f"[PROCESSING] Task {task_id[:8]}: {progress:.1f}% - {message}")
                 
                 # Emit WebSocket event for real-time updates
                 self._emit_progress_update(task)
@@ -113,7 +113,7 @@ class ConversionManager:
                     print(f"📡 WebSocket: Emitted progress for video {task.video_id}: {task.progress:.1f}%")
                     
         except Exception as e:
-            print(f"⚠️ WebSocket emit failed: {e}")
+            print(f"[WARNING] WebSocket emit failed: {e}")
             # Continue without WebSocket - fallback to polling
     
     def start_conversion(self, task_id: str, app, processor_callback: Callable):
@@ -155,7 +155,7 @@ class ConversionManager:
                         if task_id in self.active_threads:
                             del self.active_threads[task_id]
                     
-                    print(f"✅ Task {task_id[:8]} completed: success={success}")
+                    print(f"[OK] Task {task_id[:8]} completed: success={success}")
                     
                 except Exception as e:
                     with self.lock:
@@ -166,7 +166,7 @@ class ConversionManager:
                         if task_id in self.active_threads:
                             del self.active_threads[task_id]
                     
-                    print(f"❌ Task {task_id[:8]} failed: {e}")
+                    print(f"[ERROR] Task {task_id[:8]} failed: {e}")
         
         # Start background thread
         thread = threading.Thread(target=conversion_worker, daemon=True)
@@ -200,7 +200,7 @@ class ConversionManager:
                     del self.active_threads[task_id]
             
             if to_remove:
-                print(f"🧹 Cleaned up {len(to_remove)} old conversion tasks")
+                print(f"[CLEANUP] Cleaned up {len(to_remove)} old conversion tasks")
 
 # Global conversion manager instance
 conversion_manager = ConversionManager()

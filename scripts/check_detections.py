@@ -31,7 +31,7 @@ def check_detections():
         print(f"\nTotal DetectedPerson records: {total_detections}")
         
         if total_detections == 0:
-            print("\n⚠️  No DetectedPerson records found!")
+            print("\n[WARNING]  No DetectedPerson records found!")
             print("This is why attendance reports are empty.")
             print("\nTo fix this:")
             print("1. Make sure videos have been processed for person detection")

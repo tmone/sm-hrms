@@ -12,11 +12,11 @@ import json
 
 def check_person_quality():
     """Check for quality issues in person data"""
-    print("🔍 Checking Person Data Quality\n")
+    print("[SEARCH] Checking Person Data Quality\n")
     
     persons_dir = Path("processing/outputs/persons")
     if not persons_dir.exists():
-        print("❌ No persons directory found")
+        print("[ERROR] No persons directory found")
         return
     
     issues = {
@@ -78,26 +78,26 @@ def check_person_quality():
         issues["total_images"] += image_count
     
     # Print summary
-    print("📊 Summary:")
+    print("[INFO] Summary:")
     print(f"   Total persons: {issues['total_persons']}")
     print(f"   Total images: {issues['total_images']}")
     print(f"   Average images per person: {issues['total_images'] / issues['total_persons']:.1f}")
     
     if issues["unconfirmed_images"]:
-        print(f"\n⚠️  Persons with unconfirmed images: {len(issues['unconfirmed_images'])}")
+        print(f"\n[WARNING]  Persons with unconfirmed images: {len(issues['unconfirmed_images'])}")
         for data in sorted(issues["unconfirmed_images"], key=lambda x: x["unconfirmed"], reverse=True)[:10]:
             print(f"   - {data['person_id']}: {data['unconfirmed']}/{data['total']} unconfirmed")
             if data["recognized"]:
                 print(f"     (Recognized with {data['confidence']:.1%} confidence)")
     
     if issues["misrecognized"]:
-        print(f"\n🚨 Potential misrecognitions: {len(issues['misrecognized'])}")
+        print(f"\n[ALARM] Potential misrecognitions: {len(issues['misrecognized'])}")
         for data in issues["misrecognized"]:
             print(f"   - {data['person_id']}: {data['confidence']:.1%} confidence but "
                   f"{data['unconfirmed_ratio']:.1%} unconfirmed")
-            print(f"     → Should review and possibly move to correct person")
+            print(f"     -> Should review and possibly move to correct person")
     
-    print("\n💡 Recommended actions:")
+    print("\n[TIP] Recommended actions:")
     print("1. Run: python scripts/mark_unconfirmed_images.py")
     print("2. Run: python scripts/remove_similar_images.py --threshold 0.95")
     print("3. Review persons with high unconfirmed ratios in the web UI")

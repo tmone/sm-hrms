@@ -9,7 +9,7 @@ import platform
 def install_codecs():
     """Install necessary packages for H.264 codec support"""
     
-    print("🎬 Installing video codec support for H.264...")
+    print("[ACTION] Installing video codec support for H.264...")
     
     packages = [
         'opencv-python-headless',  # OpenCV without GUI dependencies
@@ -19,22 +19,22 @@ def install_codecs():
     ]
     
     for package in packages:
-        print(f"\n📦 Installing {package}...")
+        print(f"\n[PACKAGE] Installing {package}...")
         try:
             subprocess.check_call([
                 sys.executable, '-m', 'pip', 'install', '--upgrade', package
             ])
-            print(f"✅ {package} installed successfully")
+            print(f"[OK] {package} installed successfully")
         except subprocess.CalledProcessError as e:
-            print(f"❌ Failed to install {package}: {e}")
+            print(f"[ERROR] Failed to install {package}: {e}")
     
     # Platform-specific instructions
     system = platform.system()
-    print(f"\n💻 Platform: {system}")
+    print(f"\n[COMPUTER] Platform: {system}")
     
     if system == "Windows":
         print("""
-📌 For Windows, you may also need to:
+[PIN] For Windows, you may also need to:
 1. Download FFmpeg from https://ffmpeg.org/download.html
 2. Extract it to C:\\ffmpeg
 3. Add C:\\ffmpeg\\bin to your PATH environment variable
@@ -45,18 +45,18 @@ Alternatively, install using chocolatey:
         """)
     elif system == "Linux":
         print("""
-📌 For Linux, install system packages:
+[PIN] For Linux, install system packages:
   sudo apt-get update
   sudo apt-get install ffmpeg libavcodec-dev libavformat-dev
         """)
     elif system == "Darwin":  # macOS
         print("""
-📌 For macOS, install using Homebrew:
+[PIN] For macOS, install using Homebrew:
   brew install ffmpeg
         """)
     
-    print("\n✅ Codec installation guide complete!")
-    print("💡 After installing FFmpeg, restart your application for H.264 support")
+    print("\n[OK] Codec installation guide complete!")
+    print("[TIP] After installing FFmpeg, restart your application for H.264 support")
 
 if __name__ == '__main__':
     install_codecs()

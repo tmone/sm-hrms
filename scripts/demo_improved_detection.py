@@ -41,8 +41,8 @@ def demonstrate_issue_and_fix():
     logger.info("  - Person C unknown -> assigned PERSON-0003")
     
     logger.info("\nSecond upload of same video:")
-    logger.info("  - Person A recognized -> assigned PERSON-0004 ❌ (DUPLICATE!)")
-    logger.info("  - Person B recognized -> assigned PERSON-0005 ❌ (DUPLICATE!)")
+    logger.info("  - Person A recognized -> assigned PERSON-0004 [ERROR] (DUPLICATE!)")
+    logger.info("  - Person B recognized -> assigned PERSON-0005 [ERROR] (DUPLICATE!)")
     logger.info("  - Person C unknown -> assigned PERSON-0006")
     
     logger.info("\nRESULT: Same people get multiple PERSON IDs!")
@@ -73,10 +73,10 @@ def demonstrate_issue_and_fix():
     logger.info("\nSecond upload of same video:")
     
     person_a_id_2 = manager.get_or_create_person_id("Person_A")
-    logger.info(f"  - Person A recognized -> assigned {person_a_id_2} ✅ (REUSED!)")
+    logger.info(f"  - Person A recognized -> assigned {person_a_id_2} [OK] (REUSED!)")
     
     person_b_id_2 = manager.get_or_create_person_id("Person_B")
-    logger.info(f"  - Person B recognized -> assigned {person_b_id_2} ✅ (REUSED!)")
+    logger.info(f"  - Person B recognized -> assigned {person_b_id_2} [OK] (REUSED!)")
     
     person_c_id_2 = manager.get_or_create_person_id(None)  # Still unknown
     logger.info(f"  - Person C unknown -> assigned {person_c_id_2}")
@@ -136,9 +136,9 @@ def show_implementation_details():
     
     for name, path in files:
         if Path(path).exists():
-            logger.info(f"✅ {name}: {path}")
+            logger.info(f"[OK] {name}: {path}")
         else:
-            logger.info(f"❌ {name}: {path} (not found)")
+            logger.info(f"[ERROR] {name}: {path} (not found)")
 
 
 if __name__ == "__main__":

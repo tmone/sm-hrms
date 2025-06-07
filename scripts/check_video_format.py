@@ -10,7 +10,7 @@ import sys
 def check_video(video_path):
     """Check video format using ffprobe"""
     if not os.path.exists(video_path):
-        print(f"❌ File not found: {video_path}")
+        print(f"[ERROR] File not found: {video_path}")
         return
         
     print(f"Checking video: {video_path}")
@@ -40,14 +40,14 @@ def check_video(video_path):
             web_codecs = ['h264', 'vp8', 'vp9']
             codec = stream.get('codec_name', '').lower()
             if codec in web_codecs:
-                print("✅ Web-compatible codec")
+                print("[OK] Web-compatible codec")
             else:
-                print(f"⚠️ Non-web codec: {codec}")
+                print(f"[WARNING] Non-web codec: {codec}")
                 
     except subprocess.CalledProcessError as e:
-        print(f"❌ FFprobe error: {e.stderr}")
+        print(f"[ERROR] FFprobe error: {e.stderr}")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
 
 if __name__ == "__main__":
     # Check the specific video
@@ -59,6 +59,6 @@ if __name__ == "__main__":
     cmd = ['ffmpeg', '-v', 'error', '-i', video_path, '-f', 'null', '-']
     try:
         subprocess.run(cmd, check=True, capture_output=True)
-        print("✅ Valid MP4 structure")
+        print("[OK] Valid MP4 structure")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Invalid MP4: {e.stderr.decode()}")
+        print(f"[ERROR] Invalid MP4: {e.stderr.decode()}")

@@ -16,10 +16,10 @@ def update_extraction_parameters():
     gpu_detection_file = Path('processing/gpu_enhanced_detection.py')
     
     if not gpu_detection_file.exists():
-        print("❌ GPU detection file not found!")
+        print("[ERROR] GPU detection file not found!")
         return
     
-    print("📝 Updating extraction parameters...")
+    print("[LOG] Updating extraction parameters...")
     
     # Read the file
     with open(gpu_detection_file, 'r') as f:
@@ -52,15 +52,15 @@ def update_extraction_parameters():
     for improvement in improvements:
         if improvement['old'] in content:
             content = content.replace(improvement['old'], improvement['new'])
-            print(f"  ✅ {improvement['name']}")
+            print(f"  [OK] {improvement['name']}")
         else:
-            print(f"  ⚠️  Could not apply: {improvement['name']}")
+            print(f"  [WARNING]  Could not apply: {improvement['name']}")
     
     # Save the updated file
     with open(gpu_detection_file, 'w') as f:
         f.write(content)
     
-    print("\n✅ Improvements applied!")
+    print("\n[OK] Improvements applied!")
 
 
 def create_enhanced_extraction_config():
@@ -105,7 +105,7 @@ def create_enhanced_extraction_config():
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
     
-    print(f"\n📁 Enhanced configuration saved to: {config_path}")
+    print(f"\n[FILE] Enhanced configuration saved to: {config_path}")
     
     return config
 
@@ -114,7 +114,7 @@ def show_improvement_summary():
     """Show summary of improvements."""
     
     print("\n" + "="*60)
-    print("🚀 PERSON EXTRACTION IMPROVEMENTS SUMMARY")
+    print("[START] PERSON EXTRACTION IMPROVEMENTS SUMMARY")
     print("="*60)
     
     print("\n1. DETECTION QUALITY:")
@@ -137,17 +137,17 @@ def show_improvement_summary():
     print("   - Better temporal distribution")
     print("   - Saves more diverse poses")
     
-    print("\n💡 RECOMMENDATIONS:")
+    print("\n[TIP] RECOMMENDATIONS:")
     print("   1. Re-process videos with new parameters")
     print("   2. Use 'Split Person' for any remaining merged persons")
     print("   3. Enable GPU for appearance-based tracking")
     
-    print("\n✅ These improvements will prevent the 'all persons in one ID' issue!")
+    print("\n[OK] These improvements will prevent the 'all persons in one ID' issue!")
 
 
 def main():
     """Main function."""
-    print("🔧 Applying Person Extraction Improvements")
+    print("[CONFIG] Applying Person Extraction Improvements")
     print("="*50)
     
     # Update parameters
@@ -159,7 +159,7 @@ def main():
     # Show summary
     show_improvement_summary()
     
-    print("\n🎯 Next Steps:")
+    print("\n[TARGET] Next Steps:")
     print("1. Delete the current video and PERSON-0058 folder")
     print("2. Re-upload and process the video")
     print("3. The system will now create separate persons properly")

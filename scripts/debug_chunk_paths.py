@@ -37,7 +37,7 @@ def debug_paths():
                             print(f"    - {file}")
                             if file == chunk.filename:
                                 correct_path = f"chunks/{subdir}/{file}"
-                                print(f"      ✓ MATCH! Correct path should be: {correct_path}")
+                                print(f"      [CHECK] MATCH! Correct path should be: {correct_path}")
 
 if __name__ == "__main__":
     debug_paths()

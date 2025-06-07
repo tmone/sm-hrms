@@ -45,7 +45,7 @@ def fix_attendance_dates():
                 
                 # If dates don't match, fix them
                 if first_detection.attendance_date != video.ocr_video_date:
-                    print(f"  ⚠️ Date mismatch detected!")
+                    print(f"  [WARNING] Date mismatch detected!")
                     print(f"  Fixing {len(detections)} detections...")
                     
                     for detection in detections:
@@ -64,9 +64,9 @@ def fix_attendance_dates():
                         fixed_count += 1
                     
                     db.session.commit()
-                    print(f"  ✅ Fixed {len(detections)} detections")
+                    print(f"  [OK] Fixed {len(detections)} detections")
                 else:
-                    print(f"  ✅ Dates match correctly")
+                    print(f"  [OK] Dates match correctly")
         
         print(f"\n{'='*80}")
         print(f"Total detections fixed: {fixed_count}")

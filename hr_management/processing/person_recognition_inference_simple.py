@@ -69,7 +69,7 @@ class PersonRecognitionInferenceSimple:
             'confidence_scores': []
         })
         
-        print(f"🎥 Processing video: {video_path}")
+        print(f"[MOVIE] Processing video: {video_path}")
         print(f"   Total frames: {total_frames}, FPS: {fps}")
         
         # For simple version, we'll process the entire frame
@@ -88,7 +88,7 @@ class PersonRecognitionInferenceSimple:
                 
                 if detected_persons:
                     if processed_frames == 0:
-                        print(f"✅ Detected {len(detected_persons)} persons in first processed frame")
+                        print(f"[OK] Detected {len(detected_persons)} persons in first processed frame")
                     # Process each detected person
                     for x1, y1, x2, y2, detection_confidence in detected_persons:
                         # Crop the person from the frame
@@ -153,7 +153,7 @@ class PersonRecognitionInferenceSimple:
                 else:
                     # No persons detected in this frame
                     if processed_frames == 0:
-                        print(f"⚠️  No persons detected in first processed frame")
+                        print(f"[WARNING]  No persons detected in first processed frame")
                 
                 processed_frames += 1
                 
@@ -212,7 +212,7 @@ class PersonRecognitionInferenceSimple:
         results['processing_time'] = total_time
         results['processing_fps'] = processed_frames / total_time
         
-        print(f"✅ Video processing complete!")
+        print(f"[OK] Video processing complete!")
         print(f"   Time: {total_time:.1f}s")
         print(f"   Persons found: {len(results['persons_detected'])}")
         
@@ -418,15 +418,15 @@ class PersonRecognitionInferenceSimple:
     
     def process_cropped_image(self, image_path: str) -> Dict:
         """Process a pre-cropped person image for recognition"""
-        print(f"🔍 process_cropped_image called with: {image_path}")
+        print(f"[SEARCH] process_cropped_image called with: {image_path}")
         
         # Load image
         image = cv2.imread(image_path)
         if image is None:
-            print(f"❌ Failed to load image: {image_path}")
+            print(f"[ERROR] Failed to load image: {image_path}")
             return {'error': 'Failed to load image'}
         
-        print(f"✅ Image loaded successfully: {image.shape}")
+        print(f"[OK] Image loaded successfully: {image.shape}")
         
         # Since this is already a cropped person image, process it directly
         features = self.feature_extractor._extract_simple_features(
@@ -434,14 +434,14 @@ class PersonRecognitionInferenceSimple:
         )
         
         if features is None:
-            print(f"❌ Failed to extract features from image")
+            print(f"[ERROR] Failed to extract features from image")
             return {'persons': [], 'message': 'Failed to extract features from image'}
         
-        print(f"✅ Features extracted: shape {features.shape}")
+        print(f"[OK] Features extracted: shape {features.shape}")
         
         # Predict person
         prediction = self._predict_person(features)
-        print(f"🎯 Prediction: {prediction}")
+        print(f"[TARGET] Prediction: {prediction}")
         
         # Get image dimensions for bbox
         h, w = image.shape[:2]

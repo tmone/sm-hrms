@@ -40,9 +40,9 @@ def rename_user_to_employee():
                 # So we'll just leave user_id and use employee_id going forward
                 
                 db.session.commit()
-                print("✅ Created employee_id column and copied data")
+                print("[OK] Created employee_id column and copied data")
             elif 'employee_id' in columns:
-                print("✅ employee_id column already exists")
+                print("[OK] employee_id column already exists")
             else:
                 # Neither exists, just add employee_id
                 db.session.execute(text("""
@@ -50,10 +50,10 @@ def rename_user_to_employee():
                     ADD COLUMN employee_id INTEGER
                 """))
                 db.session.commit()
-                print("✅ Added employee_id column")
+                print("[OK] Added employee_id column")
                 
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"[ERROR] Error: {e}")
             db.session.rollback()
             raise
 

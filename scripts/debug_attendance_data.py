@@ -90,7 +90,7 @@ def debug_attendance_data():
         
         # Check if we need to populate attendance fields
         if with_attendance == 0 and len(videos_with_ocr) > 0:
-            print("\n⚠️  ISSUE FOUND: Videos have OCR data but DetectedPerson records don't have attendance fields populated!")
+            print("\n[WARNING]  ISSUE FOUND: Videos have OCR data but DetectedPerson records don't have attendance fields populated!")
             print("\nThis is why attendance reports are empty.")
             print("\nTo fix this, we need to populate the attendance fields in DetectedPerson records")
             print("based on the OCR data from their associated videos.")
@@ -106,7 +106,7 @@ def debug_attendance_data():
                     print(f"   OCR Location: {video.ocr_location}")
                     print(f"   Has {detections_count} detections that need attendance fields updated")
         elif with_attendance > 0:
-            print("\n✅ Attendance data is already populated for some detections.")
+            print("\n[OK] Attendance data is already populated for some detections.")
             print("   Attendance reports should be showing data.")
 
 def populate_attendance_fields():
@@ -167,16 +167,16 @@ def populate_attendance_fields():
                 
                 updated_count += 1
             
-            print(f"  ✓ Updated {len(detections)} detections")
+            print(f"  [CHECK] Updated {len(detections)} detections")
         
         # Commit all changes
         try:
             db.session.commit()
-            print(f"\n✅ Successfully updated {updated_count} detection records with attendance data!")
+            print(f"\n[OK] Successfully updated {updated_count} detection records with attendance data!")
             print("\nAttendance reports should now show data.")
         except Exception as e:
             db.session.rollback()
-            print(f"\n❌ Error updating records: {e}")
+            print(f"\n[ERROR] Error updating records: {e}")
 
 def main():
     import argparse

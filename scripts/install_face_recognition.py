@@ -14,7 +14,7 @@ def install_face_recognition():
     system = platform.system()
     
     if system == "Windows":
-        print("⚠️  Windows detected. Installing face_recognition on Windows can be complex.")
+        print("[WARNING]  Windows detected. Installing face_recognition on Windows can be complex.")
         print("   You may need to install Visual Studio Build Tools first.")
         print("   Alternatively, you can install via conda:")
         print("   conda install -c conda-forge dlib")
@@ -35,10 +35,10 @@ def install_face_recognition():
         print("Installing additional dependencies...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "scikit-learn", "joblib"])
         
-        print("✅ face_recognition installed successfully!")
+        print("[OK] face_recognition installed successfully!")
         
     except subprocess.CalledProcessError as e:
-        print(f"❌ Installation failed: {e}")
+        print(f"[ERROR] Installation failed: {e}")
         print("\nAlternative installation methods:")
         print("1. Using conda: conda install -c conda-forge face_recognition")
         print("2. Using pre-built wheels: pip install face_recognition --find-links https://github.com/jloh02/dlib/releases/")

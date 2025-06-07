@@ -24,9 +24,9 @@ class UIStyleRecognition:
             from hr_management.processing.person_recognition_inference_simple import PersonRecognitionInferenceSimple
             self.inference = PersonRecognitionInferenceSimple(model_name, confidence_threshold)
             self.loaded = True
-            logger.info(f"✅ Loaded recognition model UI-style: {model_name}")
+            logger.info(f"[OK] Loaded recognition model UI-style: {model_name}")
         except Exception as e:
-            logger.error(f"❌ Failed to load model UI-style: {e}")
+            logger.error(f"[ERROR] Failed to load model UI-style: {e}")
     
     def recognize_person_like_ui(self, person_img):
         """
@@ -98,8 +98,8 @@ if __name__ == "__main__":
             
             result = recognize_person_ui_style(test_img)
             if result:
-                print(f"✅ Recognized: {result['person_id']} (confidence: {result['confidence']:.2f})")
+                print(f"[OK] Recognized: {result['person_id']} (confidence: {result['confidence']:.2f})")
             else:
-                print("❌ Not recognized")
+                print("[ERROR] Not recognized")
     
     print("\nThis uses the EXACT same method as the UI test that works!")

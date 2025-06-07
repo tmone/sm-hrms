@@ -198,7 +198,7 @@ def extract_persons_data(video_path, person_tracks, persons_dir):
             
             bbox_width = detection['bbox'][2]  # bbox format is [x, y, width, height]
             if bbox_width < MIN_BBOX_WIDTH:
-                logger.info(f"⚠️ Skipping {person_id} frame {frame_number}: bbox width {bbox_width}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                logger.info(f"[WARNING] Skipping {person_id} frame {frame_number}: bbox width {bbox_width}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
                 continue
             
             img_filename = f"{person_id}_frame_{frame_number:06d}.jpg"
@@ -345,13 +345,13 @@ if __name__ == "__main__":
         result = process_video_with_enhanced_detection(test_video)
         
         if result and result['success']:
-            print("✅ Fallback simulation successful!")
-            print(f"📊 Output directory: {result['output_dir']}")
-            print(f"📁 Persons detected: {result['summary']['total_persons']}")
+            print("[OK] Fallback simulation successful!")
+            print(f"[INFO] Output directory: {result['output_dir']}")
+            print(f"[FILE] Persons detected: {result['summary']['total_persons']}")
             
             # List generated files
             if os.path.exists(result['output_dir']):
-                print(f"\n📂 Generated structure:")
+                print(f"\n[FOLDER] Generated structure:")
                 for root, dirs, files in os.walk(result['output_dir']):
                     level = root.replace(result['output_dir'], '').count(os.sep)
                     indent = ' ' * 2 * level
@@ -360,13 +360,13 @@ if __name__ == "__main__":
                     for file in files:
                         print(f"{subindent}{file}")
         else:
-            print(f"❌ Simulation failed: {result.get('error', 'Unknown error')}")
+            print(f"[ERROR] Simulation failed: {result.get('error', 'Unknown error')}")
             
     finally:
         # Clean up
         if os.path.exists(test_video):
             os.unlink(test_video)
         
-    print("\n💡 This fallback system demonstrates the folder structure")
+    print("\n[TIP] This fallback system demonstrates the folder structure")
     print("   Install AI dependencies for full functionality:")
     print("   python3 install_dependencies.py")

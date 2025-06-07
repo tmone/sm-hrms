@@ -24,7 +24,7 @@ def create_test_directories():
     test_chunk_dir.mkdir(exist_ok=True)
     (test_chunk_dir / "chunk_000.mp4").touch()
     (test_chunk_dir / "chunk_001.mp4").touch()
-    print(f"  ✅ Created test chunk directory: {test_chunk_dir}")
+    print(f"  [OK] Created test chunk directory: {test_chunk_dir}")
     
     # Create test non-PERSON directories
     persons_dir = Path("processing/outputs/persons")
@@ -34,7 +34,7 @@ def create_test_directories():
     valid_person = persons_dir / "PERSON-0001"
     valid_person.mkdir(exist_ok=True)
     (valid_person / "test.jpg").touch()
-    print(f"  ✅ Created valid PERSON directory: {valid_person}")
+    print(f"  [OK] Created valid PERSON directory: {valid_person}")
     
     # Invalid directories (should be deleted)
     invalid_dirs = [
@@ -48,7 +48,7 @@ def create_test_directories():
         invalid_dir = persons_dir / dir_name
         invalid_dir.mkdir(exist_ok=True)
         (invalid_dir / "test.jpg").touch()
-        print(f"  ✅ Created invalid directory: {invalid_dir}")
+        print(f"  [OK] Created invalid directory: {invalid_dir}")
         
     # Create temp files
     temp_files = [
@@ -59,7 +59,7 @@ def create_test_directories():
     
     for temp_file in temp_files:
         temp_file.touch()
-        print(f"  ✅ Created temp file: {temp_file}")
+        print(f"  [OK] Created temp file: {temp_file}")
         
     print("\nTest directories created successfully!")
 
@@ -111,9 +111,9 @@ def run_cleanup_test():
         
         # Verify PERSON-0001 was NOT deleted
         if (persons_dir / "PERSON-0001").exists():
-            print("  ✅ Valid PERSON-0001 directory was preserved!")
+            print("  [OK] Valid PERSON-0001 directory was preserved!")
         else:
-            print("  ❌ ERROR: PERSON-0001 was incorrectly deleted!")
+            print("  [ERROR] ERROR: PERSON-0001 was incorrectly deleted!")
             
     print("\n" + "="*60)
     print("Cleanup test completed!")

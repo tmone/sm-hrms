@@ -20,20 +20,20 @@ def test_recreate_dataset():
     test_dataset_path = Path('datasets/person_recognition') / dataset_name
     if test_dataset_path.exists():
         shutil.rmtree(test_dataset_path)
-        print(f"🗑️  Removed old test dataset: {test_dataset_path}")
+        print(f"[DELETE]  Removed old test dataset: {test_dataset_path}")
     
     # Create new dataset
     creator = PersonDatasetCreatorSimple()
-    print(f"\n🔄 Creating test dataset with {len(person_ids)} persons...")
+    print(f"\n[PROCESSING] Creating test dataset with {len(person_ids)} persons...")
     
     dataset_info = creator.create_dataset_from_persons(person_ids, dataset_name)
     
-    print(f"\n✅ Dataset created:")
+    print(f"\n[OK] Dataset created:")
     print(f"   Total persons: {len(dataset_info['persons'])}")
     print(f"   Total images: {dataset_info['total_images']}")
     print(f"   Total features: {dataset_info['total_features']}")
     
-    print(f"\n📊 Per-person stats:")
+    print(f"\n[INFO] Per-person stats:")
     for person_id, person_data in dataset_info['persons'].items():
         print(f"   {person_id}:")
         print(f"      - Images: {person_data.get('images_count', 0)}")
@@ -43,19 +43,19 @@ def test_recreate_dataset():
     # Check the features directory
     features_dir = test_dataset_path / 'features'
     if features_dir.exists():
-        print(f"\n📁 Features directory contents:")
+        print(f"\n[FILE] Features directory contents:")
         for person_dir in features_dir.iterdir():
             if person_dir.is_dir():
                 files = list(person_dir.glob('*.pkl'))
                 print(f"   {person_dir.name}: {len(files)} feature files")
     else:
-        print(f"\n⚠️  Features directory not found!")
+        print(f"\n[WARNING]  Features directory not found!")
     
     # Test loading the dataset
-    print(f"\n🔄 Testing dataset loading...")
+    print(f"\n[PROCESSING] Testing dataset loading...")
     X, y, loaded_person_ids = creator.prepare_training_data(dataset_name)
     
-    print(f"\n📊 Loaded training data:")
+    print(f"\n[INFO] Loaded training data:")
     print(f"   X shape: {X.shape if len(X) > 0 else 'empty'}")
     print(f"   y shape: {y.shape if len(y) > 0 else 'empty'}")
     print(f"   Unique persons: {len(loaded_person_ids)}")

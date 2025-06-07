@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 from datetime import datetime
 import os
+import sys
 from pathlib import Path
 import json
 import glob
@@ -30,6 +31,10 @@ except:
     THROTTLING_ENABLED = False
     throttler = None
 
+# Checkpoint system removed for stability
+CHECKPOINT_ENABLED = False
+checkpoint_manager = None
+
 # Try to import torch and check CUDA availability
 try:
     import torch
@@ -50,9 +55,9 @@ try:
         sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         from hr_management.processing.gpu_appearance_tracker import GPUPersonTracker
         GPU_TRACKER_AVAILABLE = True
-        print("✅ GPU Appearance Tracker available")
+        print("[OK] GPU Appearance Tracker available")
 except ImportError as e:
-    print(f"⚠️ GPU Appearance Tracker not available: {e}")
+    print(f"[WARNING] GPU Appearance Tracker not available: {e}")
 
 # Try to import OCR extractor
 OCR_AVAILABLE = False
@@ -61,9 +66,9 @@ try:
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from hr_management.processing.ocr_extractor import VideoOCRExtractor
     OCR_AVAILABLE = True
-    print("✅ OCR Extractor available")
+    print("[OK] OCR Extractor available")
 except ImportError as e:
-    print(f"⚠️ OCR Extractor not available: {e}")
+    print(f"[WARNING] OCR Extractor not available: {e}")
 
 # Try to import recognition - use venv wrapper to avoid NumPy issues
 RECOGNITION_AVAILABLE = False
@@ -75,14 +80,14 @@ try:
     try:
         from hr_management.processing.person_recognition_inference_simple import PersonRecognitionInferenceSimple
         RECOGNITION_AVAILABLE = True
-        print("✅ Person Recognition available (direct)")
+        print("[OK] Person Recognition available (direct)")
     except ImportError as e:
         # Use virtual environment wrapper as fallback
         from processing.venv_recognition_wrapper import VenvRecognitionWrapper, recognize_in_venv
         RECOGNITION_AVAILABLE = True
-        print("✅ Person Recognition available (via venv wrapper)")
+        print("[OK] Person Recognition available (via venv wrapper)")
 except Exception as e:
-    print(f"⚠️ Person Recognition not available: {e}")
+    print(f"[WARNING] Person Recognition not available: {e}")
     RECOGNITION_AVAILABLE = False
 
 def get_next_person_id():
@@ -118,7 +123,7 @@ def get_next_person_id():
                 data = json.load(f)
                 max_counter_id = data.get('last_person_id', 0)
         except Exception as e:
-            print(f"⚠️ Error reading counter file: {e}")
+            print(f"[WARNING] Error reading counter file: {e}")
     
     # Use the maximum of both
     max_id = max(max_folder_id, max_counter_id)
@@ -133,9 +138,13 @@ def get_next_person_id():
                 'total_persons': len(existing_persons)
             }, f, indent=2)
     except Exception as e:
-        print(f"⚠️ Error updating counter file: {e}")
+        print(f"[WARNING] Error updating counter file: {e}")
     
-    print(f"📊 Found {len(existing_persons)} existing persons, next ID will be: PERSON-{next_id:04d}")
+    if sys.platform == 'win32':
+        # Use ASCII characters on Windows to avoid encoding issues
+        print(f"[INFO] Found {len(existing_persons)} existing persons, next ID will be: PERSON-{next_id:04d}")
+    else:
+        print(f"[INFO] Found {len(existing_persons)} existing persons, next ID will be: PERSON-{next_id:04d}")
     return next_id
 
 
@@ -160,9 +169,9 @@ def update_person_id_counter(last_used_id):
                     'last_person_id': last_used_id,
                     'updated_at': datetime.now().isoformat()
                 }, f, indent=2)
-            print(f"📊 Updated person ID counter to: {last_used_id}")
+            print(f"[INFO] Updated person ID counter to: {last_used_id}")
     except Exception as e:
-        print(f"⚠️ Error updating person ID counter: {e}")
+        print(f"[WARNING] Error updating person ID counter: {e}")
 
 
 def update_video_progress(video_id, progress, message="Processing...", app=None):
@@ -185,12 +194,12 @@ def update_video_progress(video_id, progress, message="Processing...", app=None)
                     db.session.close()
                     db.session.remove()
                     
-                    print(f"📊 Progress updated: {progress}% - {message}")
+                    print(f"[INFO] Progress updated: {progress}% - {message}")
         else:
             # Just log without database update
-            print(f"📊 Progress: {progress}% - {message}")
+            print(f"[INFO] Progress: {progress}% - {message}")
     except Exception as e:
-        print(f"⚠️ Could not update progress: {e}")
+        print(f"[WARNING] Could not update progress: {e}")
         # Don't propagate the error - progress updates are non-critical
 
 def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=None):
@@ -198,24 +207,28 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
     GPU-accelerated person detection with optimizations for large videos
     """
     try:
-        # Default GPU configuration
+        # Default GPU configuration - more conservative for stability
         if gpu_config is None:
             gpu_config = {
                 'use_gpu': CUDA_AVAILABLE,
-                'batch_size': 4 if CUDA_AVAILABLE else 2,  # Reduced from 8 to 4 for stability
+                'batch_size': 2 if CUDA_AVAILABLE else 1,  # Further reduced for stability
                 'device': 'cuda:0' if CUDA_AVAILABLE else 'cpu',
-                'fp16': CUDA_AVAILABLE,
-                'num_workers': 4
+                'fp16': False,  # Disabled FP16 for stability
+                'num_workers': 2  # Reduced workers to prevent CPU overload
             }
         
-        print(f"🎮 GPU Detection Config: {gpu_config}")
-        print(f"📊 CUDA Available: {CUDA_AVAILABLE}")
+        print(f"[GPU] GPU Detection Config: {gpu_config}")
+        print(f"[INFO] CUDA Available: {CUDA_AVAILABLE}")
         if CUDA_AVAILABLE and TORCH_AVAILABLE:
-            print(f"🎮 GPU Device: {torch.cuda.get_device_name(0)}")
-            print(f"💾 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+            print(f"[GPU] GPU Device: {torch.cuda.get_device_name(0)}")
+            print(f"[SAVE] GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+        
+        # Checkpoint system removed - process from beginning
+        checkpoint_helper = None
+        resume_data = None
         
         # Skip progress updates during processing to avoid database connections
-        print("📊 Progress: 5% - Initializing GPU detection...")
+        print("[INFO] Progress: 5% - Initializing GPU detection...")
         
         # Set CUDA to use less aggressive memory allocation
         if CUDA_AVAILABLE and torch.cuda.is_available():
@@ -245,7 +258,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                         # Use the latest refined model
                         latest_model = max(refined_models, key=lambda p: p.stat().st_mtime)
                         model_name = latest_model.name
-                        print(f"🎯 Using model: {model_name}")
+                        print(f"[TARGET] Using model: {model_name}")
                     else:
                         # Try the default model from config
                         config_path = Path("models/person_recognition/config.json")
@@ -254,29 +267,29 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                             with open(config_path) as f:
                                 config = json.load(f)
                             model_name = config.get('default_model', 'person_model_svm_20250607_181818')
-                            print(f"🎯 Using default model from config: {model_name}")
+                            print(f"[TARGET] Using default model from config: {model_name}")
                         else:
                             model_name = 'person_model_svm_20250607_181818'
-                            print(f"🎯 Using fallback model: {model_name}")
+                            print(f"[TARGET] Using fallback model: {model_name}")
                     
                     ui_style_recognizer = PersonRecognitionInferenceSimple(
                         model_name=model_name,
                         confidence_threshold=0.8  # High threshold for automatic recognition
                     )
-                    print("✅ Person Recognizer initialized directly")
+                    print("[OK] Person Recognizer initialized directly")
                 except (ImportError, Exception) as e:
                     # Use venv wrapper
-                    print(f"⚠️ Direct load failed: {e}")
-                    print("🔄 Using virtual environment wrapper for recognition")
+                    print(f"[WARNING] Direct load failed: {e}")
+                    print("[PROCESSING] Using virtual environment wrapper for recognition")
                     try:
                         from processing.venv_recognition_wrapper import VenvRecognitionWrapper
                         ui_style_recognizer = VenvRecognitionWrapper()
-                        print("✅ Person recognition loaded via venv wrapper")
+                        print("[OK] Person recognition loaded via venv wrapper")
                     except Exception as venv_error:
-                        print(f"❌ Venv recognition error: {venv_error}")
+                        print(f"[ERROR] Venv recognition error: {venv_error}")
                         ui_style_recognizer = None
             except Exception as e:
-                print(f"❌ Could not initialize any recognizer: {e}")
+                print(f"[ERROR] Could not initialize any recognizer: {e}")
                 ui_style_recognizer = None
         
         # Initialize video capture with backend preference
@@ -293,12 +306,12 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             try:
                 cap = cv2.VideoCapture(video_path, backend)
                 if cap.isOpened():
-                    print(f"✅ Opened video with backend: {backend}")
+                    print(f"[OK] Opened video with backend: {backend}")
                     break
                 else:
                     cap.release()
             except Exception as e:
-                print(f"⚠️ Failed with backend {backend}: {e}")
+                print(f"[WARNING] Failed with backend {backend}: {e}")
                 continue
         
         if cap is None or not cap.isOpened():
@@ -313,20 +326,22 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         
         # Get input file size
         input_size_mb = Path(video_path).stat().st_size / (1024 * 1024)
-        print(f"📹 Video: {width}x{height} @ {fps:.1f}fps, {total_frames} frames, {duration:.1f}s")
-        print(f"📁 Input size: {input_size_mb:.1f} MB")
+        print(f"[VIDEO] Video: {width}x{height} @ {fps:.1f}fps, {total_frames} frames, {duration:.1f}s")
+        print(f"[FILE] Input size: {input_size_mb:.1f} MB")
         
         # Update progress: Video loaded
         if video_id:
             # Skip DB update to avoid connection pool issues
-            print(f"📊 Progress: 10% - Video loaded: {total_frames} frames, {duration:.1f}s")
+            print(f"[INFO] Progress: 10% - Video loaded: {total_frames} frames, {duration:.1f}s")
+        
+        # No checkpoint system - removed for stability
         
         # Extract OCR data (timestamp and location) from video
         ocr_data = None
         if OCR_AVAILABLE:
-            print("\n🔤 Extracting OCR data from video...")
+            print("\n[TEXT] Extracting OCR data from video...")
             if video_id:
-                print("📊 Progress: 12% - Extracting timestamps and location...")
+                print("[INFO] Progress: 12% - Extracting timestamps and location...")
             
             try:
                 ocr_extractor = VideoOCRExtractor(ocr_engine='easyocr')
@@ -335,14 +350,14 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 ocr_data = ocr_extractor.extract_video_info(video_path, sample_interval=sample_interval)
                 
                 if ocr_data:
-                    print(f"✅ OCR extraction complete:")
+                    print(f"[OK] OCR extraction complete:")
                     print(f"   - Location: {ocr_data.get('location', 'Not found')}")
                     print(f"   - Video Date: {ocr_data.get('video_date', 'Not found')}")
                     print(f"   - Confidence: {ocr_data.get('confidence', 0):.2%}")
                 else:
-                    print("⚠️ No OCR data extracted")
+                    print("[WARNING] No OCR data extracted")
             except Exception as e:
-                print(f"⚠️ OCR extraction failed: {e}")
+                print(f"[WARNING] OCR extraction failed: {e}")
                 ocr_data = None
         
         # Create output directory for annotated video
@@ -371,9 +386,9 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             from .windows_video_writer import create_windows_compatible_writer
             out, actual_output_path = create_windows_compatible_writer(output_path, output_fps, width, height)
             output_path = actual_output_path  # Update path in case extension changed
-            print(f"✅ Video writer initialized successfully")
+            print(f"[OK] Video writer initialized successfully")
         except Exception as e:
-            print(f"⚠️ Failed to use Windows-compatible writer: {e}")
+            print(f"[WARNING] Failed to use Windows-compatible writer: {e}")
             
             # Simple fallback - try mp4v directly
             try:
@@ -381,17 +396,17 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 out = cv2.VideoWriter(str(output_path), fourcc, output_fps, (width, height), True)
                 
                 if out.isOpened():
-                    print(f"✅ Using MPEG-4 codec (fallback)")
+                    print(f"[OK] Using MPEG-4 codec (fallback)")
                 else:
                     out.release()
                     out = None
             except Exception as e:
-                print(f"⚠️ Failed to use mp4v codec: {e}")
+                print(f"[WARNING] Failed to use mp4v codec: {e}")
         
         # If MP4 codecs fail, try XVID in AVI container
         if out is None:
             avi_output_path = str(output_path).replace('.mp4', '.avi')
-            print(f"🔄 Trying AVI container with XVID codec: {avi_output_path}")
+            print(f"[PROCESSING] Trying AVI container with XVID codec: {avi_output_path}")
             
             try:
                 # Use XVID for better compression
@@ -399,18 +414,18 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 out = cv2.VideoWriter(avi_output_path, fourcc, output_fps, (width, height), True)
                 if out.isOpened():
                     output_path = Path(avi_output_path)
-                    print(f"✅ Using XVID codec in AVI container")
-                    print(f"📹 Output settings: {width}x{height} @ {output_fps}fps")
-                    print(f"⚠️  Note: AVI files may need conversion for web playback")
+                    print(f"[OK] Using XVID codec in AVI container")
+                    print(f"[VIDEO] Output settings: {width}x{height} @ {output_fps}fps")
+                    print(f"[WARNING]  Note: AVI files may need conversion for web playback")
                 else:
                     out.release()
                     out = None
             except Exception as e:
-                print(f"⚠️ Failed to use AVI container: {e}")
+                print(f"[WARNING] Failed to use AVI container: {e}")
         
         if out is None:
-            print("❌ ERROR: Could not initialize video writer with any codec!")
-            print("💡 Please install FFmpeg for better codec support:")
+            print("[ERROR] ERROR: Could not initialize video writer with any codec!")
+            print("[TIP] Please install FFmpeg for better codec support:")
             print("   Windows: winget install ffmpeg")
             print("   Or download from: https://ffmpeg.org/download.html")
             return {'error': 'Failed to initialize video writer. Please install FFmpeg.'}
@@ -426,21 +441,21 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
             if gpu_config['use_gpu']:
                 try:
                     model.to(gpu_config['device'])
-                    print(f"✅ YOLO model loaded on GPU: {gpu_config['device']}")
+                    print(f"[OK] YOLO model loaded on GPU: {gpu_config['device']}")
                     
                     # Enable half precision for faster inference
                     if gpu_config['fp16']:
                         model.half()
-                        print("✅ Using FP16 half precision for faster GPU inference")
+                        print("[OK] Using FP16 half precision for faster GPU inference")
                 except Exception as e:
-                    print(f"⚠️ Failed to use GPU: {e}")
-                    print("📌 Falling back to CPU mode")
+                    print(f"[WARNING] Failed to use GPU: {e}")
+                    print("[PIN] Falling back to CPU mode")
                     gpu_config['use_gpu'] = False
                     gpu_config['device'] = 'cpu'
                     gpu_config['fp16'] = False
             
         except ImportError:
-            print("⚠️ Ultralytics not available, using OpenCV DNN as fallback")
+            print("[WARNING] Ultralytics not available, using OpenCV DNN as fallback")
             # Fallback to OpenCV DNN (still GPU-accelerated if available)
             model = load_opencv_dnn_model()
             gpu_config['use_gpu'] = False
@@ -455,9 +470,9 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                     device=gpu_config['device'],
                     initial_track_id=next_person_id
                 )
-                print("✅ Using GPU Appearance Tracker for enhanced person tracking")
+                print("[OK] Using GPU Appearance Tracker for enhanced person tracking")
             except Exception as e:
-                print(f"⚠️ Failed to initialize GPU tracker: {e}")
+                print(f"[WARNING] Failed to initialize GPU tracker: {e}")
                 gpu_tracker = None
         
         # Process video in batches for GPU efficiency
@@ -468,16 +483,16 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         person_tracks = {}  # Track persons across frames
         next_person_id = get_next_person_id()  # Get global next ID instead of starting from 1
         
-        print(f"🚀 Starting GPU-accelerated detection with batch size: {batch_size}")
+        print(f"[START] Starting GPU-accelerated detection with batch size: {batch_size}")
         
         frame_count = 0
         processed_frames = 0
         written_frames = 0  # Track actual frames written to output
         
-        print(f"📊 Video info: {total_frames} frames @ {fps}fps = {duration:.1f}s")
-        print(f"⚡ Skip frames: {skip_frames} (processing every {skip_frames} frame{'s' if skip_frames > 1 else ''})")
+        print(f"[INFO] Video info: {total_frames} frames @ {fps}fps = {duration:.1f}s")
+        print(f"[FAST] Skip frames: {skip_frames} (processing every {skip_frames} frame{'s' if skip_frames > 1 else ''})")
         if skip_frames > 1:
-            print(f"📹 Output video will be @ {output_fps}fps to maintain correct timing")
+            print(f"[VIDEO] Output video will be @ {output_fps}fps to maintain correct timing")
         
         while True:
             ret, frame = cap.read()
@@ -499,6 +514,30 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 # Apply resource throttling before GPU operations
                 if THROTTLING_ENABLED and throttler:
                     throttler.throttle()
+                    
+                    # Extra safety check - wait if resources critically high
+                    if throttler.throttle_level >= 3:
+                        print("[WARNING] System under heavy load, waiting for resources...")
+                        wait_time = 5.0  # Start with 5 seconds
+                        max_wait_time = 30.0  # Maximum wait time
+                        
+                        while throttler.throttle_level >= 3:
+                            print(f"   Waiting {wait_time:.1f}s for resources to become available...")
+                            time.sleep(wait_time)
+                            
+                            # Clear memory if using GPU
+                            if CUDA_AVAILABLE and torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+                                import gc
+                                gc.collect()
+                            
+                            # Increase wait time for next iteration (exponential backoff)
+                            wait_time = min(wait_time * 1.5, max_wait_time)
+                            
+                            # Re-check throttle level
+                            throttler.throttle_level = throttler.calculate_throttle_level()
+                        
+                        print("[OK] Resources available, continuing processing...")
                 
                 # Run batch inference
                 if gpu_tracker:
@@ -508,8 +547,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                             process_batch_gpu_with_tracker,
                             model, frame_batch, frame_numbers, 
                             gpu_config, gpu_tracker, fps,
-                            ui_style_recognizer=ui_style_recognizer,
-                            batch_size=len(frame_batch)
+                            ui_style_recognizer=ui_style_recognizer
                         )
                     else:
                         batch_detections = process_batch_gpu_with_tracker(
@@ -524,8 +562,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                             process_batch_gpu,
                             model, frame_batch, frame_numbers, 
                             gpu_config, person_tracks, next_person_id,
-                            ui_style_recognizer=ui_style_recognizer,
-                            batch_size=len(frame_batch)
+                            ui_style_recognizer=ui_style_recognizer
                         )
                     else:
                         batch_detections = process_batch_gpu(
@@ -577,11 +614,13 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 
                 # Progress update
                 progress = 10 + (processed_frames / total_frames) * 80  # 10-90% for detection
-                print(f"🔄 GPU Processing: {progress:.1f}% ({processed_frames}/{total_frames} frames)")
+                print(f"[PROCESSING] GPU Processing: {progress:.1f}% ({processed_frames}/{total_frames} frames)")
                 
                 # Update database progress
                 if video_id:
-                    print(f"📊 Progress: {int(progress)}% - Detecting persons: {processed_frames}/{total_frames} frames")
+                    print(f"[INFO] Progress: {int(progress)}% - Detecting persons: {processed_frames}/{total_frames} frames")
+                
+                # No checkpoint saving - removed for stability
             
             frame_count += 1
         
@@ -598,9 +637,9 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         # Verify output video
         output_size_mb = output_path.stat().st_size / (1024 * 1024) if output_path.exists() else 0
         
-        print(f"✅ GPU processing complete: {len(detections)} detections")
-        print(f"📁 Annotated video saved: {output_path}")
-        print(f"📊 Frame statistics:")
+        print(f"[OK] GPU processing complete: {len(detections)} detections")
+        print(f"[FILE] Annotated video saved: {output_path}")
+        print(f"[INFO] Frame statistics:")
         print(f"   - Input frames: {total_frames}")
         print(f"   - Processed frames: {processed_frames}")
         print(f"   - Written frames: {written_frames}")
@@ -609,13 +648,13 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         # Verify no frame duplication
         expected_written = processed_frames  # Should match exactly
         if written_frames != expected_written:
-            print(f"⚠️  WARNING: Frame count mismatch! Written: {written_frames}, Expected: {expected_written}")
+            print(f"[WARNING]  WARNING: Frame count mismatch! Written: {written_frames}, Expected: {expected_written}")
         else:
-            print(f"✅ Frame count verified: {written_frames} frames written correctly")
+            print(f"[OK] Frame count verified: {written_frames} frames written correctly")
         
         # Warn if output is too large
         if output_size_mb > 1000:  # More than 1GB
-            print(f"⚠️  WARNING: Output video is very large ({output_size_mb:.1f} MB)")
+            print(f"[WARNING]  WARNING: Output video is very large ({output_size_mb:.1f} MB)")
             print(f"   Consider using better compression or reducing quality")
         
         # Convert to web format if needed (AVI or problematic MP4)
@@ -623,7 +662,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         # Always convert to ensure compression and web compatibility
         # Convert if: AVI format, large size, or always for consistent compression
         if str(output_path).endswith('.avi') or output_size_mb > 100:
-            print(f"\n🔄 Converting to web-compatible format...")
+            print(f"\n[PROCESSING] Converting to web-compatible format...")
             try:
                 from .convert_to_web import convert_video_to_web_format
                 web_path = convert_video_to_web_format(output_path)
@@ -633,18 +672,18 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                         output_path.unlink()
                     final_output_path = web_path
                     final_size_mb = final_output_path.stat().st_size / (1024 * 1024) if final_output_path.exists() else 0
-                    print(f"✅ Converted to web format: {final_output_path}")
-                    print(f"📊 Final size: {final_size_mb:.1f} MB (compression ratio: {input_size_mb/final_size_mb:.1f}x)")
+                    print(f"[OK] Converted to web format: {final_output_path}")
+                    print(f"[INFO] Final size: {final_size_mb:.1f} MB (compression ratio: {input_size_mb/final_size_mb:.1f}x)")
                     
                     # Verify output is smaller than input
                     if final_size_mb >= input_size_mb:
-                        print(f"⚠️  WARNING: Output ({final_size_mb:.1f} MB) is not smaller than input ({input_size_mb:.1f} MB)!")
+                        print(f"[WARNING]  WARNING: Output ({final_size_mb:.1f} MB) is not smaller than input ({input_size_mb:.1f} MB)!")
             except Exception as e:
-                print(f"⚠️  Could not convert to web format: {e}")
+                print(f"[WARNING]  Could not convert to web format: {e}")
                 print("   Video may not play in browser without FFmpeg")
         
         # Extract person images before finalizing
-        print(f"\n📸 Extracting person images...")
+        print(f"\n[CAMERA] Extracting person images...")
         # Keep persons in a separate directory for organization
         persons_dir = Path('processing/outputs/persons')
         persons_dir.mkdir(parents=True, exist_ok=True)
@@ -678,7 +717,7 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         
         # Update progress: Finalizing
         if video_id:
-            print(f"📊 Progress: 95% - Finalizing: {len(detections)} detections found")
+            print(f"[INFO] Progress: 95% - Finalizing: {len(detections)} detections found")
         
         # Create processing summary
         unique_persons = len(set(d.get('person_id', 0) for d in detections if d.get('person_id')))
@@ -699,6 +738,8 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         # The database expects just the filename, not the full path
         # Use final_output_path which might be the web-converted version
         annotated_filename = final_output_path.name if isinstance(final_output_path, Path) else Path(final_output_path).name
+        
+        # No checkpoint deletion needed - system removed
         
         return {
             'detections': detections,
@@ -727,8 +768,11 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"❌ GPU detection error: {str(e)}")
-        print(f"📋 Trace: {error_trace}")
+        print(f"[ERROR] GPU detection error: {str(e)}")
+        print(f"[TRACE] Trace: {error_trace}")
+        
+        # No error checkpoint - focus on preventing crashes instead
+        
         return {'error': str(e), 'trace': error_trace}
 
 
@@ -774,7 +818,7 @@ def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, n
                         MIN_BBOX_WIDTH = 128
                         
                         if bbox_width < MIN_BBOX_WIDTH:
-                            print(f"⚠️ Skipping person detection: bbox width {bbox_width}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                            print(f"[WARNING] Skipping person detection: bbox width {bbox_width}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
                             continue
                         
                         # Simple tracking based on position
@@ -847,7 +891,7 @@ def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, n
                     detections.append(detection)
     
     except Exception as e:
-        print(f"⚠️ Batch processing error: {e}")
+        print(f"[WARNING] Batch processing error: {e}")
     
     return detections
 
@@ -1023,10 +1067,10 @@ def load_opencv_dnn_model():
             net.setPreferableTarget(cv2.dnn.DNN_TARGET_OPENCL)
             return net
         else:
-            print("⚠️ OpenCV DNN model files not found")
+            print("[WARNING] OpenCV DNN model files not found")
             return None
     except Exception as e:
-        print(f"⚠️ Failed to load OpenCV DNN model: {e}")
+        print(f"[WARNING] Failed to load OpenCV DNN model: {e}")
         return None
 
 
@@ -1087,7 +1131,7 @@ def validate_and_merge_tracks(person_tracks):
             overlap = len(existing_frames & current_frames)
             if overlap > min(len(existing_frames), len(current_frames)) * 0.8:  # Increased from 0.3 to prevent merging different people
                 # Merge into existing track
-                print(f"🔄 Merging track {person_id} into {existing_id} (overlap: {overlap} frames)")
+                print(f"[PROCESSING] Merging track {person_id} into {existing_id} (overlap: {overlap} frames)")
                 existing_detections.extend(detections)
                 is_duplicate = True
                 break
@@ -1113,11 +1157,11 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir, ui_style_re
         persons_dir: Directory to save person data
         ui_style_recognizer: Optional PersonRecognitionInferenceSimple instance for recognition
     """
-    print(f"📸 Extracting person data to {persons_dir}")
+    print(f"[CAMERA] Extracting person data to {persons_dir}")
     
     # Import recognition module if needed
     if ui_style_recognizer is not None:
-        print("✅ Person recognition enabled during extraction")
+        print("[OK] Person recognition enabled during extraction")
         import tempfile
         import os as temp_os
     
@@ -1126,7 +1170,7 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir, ui_style_re
     
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print(f"❌ Failed to open video for person extraction: {video_path}")
+        print(f"[ERROR] Failed to open video for person extraction: {video_path}")
         return
     
     extracted_count = 0
@@ -1137,7 +1181,7 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir, ui_style_re
         recognition_confidence = 0.0
         
         if ui_style_recognizer and len(detections) > 0:
-            print(f"🔍 Attempting recognition for tracked person {person_id}...")
+            print(f"[SEARCH] Attempting recognition for tracked person {person_id}...")
             
             # Try recognition on first valid detection
             for i, detection in enumerate(detections[:3]):  # Try up to 3 frames
@@ -1190,11 +1234,11 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir, ui_style_re
                                         recognition_confidence = first_person['confidence']
                             
                             if recognized_person_id:
-                                print(f"✅ Pre-recognition successful: {recognized_person_id} ({recognition_confidence:.2%})")
+                                print(f"[OK] Pre-recognition successful: {recognized_person_id} ({recognition_confidence:.2%})")
                                 break
                                 
                         except Exception as e:
-                            print(f"⚠️ Pre-recognition error: {e}")
+                            print(f"[WARNING] Pre-recognition error: {e}")
             
             # Reset video position
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -1202,13 +1246,13 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir, ui_style_re
         # Now determine folder name based on recognition
         if recognized_person_id:
             person_id_str = recognized_person_id
-            print(f"🎯 Using recognized ID for folder: {person_id_str}")
+            print(f"[TARGET] Using recognized ID for folder: {person_id_str}")
         else:
             if isinstance(person_id, int):
                 person_id_str = f"PERSON-{person_id:04d}"
             else:
                 person_id_str = str(person_id)
-            print(f"🆕 Creating new person folder: {person_id_str}")
+            print(f"[NEW] Creating new person folder: {person_id_str}")
         
         person_dir = persons_dir / person_id_str
         person_dir.mkdir(parents=True, exist_ok=True)
@@ -1307,12 +1351,12 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir, ui_style_re
         
         if len(person_metadata["images"]) > 0:
             extracted_count += 1
-            print(f"✅ Created {person_id_str} folder with {len(person_metadata['images'])} images (from {len(detections)} detections)")
+            print(f"[OK] Created {person_id_str} folder with {len(person_metadata['images'])} images (from {len(detections)} detections)")
         else:
-            print(f"⚠️ No valid images for {person_id_str} (all too small)")
+            print(f"[WARNING] No valid images for {person_id_str} (all too small)")
     
     cap.release()
-    print(f"📸 Extracted {extracted_count} persons with valid images")
+    print(f"[CAMERA] Extracted {extracted_count} persons with valid images")
     return extracted_count
 
 
@@ -1391,6 +1435,6 @@ def process_batch_gpu_with_tracker(model, frames, frame_numbers, gpu_config, gpu
         return detections
         
     except Exception as e:
-        print(f"⚠️ GPU tracker error: {e}, falling back to simple tracking")
+        print(f"[WARNING] GPU tracker error: {e}, falling back to simple tracking")
         # Fall back to simple tracking
         return process_batch_gpu(model, frames, frame_numbers, gpu_config, {}, 1)

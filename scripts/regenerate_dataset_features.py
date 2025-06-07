@@ -45,7 +45,7 @@ def regenerate_features(dataset_name):
         
         print(f"  Generated {feature_count} features for {person_id}")
     
-    print("✅ Feature regeneration complete")
+    print("[OK] Feature regeneration complete")
 
 if __name__ == "__main__":
     regenerate_features('all_persons_2025_05_27')

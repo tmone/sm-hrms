@@ -17,33 +17,33 @@ def test_dataset_update():
     # Find a dataset to test with
     datasets_dir = Path('datasets/person_recognition')
     if not datasets_dir.exists():
-        print("❌ No datasets directory found")
+        print("[ERROR] No datasets directory found")
         return
     
     # Get first dataset
     dataset_dirs = [d for d in datasets_dir.iterdir() if d.is_dir()]
     if not dataset_dirs:
-        print("❌ No datasets found")
+        print("[ERROR] No datasets found")
         return
     
     dataset_dir = dataset_dirs[0]
     dataset_info_path = dataset_dir / 'dataset_info.json'
     
     if not dataset_info_path.exists():
-        print(f"❌ No dataset_info.json in {dataset_dir.name}")
+        print(f"[ERROR] No dataset_info.json in {dataset_dir.name}")
         return
     
     # Load dataset info
     with open(dataset_info_path) as f:
         dataset_info = json.load(f)
     
-    print(f"📊 Testing with dataset: {dataset_dir.name}")
+    print(f"[INFO] Testing with dataset: {dataset_dir.name}")
     print(f"   Total persons: {len(dataset_info.get('persons', {}))}")
     
     # Get a person ID to test with (but don't actually delete)
     person_ids = list(dataset_info.get('persons', {}).keys())
     if not person_ids:
-        print("❌ No persons in dataset")
+        print("[ERROR] No persons in dataset")
         return
     
     test_person_id = person_ids[0]
@@ -59,16 +59,16 @@ def test_dataset_update():
         print("\n🧪 Testing update_datasets_after_person_deletion...")
         # We'll pass an empty list to avoid actually deleting anything
         result = update_datasets_after_person_deletion([])
-        print("✅ Function executed without errors")
+        print("[OK] Function executed without errors")
         
         # Now test with a fake person ID that doesn't exist
         fake_id = "PERSON-9999"
         print(f"\n🧪 Testing with non-existent person ID: {fake_id}")
         result = update_datasets_after_person_deletion([fake_id])
-        print("✅ Handled non-existent person ID gracefully")
+        print("[OK] Handled non-existent person ID gracefully")
         
     except Exception as e:
-        print(f"❌ Error: {type(e).__name__}: {str(e)}")
+        print(f"[ERROR] Error: {type(e).__name__}: {str(e)}")
         import traceback
         traceback.print_exc()
 

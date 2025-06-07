@@ -18,21 +18,21 @@ def migrate():
             print("Adding annotated_video_path column to videos table...")
             cursor.execute("ALTER TABLE videos ADD COLUMN annotated_video_path VARCHAR(500)")
             conn.commit()
-            print("✅ Migration completed successfully!")
+            print("[OK] Migration completed successfully!")
         else:
-            print("✅ Column annotated_video_path already exists, skipping migration.")
+            print("[OK] Column annotated_video_path already exists, skipping migration.")
         
         # Also add processing_progress if missing
         if 'processing_progress' not in columns:
             print("Adding processing_progress column to videos table...")
             cursor.execute("ALTER TABLE videos ADD COLUMN processing_progress INTEGER DEFAULT 0")
             conn.commit()
-            print("✅ Added processing_progress column!")
+            print("[OK] Added processing_progress column!")
         
         conn.close()
         
     except Exception as e:
-        print(f"❌ Migration failed: {e}")
+        print(f"[ERROR] Migration failed: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

@@ -71,9 +71,9 @@ def debug_attendance_500():
             # Test pagination
             try:
                 pagination = base_query.paginate(page=page, per_page=per_page, error_out=False)
-                print(f"   ✅ Pagination successful: {pagination.total} total records")
+                print(f"   [OK] Pagination successful: {pagination.total} total records")
             except Exception as e:
-                print(f"   ❌ Pagination error: {e}")
+                print(f"   [ERROR] Pagination error: {e}")
                 traceback.print_exc()
                 return
             
@@ -89,7 +89,7 @@ def debug_attendance_500():
                     # Get video info - THIS MIGHT BE THE ISSUE
                     video = Video.query.get(record.video_id)
                     if not video:
-                        print(f"   ⚠️  WARNING: Video {record.video_id} not found!")
+                        print(f"   [WARNING]  WARNING: Video {record.video_id} not found!")
                     else:
                         print(f"   - Video filename: {video.filename}")
                     
@@ -134,10 +134,10 @@ def debug_attendance_500():
                     }
                     
                     attendance_records.append(attendance_record)
-                    print(f"   ✅ Record processed successfully")
+                    print(f"   [OK] Record processed successfully")
                     
                 except Exception as e:
-                    print(f"   ❌ Error processing record: {e}")
+                    print(f"   [ERROR] Error processing record: {e}")
                     traceback.print_exc()
             
             print(f"\n3. Successfully processed {len(attendance_records)} records")
@@ -151,13 +151,13 @@ def debug_attendance_500():
                     DetectedPerson.attendance_location.isnot(None)
                 ).all()
                 locations = [loc[0] for loc in all_locations]
-                print(f"   ✅ Found locations: {locations}")
+                print(f"   [OK] Found locations: {locations}")
             except Exception as e:
-                print(f"   ❌ Locations query error: {e}")
+                print(f"   [ERROR] Locations query error: {e}")
                 traceback.print_exc()
                 
         except Exception as e:
-            print(f"\n❌ MAIN ERROR: {e}")
+            print(f"\n[ERROR] MAIN ERROR: {e}")
             traceback.print_exc()
 
 if __name__ == "__main__":

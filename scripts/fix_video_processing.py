@@ -23,30 +23,30 @@ def show_video_processing_status():
         with open(gpu_detection_file, 'r') as f:
             content = f.read()
             
-        print("✅ GPU Enhanced Detection Module:")
+        print("[OK] GPU Enhanced Detection Module:")
         
         # Check for duplicate frame issue
         if "last_annotated_frame = None" in content:
-            print("  ✅ Fixed: Duplicate frame issue resolved")
+            print("  [OK] Fixed: Duplicate frame issue resolved")
             print("     - Skipped frames now use last annotated frame")
             print("     - No more original frames mixed with annotated ones")
         else:
-            print("  ❌ Issue: May still have duplicate frames")
+            print("  [ERROR] Issue: May still have duplicate frames")
         
         # Check for H.264 codec
         if "h264_codecs" in content and "H264" in content:
-            print("  ✅ Fixed: H.264 codec support for browser compatibility")
+            print("  [OK] Fixed: H.264 codec support for browser compatibility")
             print("     - Multiple H.264 variants attempted")
             print("     - Fallback to MJPEG in AVI if needed")
         else:
-            print("  ⚠️  Warning: May not have proper H.264 support")
+            print("  [WARNING]  Warning: May not have proper H.264 support")
     else:
-        print("❌ GPU Enhanced Detection module not found")
+        print("[ERROR] GPU Enhanced Detection module not found")
     
     print()
     
     # Show the key changes made
-    print("🔧 Key Changes Made:")
+    print("[CONFIG] Key Changes Made:")
     print()
     print("1. Frame Processing Fix:")
     print("   Before: Writing both original and annotated frames (duplicate)")
@@ -73,7 +73,7 @@ def show_video_processing_status():
     
     # Check for test videos
     print()
-    print("📹 Checking for test videos...")
+    print("[VIDEO] Checking for test videos...")
     outputs_dir = Path("processing/outputs")
     if outputs_dir.exists():
         video_files = list(outputs_dir.glob("*_annotated_*.mp4")) + list(outputs_dir.glob("*_annotated_*.avi"))
@@ -118,9 +118,9 @@ def reprocess_video(video_path):
     )
     
     if 'error' in result:
-        print(f"❌ Error: {result['error']}")
+        print(f"[ERROR] Error: {result['error']}")
     else:
-        print(f"✅ Success: {result.get('annotated_video_path')}")
+        print(f"[OK] Success: {result.get('annotated_video_path')}")
         summary = result.get('processing_summary', {})
         print(f"   - Detections: {summary.get('total_detections', 0)}")
         print(f"   - Persons: {summary.get('total_persons', 0)}")
@@ -156,7 +156,7 @@ if __name__ == "__main__":
     with open("reprocess_videos.py", "w") as f:
         f.write(script_content)
     
-    print("\n✅ Created reprocess_videos.py script")
+    print("\n[OK] Created reprocess_videos.py script")
     print("   Usage: python reprocess_videos.py [video_path]")
     print("   Without args: Process all videos in uploads/")
 

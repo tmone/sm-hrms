@@ -34,26 +34,26 @@ def main():
     cleanup_manager = get_cleanup_manager()
     
     if args.dry_run:
-        print("🔍 DRY RUN MODE - No files will be deleted\n")
+        print("[SEARCH] DRY RUN MODE - No files will be deleted\n")
         
     if args.chunks_only:
-        print("🗑️  Cleaning up chunk directories...")
+        print("[DELETE]  Cleaning up chunk directories...")
         if not args.dry_run:
             count = cleanup_manager.cleanup_old_chunks(hours_old=args.hours_old)
-            print(f"✅ Cleaned up {count} old chunk directories")
+            print(f"[OK] Cleaned up {count} old chunk directories")
             
     elif args.non_person_only:
-        print("🗑️  Cleaning up non-PERSON directories...")
+        print("[DELETE]  Cleaning up non-PERSON directories...")
         if not args.dry_run:
             count = cleanup_manager.cleanup_non_person_directories()
-            print(f"✅ Cleaned up {count} non-person directories")
+            print(f"[OK] Cleaned up {count} non-person directories")
             
     else:
-        print("🗑️  Performing full cleanup...")
+        print("[DELETE]  Performing full cleanup...")
         if not args.dry_run:
             stats = cleanup_manager.perform_full_cleanup()
             
-            print("\n📊 Cleanup Summary:")
+            print("\n[INFO] Cleanup Summary:")
             print(f"  • Non-person directories: {stats['non_person_dirs']}")
             print(f"  • Old chunk directories: {stats['old_chunks']}")
             print(f"  • Temporary files: {stats['temp_files']}")
@@ -61,7 +61,7 @@ def main():
             print(f"  • Total items cleaned: {stats['total']}")
             
     print(f"\n{'='*60}")
-    print("✅ Cleanup complete!")
+    print("[OK] Cleanup complete!")
     print(f"{'='*60}\n")
 
 

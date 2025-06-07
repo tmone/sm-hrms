@@ -38,9 +38,9 @@ class SimpleRecognitionModel:
             if model_path.exists():
                 with open(model_path, 'rb') as f:
                     self.model = pickle.load(f)
-                logger.info("✅ Loaded model.pkl")
+                logger.info("[OK] Loaded model.pkl")
             else:
-                logger.error("❌ model.pkl not found")
+                logger.error("[ERROR] model.pkl not found")
                 return
                 
             # Load scaler
@@ -48,9 +48,9 @@ class SimpleRecognitionModel:
             if scaler_path.exists():
                 with open(scaler_path, 'rb') as f:
                     self.scaler = pickle.load(f)
-                logger.info("✅ Loaded scaler.pkl")
+                logger.info("[OK] Loaded scaler.pkl")
             else:
-                logger.error("❌ scaler.pkl not found")
+                logger.error("[ERROR] scaler.pkl not found")
                 return
                 
             # Load label encoder
@@ -58,10 +58,10 @@ class SimpleRecognitionModel:
             if encoder_path.exists():
                 with open(encoder_path, 'rb') as f:
                     self.label_encoder = pickle.load(f)
-                logger.info("✅ Loaded label_encoder.pkl")
+                logger.info("[OK] Loaded label_encoder.pkl")
                 logger.info(f"   Classes: {list(self.label_encoder.classes_)}")
             else:
-                logger.error("❌ label_encoder.pkl not found")
+                logger.error("[ERROR] label_encoder.pkl not found")
                 return
                 
             # Load person mapping
@@ -71,14 +71,14 @@ class SimpleRecognitionModel:
                     mapping = json.load(f)
                     # Convert string keys to int
                     self.person_mapping = {int(k): v for k, v in mapping.items()}
-                logger.info(f"✅ Loaded person mappings: {len(self.person_mapping)} persons")
+                logger.info(f"[OK] Loaded person mappings: {len(self.person_mapping)} persons")
             else:
                 # Create mapping from label encoder
                 self.person_mapping = {i: cls for i, cls in enumerate(self.label_encoder.classes_)}
-                logger.info(f"✅ Created person mappings from label encoder")
+                logger.info(f"[OK] Created person mappings from label encoder")
                 
             self.loaded = True
-            logger.info(f"✅ Recognition model loaded successfully!")
+            logger.info(f"[OK] Recognition model loaded successfully!")
             
         except Exception as e:
             logger.error(f"Failed to load model: {type(e).__name__}: {str(e)}")

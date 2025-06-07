@@ -50,13 +50,13 @@ class WorkingRecognitionWrapper:
                     
                     if self.model is not None:
                         self.loaded = True
-                        logger.info(f"✅ Loaded model using trainer method")
+                        logger.info(f"[OK] Loaded model using trainer method")
                         return
                 except Exception as e:
                     logger.debug(f"Trainer method failed: {e}")
                 
                 # If trainer method fails, report it
-                logger.error("❌ Cannot load model - incompatible pickle format")
+                logger.error("[ERROR] Cannot load model - incompatible pickle format")
                 logger.error("The model needs to be retrained with current environment")
                 
         except Exception as e:
@@ -99,10 +99,10 @@ def test_recognition():
     recognizer = get_working_recognizer()
     
     if recognizer.loaded:
-        print("✅ Recognition model loaded successfully!")
+        print("[OK] Recognition model loaded successfully!")
         return True
     else:
-        print("❌ Recognition model not loaded")
+        print("[ERROR] Recognition model not loaded")
         print("\nThe issue is clear:")
         print("1. The UI test works (80.4% confidence for PERSON-0019)")
         print("2. But the model cannot be loaded in video processing")

@@ -10,10 +10,10 @@ video_path = f"static/uploads/{video_filename}"
 
 # Check video properties
 if os.path.exists(video_path):
-    print(f"✅ Video exists: {video_path}")
+    print(f"[OK] Video exists: {video_path}")
     print(f"Size: {os.path.getsize(video_path) / (1024*1024):.1f} MB")
 else:
-    print(f"❌ Video not found: {video_path}")
+    print(f"[ERROR] Video not found: {video_path}")
     exit(1)
 
 # Create test HTML
@@ -77,6 +77,6 @@ html_content = f"""<!DOCTYPE html>
 with open("test_video_playback.html", "w") as f:
     f.write(html_content)
     
-print("✅ Created test_video_playback.html")
-print("📌 Open this file in your browser to test video playback")
-print("📌 Check browser console (F12) for error messages")
+print("[OK] Created test_video_playback.html")
+print("[PIN] Open this file in your browser to test video playback")
+print("[PIN] Check browser console (F12) for error messages")

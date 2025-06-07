@@ -15,15 +15,15 @@ def fix_dataset_features(dataset_name):
     
     dataset_path = Path('datasets/person_recognition') / dataset_name
     if not dataset_path.exists():
-        print(f"❌ Dataset not found: {dataset_name}")
+        print(f"[ERROR] Dataset not found: {dataset_name}")
         return False
     
-    print(f"🔄 Fixing dataset: {dataset_name}")
+    print(f"[PROCESSING] Fixing dataset: {dataset_name}")
     
     # Load dataset info
     info_path = dataset_path / 'dataset_info.json'
     if not info_path.exists():
-        print(f"❌ Dataset info not found")
+        print(f"[ERROR] Dataset info not found")
         return False
     
     with open(info_path) as f:
@@ -39,7 +39,7 @@ def fix_dataset_features(dataset_name):
     # Process each person
     total_features = 0
     for person_id, person_data in dataset_info['persons'].items():
-        print(f"\n📊 Processing {person_id}...")
+        print(f"\n[INFO] Processing {person_id}...")
         
         person_features_dir = features_dir / person_id
         person_features_dir.mkdir(exist_ok=True)
@@ -47,7 +47,7 @@ def fix_dataset_features(dataset_name):
         # Get images from the images directory
         person_images_dir = dataset_path / 'images' / person_id
         if not person_images_dir.exists():
-            print(f"   ⚠️  No images directory for {person_id}")
+            print(f"   [WARNING]  No images directory for {person_id}")
             continue
         
         features_count = 0
@@ -73,7 +73,7 @@ def fix_dataset_features(dataset_name):
                 
                 features_count += 1
         
-        print(f"   ✅ Extracted {features_count} features")
+        print(f"   [OK] Extracted {features_count} features")
         total_features += features_count
         
         # Update person data
@@ -87,11 +87,11 @@ def fix_dataset_features(dataset_name):
     with open(info_path, 'w') as f:
         json.dump(dataset_info, f, indent=2)
     
-    print(f"\n✅ Fixed dataset {dataset_name}:")
+    print(f"\n[OK] Fixed dataset {dataset_name}:")
     print(f"   Total features extracted: {total_features}")
     
     # Test loading
-    print(f"\n🔄 Testing dataset loading...")
+    print(f"\n[PROCESSING] Testing dataset loading...")
     X, y, person_ids = creator.prepare_training_data(dataset_name)
     print(f"   Loaded {len(X)} samples for {len(person_ids)} persons")
     

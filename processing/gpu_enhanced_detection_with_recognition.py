@@ -33,7 +33,7 @@ def get_recognizer():
                 logger.warning("Recognition model not loaded - will create new IDs for all persons")
                 _recognizer = None
             else:
-                logger.info("✅ Recognition model loaded for GPU detection")
+                logger.info("[OK] Recognition model loaded for GPU detection")
         except Exception as e:
             logger.error(f"Failed to load recognizer: {e}")
             _recognizer = None
@@ -59,7 +59,7 @@ def assign_person_id_with_recognition(x1, y1, x2, y2, frame_num, person_tracks, 
                         recognized_id = result['person_id']
                         confidence = result['confidence']
                         
-                        logger.info(f"🎯 Frame {frame_num}: Recognized {recognized_id} with confidence {confidence:.2f}")
+                        logger.info(f"[TARGET] Frame {frame_num}: Recognized {recognized_id} with confidence {confidence:.2f}")
                         
                         # Extract numeric ID from PERSON-XXXX format
                         try:
@@ -93,9 +93,9 @@ def detect_persons_batch_with_recognition(frames, frame_numbers, model, device='
     # Log once at start
     recognizer = get_recognizer()
     if recognizer is None:
-        logger.warning("⚠️ Recognition disabled - all persons will get new PERSON-XXXX IDs")
+        logger.warning("[WARNING] Recognition disabled - all persons will get new PERSON-XXXX IDs")
     else:
-        logger.info("✅ Recognition enabled for GPU detection")
+        logger.info("[OK] Recognition enabled for GPU detection")
     
     # Call original function
     return original_detect_persons_batch(frames, frame_numbers, model, device)

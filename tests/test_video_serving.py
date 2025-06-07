@@ -13,19 +13,19 @@ def test_video_file_access():
     
     if os.path.exists(video_file):
         file_size = os.path.getsize(video_file)
-        print(f"✅ Video file exists: {video_file}")
-        print(f"📁 File size: {file_size:,} bytes ({file_size / 1024 / 1024:.1f} MB)")
+        print(f"[OK] Video file exists: {video_file}")
+        print(f"[FILE] File size: {file_size:,} bytes ({file_size / 1024 / 1024:.1f} MB)")
         
         # Test reading first few bytes
         try:
             with open(video_file, 'rb') as f:
                 header = f.read(32)
                 print(f"📄 File header: {header.hex()}")
-                print(f"📄 File readable: ✅")
+                print(f"📄 File readable: [OK]")
         except Exception as e:
-            print(f"❌ Error reading file: {e}")
+            print(f"[ERROR] Error reading file: {e}")
     else:
-        print(f"❌ Video file not found: {video_file}")
+        print(f"[ERROR] Video file not found: {video_file}")
     
     print()
 
@@ -35,27 +35,27 @@ def test_flask_imports():
     
     try:
         from flask import Flask
-        print("✅ Flask imported successfully")
+        print("[OK] Flask imported successfully")
         
         # Try to create basic app
         app = Flask(__name__)
-        print("✅ Flask app created successfully")
+        print("[OK] Flask app created successfully")
         
         # Test if our app module works
         sys.path.append('.')
         from app import create_app
         hrm_app = create_app()
-        print("✅ HRM app created successfully")
+        print("[OK] HRM app created successfully")
         
         # Test app configuration
-        print(f"📁 Upload folder: {hrm_app.config.get('UPLOAD_FOLDER')}")
-        print(f"🔧 Debug mode: {hrm_app.config.get('DEBUG')}")
+        print(f"[FILE] Upload folder: {hrm_app.config.get('UPLOAD_FOLDER')}")
+        print(f"[CONFIG] Debug mode: {hrm_app.config.get('DEBUG')}")
         
     except ImportError as e:
-        print(f"❌ Flask import error: {e}")
-        print("💡 Solution: pip install flask flask-sqlalchemy flask-login")
+        print(f"[ERROR] Flask import error: {e}")
+        print("[TIP] Solution: pip install flask flask-sqlalchemy flask-login")
     except Exception as e:
-        print(f"❌ App creation error: {e}")
+        print(f"[ERROR] App creation error: {e}")
     
     print()
 
@@ -76,30 +76,30 @@ def test_url_generation():
             # Test different URL generation methods
             try:
                 stream_url = url_for('videos.stream_video', filename=filename)
-                print(f"🔗 Stream URL: {stream_url}")
+                print(f"[LINK] Stream URL: {stream_url}")
             except Exception as e:
-                print(f"❌ Stream URL error: {e}")
+                print(f"[ERROR] Stream URL error: {e}")
             
             try:
                 serve_url = url_for('videos.serve_video_static', filename=filename)
-                print(f"🔗 Serve URL: {serve_url}")
+                print(f"[LINK] Serve URL: {serve_url}")
             except Exception as e:
-                print(f"❌ Serve URL error: {e}")
+                print(f"[ERROR] Serve URL error: {e}")
             
             try:
                 download_url = url_for('videos.download_video', filename=filename)
-                print(f"🔗 Download URL: {download_url}")
+                print(f"[LINK] Download URL: {download_url}")
             except Exception as e:
-                print(f"❌ Download URL error: {e}")
+                print(f"[ERROR] Download URL error: {e}")
             
             try:
                 static_url = url_for('static', filename=f'uploads/{filename}')
-                print(f"🔗 Static URL: {static_url}")
+                print(f"[LINK] Static URL: {static_url}")
             except Exception as e:
-                print(f"❌ Static URL error: {e}")
+                print(f"[ERROR] Static URL error: {e}")
                 
     except Exception as e:
-        print(f"❌ URL generation failed: {e}")
+        print(f"[ERROR] URL generation failed: {e}")
     
     print()
 
@@ -169,7 +169,7 @@ def create_test_html():
                     console.error(`Video ${{index + 1}} error:`, e);
                     const error = document.createElement('p');
                     error.className = 'error';
-                    error.textContent = `❌ Video failed to load (Error: ${{e.target.error?.code || 'Unknown'}})`;
+                    error.textContent = `[ERROR] Video failed to load (Error: ${{e.target.error?.code || 'Unknown'}})`;
                     video.parentNode.appendChild(error);
                 }});
                 
@@ -181,7 +181,7 @@ def create_test_html():
                     console.log(`Video ${{index + 1}} can play`);
                     const success = document.createElement('p');
                     success.className = 'success';
-                    success.textContent = '✅ Video loaded successfully';
+                    success.textContent = '[OK] Video loaded successfully';
                     video.parentNode.appendChild(success);
                 }});
             }});
@@ -194,10 +194,10 @@ def create_test_html():
         f.write(html_content)
     
     print("📄 Created video_test.html for browser testing")
-    print("💡 Copy this file to your Flask static folder and access via browser")
+    print("[TIP] Copy this file to your Flask static folder and access via browser")
 
 if __name__ == "__main__":
-    print("🔍 Video Serving Diagnostic Tool")
+    print("[SEARCH] Video Serving Diagnostic Tool")
     print("=" * 50)
     
     test_video_file_access()
@@ -205,7 +205,7 @@ if __name__ == "__main__":
     test_url_generation()
     create_test_html()
     
-    print("🎯 Next Steps:")
+    print("[TARGET] Next Steps:")
     print("1. Start your Flask app: python app.py")
     print("2. Open browser to http://localhost:5000/static/video_test.html")
     print("3. Check browser console for detailed error messages")

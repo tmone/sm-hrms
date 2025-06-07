@@ -36,7 +36,7 @@ def test_h264_conversion(test_video_path):
     print("\n=== Testing H.264 Conversion ===")
     
     if not os.path.exists(test_video_path):
-        print(f"❌ Test video not found: {test_video_path}")
+        print(f"[ERROR] Test video not found: {test_video_path}")
         return False
         
     # Check original codec
@@ -54,10 +54,10 @@ def test_h264_conversion(test_video_path):
     print(f"Converted video codec: {converted_codec}")
     
     if converted_codec == 'h264':
-        print("✅ H.264 conversion successful!")
+        print("[OK] H.264 conversion successful!")
         return True
     else:
-        print("❌ H.264 conversion failed!")
+        print("[ERROR] H.264 conversion failed!")
         return False
 
 
@@ -66,7 +66,7 @@ def test_video_chunking(test_video_path):
     print("\n=== Testing Video Chunking ===")
     
     if not os.path.exists(test_video_path):
-        print(f"❌ Test video not found: {test_video_path}")
+        print(f"[ERROR] Test video not found: {test_video_path}")
         return False
         
     # Create chunk manager
@@ -111,9 +111,9 @@ def test_video_chunking(test_video_path):
             print(f"Merged video codec: {merged_codec}")
             
             if merged_codec == 'h264':
-                print("✅ Merged video is H.264!")
+                print("[OK] Merged video is H.264!")
             else:
-                print("❌ Merged video is not H.264!")
+                print("[ERROR] Merged video is not H.264!")
                 
         return True
     else:
@@ -148,7 +148,7 @@ def main():
                 test_video = str(videos[0])
                 
     if not test_video:
-        print("❌ No test video found in static/uploads/")
+        print("[ERROR] No test video found in static/uploads/")
         print("Please upload a video first.")
         return
         
@@ -158,7 +158,7 @@ def main():
     test_h264_conversion(test_video)
     test_video_chunking(test_video)
     
-    print("\n✅ Tests completed!")
+    print("\n[OK] Tests completed!")
 
 
 if __name__ == "__main__":

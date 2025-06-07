@@ -12,13 +12,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def add_recognition_logging():
     """Add logging to key recognition points"""
     
-    print("📝 Adding detailed recognition logging...\n")
+    print("[LOG] Adding detailed recognition logging...\n")
     
     # 1. Update shared_state_manager_improved.py to add more logging
     state_manager_file = Path('processing/shared_state_manager_improved.py')
     
     if state_manager_file.exists():
-        print("✅ Found shared_state_manager_improved.py")
+        print("[OK] Found shared_state_manager_improved.py")
         
         # Read the file
         with open(state_manager_file) as f:
@@ -77,10 +77,10 @@ print(f"Recognition logging to: {log_file}")
     with open(monitor_script, 'w') as f:
         f.write(monitor_content)
         
-    print(f"✅ Created {monitor_script}")
+    print(f"[OK] Created {monitor_script}")
     
     # 3. Show how to use it
-    print("\n📋 To enable recognition logging during video processing:")
+    print("\n[TRACE] To enable recognition logging during video processing:")
     print("\n1. The system will log recognition events to:")
     print("   processing/recognition_logs/recognition_TIMESTAMP.log")
     print("\n2. Key events logged:")
@@ -90,7 +90,7 @@ print(f"Recognition logging to: {log_file}")
     print("   - Final ID mappings")
     
     # 4. Check current video processing logs
-    print("\n📂 Checking for existing debug logs...")
+    print("\n[FOLDER] Checking for existing debug logs...")
     
     debug_log_dir = Path('processing/debug_logs')
     if debug_log_dir.exists():
@@ -113,14 +113,14 @@ print(f"Recognition logging to: {log_file}")
         print("   No debug logs found")
         
     # 5. Show what needs to be fixed
-    print("\n🔧 Issues to fix:")
+    print("\n[CONFIG] Issues to fix:")
     print("\n1. Recognition model is missing files:")
     print("   - label_encoder.pkl")
     print("   - persons.json")
     print("\n2. The model needs these files to map predictions to person IDs")
     print("\n3. Without these files, recognition cannot work properly")
     
-    print("\n💡 Solution:")
+    print("\n[TIP] Solution:")
     print("1. Retrain the model to generate all required files")
     print("2. Or manually create the missing mappings")
     print("3. Or use a different model that has all files")

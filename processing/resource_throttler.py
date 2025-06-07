@@ -27,10 +27,10 @@ class ResourceThrottler:
     """Monitors and throttles resource usage to prevent system crashes"""
     
     def __init__(self, 
-                 max_cpu_percent: float = 80.0,
-                 max_gpu_percent: float = 85.0,
-                 max_gpu_memory_percent: float = 90.0,
-                 max_temperature: float = 83.0,
+                 max_cpu_percent: float = 70.0,  # Reduced from 80%
+                 max_gpu_percent: float = 75.0,  # Reduced from 85%
+                 max_gpu_memory_percent: float = 80.0,  # Reduced from 90%
+                 max_temperature: float = 78.0,  # Reduced from 83°C
                  check_interval: float = 0.5):
         """
         Initialize resource throttler
@@ -144,9 +144,9 @@ class ResourceThrottler:
         """Get delay time based on throttle level"""
         delays = {
             0: 0.0,    # No delay
-            1: 0.05,   # 50ms delay
-            2: 0.1,    # 100ms delay
-            3: 0.5     # 500ms delay
+            1: 0.1,    # 100ms delay (increased from 50ms)
+            2: 0.3,    # 300ms delay (increased from 100ms)
+            3: 1.0     # 1000ms delay (increased from 500ms)
         }
         return delays.get(self.throttle_level, 0.0)
     
@@ -156,7 +156,7 @@ class ResourceThrottler:
         
         if self.throttle_level > 0:
             if not self.is_throttling:
-                logger.warning(f"🚦 Resource throttling activated (level {self.throttle_level})")
+                logger.warning(f"[THROTTLE] Resource throttling activated (level {self.throttle_level})")
                 self.is_throttling = True
             
             delay = self.get_delay_time()
@@ -174,7 +174,7 @@ class ResourceThrottler:
                     torch.cuda.empty_cache()
         else:
             if self.is_throttling:
-                logger.info("✅ Resource throttling deactivated")
+                logger.info("[OK] Resource throttling deactivated")
                 self.is_throttling = False
     
     def wait_for_resources(self, timeout: float = 30.0) -> bool:
@@ -195,7 +195,7 @@ class ResourceThrottler:
             if self.throttle_level <= 1:  # Light throttle or none
                 return True
             
-            logger.info("⏳ Waiting for resources to become available...")
+            logger.info("[WAIT] Waiting for resources to become available...")
             time.sleep(1.0)
         
         return False

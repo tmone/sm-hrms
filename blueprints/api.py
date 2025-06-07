@@ -28,7 +28,7 @@ def processing_queue():
     import sys
     import os
     
-    print("🔍 API: Enhanced processing-queue endpoint called")
+    print("[SEARCH] API: Enhanced processing-queue endpoint called")
     
     try:
         Video = getattr(current_app, 'Video', None)
@@ -62,11 +62,11 @@ def processing_queue():
             total_tasks = len(all_tasks)
             conversion_manager_status = "connected"
             
-            print(f"🔍 API: Found {total_tasks} total tasks in conversion manager")
+            print(f"[SEARCH] API: Found {total_tasks} total tasks in conversion manager")
             
             # Get active tasks
             for task_id, task_data in all_tasks.items():
-                print(f"🔍 API: Task {task_id[:8]} - Status: {task_data['status']}, Progress: {task_data['progress']}%")
+                print(f"[SEARCH] API: Task {task_id[:8]} - Status: {task_data['status']}, Progress: {task_data['progress']}%")
                 
                 if task_data['status'] in ['queued', 'running']:
                     # Get video info
@@ -83,10 +83,10 @@ def processing_queue():
                         'elapsed_time': get_elapsed_time(task_data['started_at'])
                     })
             
-            print(f"🔍 API: Found {len(active_tasks)} active tasks")
+            print(f"[SEARCH] API: Found {len(active_tasks)} active tasks")
             
         except Exception as e:
-            print(f"❌ API: Error getting conversion manager status: {e}")
+            print(f"[ERROR] API: Error getting conversion manager status: {e}")
             conversion_manager_status = f"error: {str(e)}"
         
         # Get recent activity (last 10 videos)
@@ -121,7 +121,7 @@ def processing_queue():
             'endpoint_version': 'enhanced_v2'  # To confirm we're hitting the right endpoint
         }
         
-        print(f"🔍 API: Returning response with {len(active_tasks)} active tasks, queue status: {queue_status}")
+        print(f"[SEARCH] API: Returning response with {len(active_tasks)} active tasks, queue status: {queue_status}")
         
         return jsonify(response_data)
         

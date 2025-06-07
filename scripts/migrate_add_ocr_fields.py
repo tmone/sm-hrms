@@ -31,7 +31,7 @@ def add_ocr_fields():
             for sql in video_fields:
                 try:
                     db.session.execute(text(sql))
-                    print(f"✓ {sql}")
+                    print(f"[CHECK] {sql}")
                 except Exception as e:
                     print(f"✗ {sql}: {e}")
             
@@ -47,7 +47,7 @@ def add_ocr_fields():
             for sql in person_fields:
                 try:
                     db.session.execute(text(sql))
-                    print(f"✓ {sql}")
+                    print(f"[CHECK] {sql}")
                 except Exception as e:
                     print(f"✗ {sql}: {e}")
             
@@ -72,7 +72,7 @@ def add_ocr_fields():
             
             try:
                 db.session.execute(text(create_attendance_sql))
-                print("✓ Created attendance_summary table")
+                print("[CHECK] Created attendance_summary table")
             except Exception as e:
                 print(f"✗ Error creating attendance_summary table: {e}")
             
@@ -86,7 +86,7 @@ def add_ocr_fields():
             for sql in index_sql:
                 try:
                     db.session.execute(text(sql))
-                    print(f"✓ {sql}")
+                    print(f"[CHECK] {sql}")
                 except Exception as e:
                     print(f"✗ {sql}: {e}")
             

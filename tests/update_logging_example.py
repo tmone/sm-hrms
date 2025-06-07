@@ -4,10 +4,10 @@ Example of how to update your code to use the new logging system
 
 # OLD WAY (too much console output):
 """
-print("🚀 Starting GPU-accelerated person extraction for video")
-print(f"✅ Video file exists: {video_path} ({os.path.getsize(video_path)} bytes)")
-print("🎮 Using GPU-accelerated detection")
-print(f"🎯 GPU detection completed - found {len(detections)} tracked detections")
+print("[START] Starting GPU-accelerated person extraction for video")
+print(f"[OK] Video file exists: {video_path} ({os.path.getsize(video_path)} bytes)")
+print("[GPU] Using GPU-accelerated detection")
+print(f"[TARGET] GPU detection completed - found {len(detections)} tracked detections")
 """
 
 # NEW WAY (cleaner console, detailed file logs):

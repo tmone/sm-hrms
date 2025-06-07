@@ -43,24 +43,24 @@ def fix_video_paths():
                         video.processed_path = os.path.basename(video.processed_path)
                     
                     fixed_count += 1
-                    print(f"✅ Fixed Video {video.id}:")
+                    print(f"[OK] Fixed Video {video.id}:")
                     print(f"   Original: {original_path}")
                     print(f"   Fixed:    {fixed_path}")
                     
                     # Verify the file exists
                     file_path = os.path.join('processing', 'outputs', fixed_path)
                     if os.path.exists(file_path):
-                        print(f"   ✅ File exists: {file_path}")
+                        print(f"   [OK] File exists: {file_path}")
                     else:
-                        print(f"   ⚠️  File not found: {file_path}")
+                        print(f"   [WARNING]  File not found: {file_path}")
                     print()
         
         if fixed_count > 0:
             # Commit changes
             db.session.commit()
-            print(f"✅ Fixed {fixed_count} video paths in database")
+            print(f"[OK] Fixed {fixed_count} video paths in database")
         else:
-            print("✅ All video paths are already in correct format")
+            print("[OK] All video paths are already in correct format")
         
         # Show current status
         print("\n" + "-" * 70)
@@ -85,7 +85,7 @@ def fix_video_paths():
             unmatched = disk_filenames - db_filenames
             
             if unmatched:
-                print(f"\n⚠️  Found {len(unmatched)} annotated videos not linked in database:")
+                print(f"\n[WARNING]  Found {len(unmatched)} annotated videos not linked in database:")
                 for filename in list(unmatched)[:5]:
                     print(f"   - {filename}")
                 if len(unmatched) > 5:

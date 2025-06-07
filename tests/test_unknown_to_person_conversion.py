@@ -65,20 +65,20 @@ def test_basic_conversion():
             john_person_ids.add(person_id)
     
     assert len(john_person_ids) == 1, f"John should have 1 person ID, got {len(john_person_ids)}"
-    logger.info(f"✅ All 'john' detections correctly mapped to {john_person_ids.pop()}")
+    logger.info(f"[OK] All 'john' detections correctly mapped to {john_person_ids.pop()}")
     
     # Unrecognized person should have unique ID
     unrecognized_id = mapping.get("UNKNOWN-0003")  # Person B's track
     assert unrecognized_id is not None
     assert unrecognized_id.startswith("PERSON-")
-    logger.info(f"✅ Unrecognized person correctly mapped to {unrecognized_id}")
+    logger.info(f"[OK] Unrecognized person correctly mapped to {unrecognized_id}")
     
     # Mary should have unique ID
     mary_id = mapping.get("UNKNOWN-0004")  # Mary's track
     assert mary_id is not None
     assert mary_id.startswith("PERSON-")
     assert mary_id != unrecognized_id
-    logger.info(f"✅ Mary correctly mapped to {mary_id}")
+    logger.info(f"[OK] Mary correctly mapped to {mary_id}")
     
     return True
 
@@ -128,8 +128,8 @@ def test_multiple_tracks_same_person():
     assert len(emp2_ids) == 1, f"Employee 002 should have 1 ID, got {len(emp2_ids)}"
     assert emp1_ids != emp2_ids, "Different employees should have different IDs"
     
-    logger.info(f"✅ Employee 001 (3 tracks) -> {emp1_ids.pop()}")
-    logger.info(f"✅ Employee 002 (1 track) -> {emp2_ids.pop()}")
+    logger.info(f"[OK] Employee 001 (3 tracks) -> {emp1_ids.pop()}")
+    logger.info(f"[OK] Employee 002 (1 track) -> {emp2_ids.pop()}")
     
     return True
 
@@ -176,9 +176,9 @@ def test_no_duplicates_in_frame():
     assert mapping[id3] != mapping[id1], "Unrecognized person should have unique ID"
     assert mapping[id3] != mapping[id2], "Unrecognized person should have unique ID"
     
-    logger.info(f"✅ Alice appears twice: {mapping[id1]} (consistent)")
-    logger.info(f"✅ Bob has unique ID: {mapping[id2]}")
-    logger.info(f"✅ Unknown has unique ID: {mapping[id3]}")
+    logger.info(f"[OK] Alice appears twice: {mapping[id1]} (consistent)")
+    logger.info(f"[OK] Bob has unique ID: {mapping[id2]}")
+    logger.info(f"[OK] Unknown has unique ID: {mapping[id3]}")
     
     return True
 
@@ -198,13 +198,13 @@ def main():
         try:
             if test_func():
                 passed += 1
-                logger.info(f"✅ {test_func.__name__} PASSED\n")
+                logger.info(f"[OK] {test_func.__name__} PASSED\n")
             else:
                 failed += 1
-                logger.error(f"❌ {test_func.__name__} FAILED\n")
+                logger.error(f"[ERROR] {test_func.__name__} FAILED\n")
         except Exception as e:
             failed += 1
-            logger.error(f"❌ {test_func.__name__} FAILED with exception: {e}\n")
+            logger.error(f"[ERROR] {test_func.__name__} FAILED with exception: {e}\n")
     
     logger.info(f"\n{'='*60}")
     logger.info(f"Test Results: {passed}/{len(tests)} passed")

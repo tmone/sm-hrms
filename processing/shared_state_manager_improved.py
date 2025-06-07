@@ -293,14 +293,14 @@ class ImprovedSharedStateManagerV3:
                                 self.unknown_to_final_id[unknown_id] = person_id
                     
             # Assign unique PERSON IDs to unrecognized unknowns
-            logger.info(f"📊 Resolving IDs: {len(recognized_groups)} recognized groups, "
+            logger.info(f"[INFO] Resolving IDs: {len(recognized_groups)} recognized groups, "
                        f"{len(unrecognized_unknowns)} unrecognized persons")
             
             for unknown_id in unrecognized_unknowns:
                 if unknown_id not in violation_unknowns:
                     person_id = self.get_next_person_id()
                     self.unknown_to_final_id[unknown_id] = person_id
-                    logger.info(f"🆕 Creating new PERSON ID: {person_id} for unrecognized person")
+                    logger.info(f"[NEW] Creating new PERSON ID: {person_id} for unrecognized person")
                 
             return self.unknown_to_final_id
             

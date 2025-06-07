@@ -9,31 +9,31 @@ import os
 
 def check_nvidia_gpu():
     """Check if NVIDIA GPU is available"""
-    print("🔍 Checking for NVIDIA GPU...")
+    print("[SEARCH] Checking for NVIDIA GPU...")
     
     try:
         # Try nvidia-smi command
         result = subprocess.run(['nvidia-smi'], capture_output=True, text=True)
         if result.returncode == 0:
-            print("✅ NVIDIA GPU detected!")
+            print("[OK] NVIDIA GPU detected!")
             print(result.stdout.split('\n')[0:10])  # Show first 10 lines
             return True
     except FileNotFoundError:
-        print("❌ nvidia-smi not found. NVIDIA drivers may not be installed.")
+        print("[ERROR] nvidia-smi not found. NVIDIA drivers may not be installed.")
     except Exception as e:
-        print(f"❌ Error checking GPU: {e}")
+        print(f"[ERROR] Error checking GPU: {e}")
     
     return False
 
 def check_cuda_version():
     """Check CUDA version"""
-    print("\n🔍 Checking CUDA version...")
+    print("\n[SEARCH] Checking CUDA version...")
     
     try:
         # Check nvcc version
         result = subprocess.run(['nvcc', '--version'], capture_output=True, text=True)
         if result.returncode == 0:
-            print("✅ CUDA compiler found:")
+            print("[OK] CUDA compiler found:")
             print(result.stdout)
             
             # Extract CUDA version
@@ -42,15 +42,15 @@ def check_cuda_version():
                     cuda_version = line.split('release')[1].split(',')[0].strip()
                     return cuda_version
     except FileNotFoundError:
-        print("❌ nvcc not found. CUDA toolkit may not be installed.")
+        print("[ERROR] nvcc not found. CUDA toolkit may not be installed.")
     except Exception as e:
-        print(f"❌ Error checking CUDA: {e}")
+        print(f"[ERROR] Error checking CUDA: {e}")
     
     return None
 
 def install_pytorch_cuda():
     """Install PyTorch with CUDA support"""
-    print("\n📦 Installing PyTorch with CUDA support...")
+    print("\n[PACKAGE] Installing PyTorch with CUDA support...")
     
     system = platform.system()
     
@@ -71,7 +71,7 @@ def install_pytorch_cuda():
         cuda_major_minor = '.'.join(cuda_version.split('.')[:2])
         cuda_suffix = cuda_versions.get(cuda_major_minor, 'cu118')  # Default to 11.8
     else:
-        print("⚠️ CUDA not detected. Installing CPU-only PyTorch.")
+        print("[WARNING] CUDA not detected. Installing CPU-only PyTorch.")
         cuda_suffix = 'cpu'
     
     # PyTorch installation commands
@@ -99,15 +99,15 @@ def install_pytorch_cuda():
         
         print(f"Running: {' '.join(cmd)}")
         subprocess.check_call(cmd)
-        print("✅ PyTorch installed successfully!")
+        print("[OK] PyTorch installed successfully!")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install PyTorch: {e}")
+        print(f"[ERROR] Failed to install PyTorch: {e}")
         return False
 
 def install_gpu_packages():
     """Install all necessary packages for GPU video processing"""
-    print("\n📦 Installing GPU-accelerated packages...")
+    print("\n[PACKAGE] Installing GPU-accelerated packages...")
     
     packages = [
         # Core GPU packages
@@ -136,23 +136,23 @@ def install_gpu_packages():
     failed_packages = []
     
     for package in packages:
-        print(f"\n📦 Installing {package}...")
+        print(f"\n[PACKAGE] Installing {package}...")
         try:
             subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--upgrade', package])
-            print(f"✅ {package} installed successfully")
+            print(f"[OK] {package} installed successfully")
         except subprocess.CalledProcessError:
-            print(f"⚠️ Failed to install {package}")
+            print(f"[WARNING] Failed to install {package}")
             failed_packages.append(package)
     
     if failed_packages:
-        print(f"\n⚠️ Failed packages: {', '.join(failed_packages)}")
+        print(f"\n[WARNING] Failed packages: {', '.join(failed_packages)}")
         print("These packages may require additional system dependencies.")
     
     return len(failed_packages) == 0
 
 def setup_opencv_cuda():
     """Instructions for OpenCV with CUDA support"""
-    print("\n🔧 OpenCV CUDA Setup Instructions:")
+    print("\n[CONFIG] OpenCV CUDA Setup Instructions:")
     
     system = platform.system()
     
@@ -215,58 +215,58 @@ def test_gpu_setup():
     # Test PyTorch CUDA
     try:
         import torch
-        print(f"\n✅ PyTorch version: {torch.__version__}")
-        print(f"✅ CUDA available: {torch.cuda.is_available()}")
+        print(f"\n[OK] PyTorch version: {torch.__version__}")
+        print(f"[OK] CUDA available: {torch.cuda.is_available()}")
         if torch.cuda.is_available():
-            print(f"✅ CUDA version: {torch.version.cuda}")
-            print(f"✅ GPU count: {torch.cuda.device_count()}")
-            print(f"✅ GPU name: {torch.cuda.get_device_name(0)}")
-            print(f"✅ GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+            print(f"[OK] CUDA version: {torch.version.cuda}")
+            print(f"[OK] GPU count: {torch.cuda.device_count()}")
+            print(f"[OK] GPU name: {torch.cuda.get_device_name(0)}")
+            print(f"[OK] GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
     except ImportError:
-        print("❌ PyTorch not installed")
+        print("[ERROR] PyTorch not installed")
     except Exception as e:
-        print(f"❌ PyTorch error: {e}")
+        print(f"[ERROR] PyTorch error: {e}")
     
     # Test OpenCV
     try:
         import cv2
-        print(f"\n✅ OpenCV version: {cv2.__version__}")
-        print(f"✅ CUDA support in OpenCV: {cv2.cuda.getCudaEnabledDeviceCount() > 0}")
+        print(f"\n[OK] OpenCV version: {cv2.__version__}")
+        print(f"[OK] CUDA support in OpenCV: {cv2.cuda.getCudaEnabledDeviceCount() > 0}")
         if cv2.cuda.getCudaEnabledDeviceCount() > 0:
-            print(f"✅ CUDA devices in OpenCV: {cv2.cuda.getCudaEnabledDeviceCount()}")
+            print(f"[OK] CUDA devices in OpenCV: {cv2.cuda.getCudaEnabledDeviceCount()}")
     except AttributeError:
-        print("⚠️ OpenCV installed but without CUDA support")
+        print("[WARNING] OpenCV installed but without CUDA support")
     except ImportError:
-        print("❌ OpenCV not installed")
+        print("[ERROR] OpenCV not installed")
     except Exception as e:
-        print(f"❌ OpenCV error: {e}")
+        print(f"[ERROR] OpenCV error: {e}")
     
     # Test YOLO
     try:
         from ultralytics import YOLO
-        print("\n✅ YOLOv8 (ultralytics) installed")
+        print("\n[OK] YOLOv8 (ultralytics) installed")
         # Try to load a model
         model = YOLO('yolov8n.pt')
-        print("✅ YOLOv8 nano model loaded successfully")
+        print("[OK] YOLOv8 nano model loaded successfully")
     except ImportError:
-        print("❌ Ultralytics (YOLOv8) not installed")
+        print("[ERROR] Ultralytics (YOLOv8) not installed")
     except Exception as e:
-        print(f"⚠️ YOLOv8 warning: {e}")
+        print(f"[WARNING] YOLOv8 warning: {e}")
 
 def main():
     """Main setup function"""
-    print("🚀 GPU Video Processing Setup")
+    print("[START] GPU Video Processing Setup")
     print("=" * 50)
     
     system = platform.system()
-    print(f"💻 Operating System: {system}")
+    print(f"[COMPUTER] Operating System: {system}")
     print(f"🐍 Python Version: {sys.version}")
     
     # Check for NVIDIA GPU
     has_gpu = check_nvidia_gpu()
     
     if not has_gpu:
-        print("\n⚠️ No NVIDIA GPU detected. You can still use CPU processing.")
+        print("\n[WARNING] No NVIDIA GPU detected. You can still use CPU processing.")
         response = input("\nContinue with CPU-only setup? (y/n): ")
         if response.lower() != 'y':
             return
@@ -275,7 +275,7 @@ def main():
     cuda_version = check_cuda_version()
     
     if has_gpu and not cuda_version:
-        print("\n⚠️ CUDA not found. Please install CUDA Toolkit from:")
+        print("\n[WARNING] CUDA not found. Please install CUDA Toolkit from:")
         print("   https://developer.nvidia.com/cuda-downloads")
         print("\n   Recommended: CUDA 11.8 or 12.1")
         response = input("\nContinue anyway? (y/n): ")
@@ -294,8 +294,8 @@ def main():
     # Test setup
     test_gpu_setup()
     
-    print("\n✅ Setup complete!")
-    print("\n📌 Next steps:")
+    print("\n[OK] Setup complete!")
+    print("\n[PIN] Next steps:")
     print("1. Restart your Python environment")
     print("2. Run: python test_gpu_performance.py")
     print("3. Process a video to test GPU acceleration")

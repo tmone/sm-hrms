@@ -32,7 +32,7 @@ class VideoProcessingProgress:
         
     def log_error(self, error_message):
         """Log error (always shown on console)"""
-        self.logger.error(f"❌ [{self.video_name}] {error_message}")
+        self.logger.error(f"[ERROR] [{self.video_name}] {error_message}")
         
     def log_success(self, message):
         """Log success message"""
@@ -40,7 +40,7 @@ class VideoProcessingProgress:
             self.progress_bar.finish()
             
         elapsed = (datetime.now() - self.start_time).total_seconds()
-        self.logger.info(f"✅ [{self.video_name}] {message} (took {elapsed:.1f}s)")
+        self.logger.info(f"[OK] [{self.video_name}] {message} (took {elapsed:.1f}s)")
         
     def log_info(self, message, to_console=False):
         """Log info message (file only by default)"""
@@ -66,9 +66,9 @@ class GPUProcessingProgress:
         
         # Only show important GPU messages on console
         if level == 'error':
-            self.logger.error(f"🎮 [{self.operation_name}] {message}")
+            self.logger.error(f"[GPU] [{self.operation_name}] {message}")
         elif level == 'success':
-            self.logger.info(f"🎮 [{self.operation_name}] {message}")
+            self.logger.info(f"[GPU] [{self.operation_name}] {message}")
             
     def log_memory(self, used_mb, total_mb):
         """Log GPU memory usage"""
@@ -77,7 +77,7 @@ class GPUProcessingProgress:
         
         # Show on console if high usage
         if percent > 80:
-            self.logger.warning(f"⚠️ High GPU memory usage: {percent:.1f}%")
+            self.logger.warning(f"[WARNING] High GPU memory usage: {percent:.1f}%")
 
 
 def simple_progress(message, current=None, total=None):
@@ -118,6 +118,6 @@ def log_background_task(task_name, status, details=None):
     if status.lower() in ['completed', 'failed', 'error']:
         progress_logger = get_logger('progress')
         if status.lower() in ['failed', 'error']:
-            progress_logger.error(f"❌ {message}")
+            progress_logger.error(f"[ERROR] {message}")
         else:
-            progress_logger.info(f"✅ {message}")
+            progress_logger.info(f"[OK] {message}")

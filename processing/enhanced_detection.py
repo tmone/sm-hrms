@@ -62,7 +62,7 @@ class PersonTracker:
                                     default_model, 
                                     confidence_threshold=self.recognition_threshold
                                 )
-                                logger.info(f"✅ Default model loaded successfully: {default_model}")
+                                logger.info(f"[OK] Default model loaded successfully: {default_model}")
                             except Exception as e:
                                 logger.error(f"Failed to load recognition model: {e}")
                                 self.recognition_model = None
@@ -140,7 +140,7 @@ class PersonTracker:
             if result.get('persons') and len(result['persons']) > 0:
                 person = result['persons'][0]
                 if person['confidence'] >= self.recognition_threshold and person['person_id'] != 'unknown':
-                    logger.info(f"🎯 Frame {frame_number}: Recognized {person['person_id']} with confidence {person['confidence']:.2f}")
+                    logger.info(f"[TARGET] Frame {frame_number}: Recognized {person['person_id']} with confidence {person['confidence']:.2f}")
                     return person['person_id'], person['confidence']
             
             return None
@@ -220,13 +220,13 @@ class PersonTracker:
                 # Use recognized person ID or create new one
                 if recognized_person_id:
                     person_id_str = recognized_person_id
-                    logger.info(f"✅ Using recognized person ID: {person_id_str} (confidence: {recognition_confidence:.2f})")
+                    logger.info(f"[OK] Using recognized person ID: {person_id_str} (confidence: {recognition_confidence:.2f})")
                 else:
                     # Use global person ID instead of track ID
                     person_id = self.next_person_id
                     self.next_person_id += 1
                     person_id_str = f"PERSON-{person_id:04d}"
-                    logger.info(f"🆕 Creating new person ID: {person_id_str}")
+                    logger.info(f"[NEW] Creating new person ID: {person_id_str}")
                 
                 self.tracks[track_id] = {
                     'first_frame': frame_number,
@@ -504,7 +504,7 @@ def extract_persons_data(video_path, person_tracks, persons_dir):
                 MIN_BBOX_WIDTH = 128
                 
                 if w < MIN_BBOX_WIDTH:
-                    logger.info(f"⚠️ Skipping {person_id} frame {frame_number}: bbox width {w:.0f}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                    logger.info(f"[WARNING] Skipping {person_id} frame {frame_number}: bbox width {w:.0f}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
                     continue
                 
                 # Extract person region with some padding

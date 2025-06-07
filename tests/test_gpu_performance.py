@@ -14,14 +14,14 @@ def test_pytorch_gpu():
         import torch
         
         if not torch.cuda.is_available():
-            print("❌ CUDA not available in PyTorch")
+            print("[ERROR] CUDA not available in PyTorch")
             return
         
         # Matrix multiplication benchmark
         sizes = [1024, 2048, 4096]
         
         for size in sizes:
-            print(f"\n📊 Matrix multiplication {size}x{size}:")
+            print(f"\n[INFO] Matrix multiplication {size}x{size}:")
             
             # CPU test
             a_cpu = torch.randn(size, size)
@@ -45,14 +45,14 @@ def test_pytorch_gpu():
             print(f"   Speedup: {cpu_time/gpu_time:.1f}x")
             
         # Memory info
-        print(f"\n💾 GPU Memory:")
+        print(f"\n[SAVE] GPU Memory:")
         print(f"   Allocated: {torch.cuda.memory_allocated() / 1024**2:.1f} MB")
         print(f"   Cached: {torch.cuda.memory_cached() / 1024**2:.1f} MB")
         
     except ImportError:
-        print("❌ PyTorch not installed")
+        print("[ERROR] PyTorch not installed")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
 
 def test_opencv_gpu():
     """Test OpenCV GPU performance"""
@@ -65,18 +65,18 @@ def test_opencv_gpu():
         try:
             cuda_count = cv2.cuda.getCudaEnabledDeviceCount()
             if cuda_count == 0:
-                print("❌ No CUDA devices found in OpenCV")
-                print("💡 OpenCV may need to be rebuilt with CUDA support")
+                print("[ERROR] No CUDA devices found in OpenCV")
+                print("[TIP] OpenCV may need to be rebuilt with CUDA support")
                 return
             
-            print(f"✅ CUDA devices found: {cuda_count}")
+            print(f"[OK] CUDA devices found: {cuda_count}")
             
             # Create test image
             img_size = (1920, 1080)
             img = np.random.randint(0, 255, (*img_size, 3), dtype=np.uint8)
             
             # Test Gaussian blur
-            print("\n📊 Gaussian Blur Performance:")
+            print("\n[INFO] Gaussian Blur Performance:")
             
             # CPU test
             start = time.time()
@@ -98,13 +98,13 @@ def test_opencv_gpu():
             print(f"   Speedup: {cpu_time/gpu_time:.1f}x")
             
         except AttributeError:
-            print("⚠️ OpenCV installed but without CUDA support")
-            print("💡 Install OpenCV with CUDA using setup_gpu_processing.py")
+            print("[WARNING] OpenCV installed but without CUDA support")
+            print("[TIP] Install OpenCV with CUDA using setup_gpu_processing.py")
             
     except ImportError:
-        print("❌ OpenCV not installed")
+        print("[ERROR] OpenCV not installed")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
 
 def test_yolo_gpu():
     """Test YOLO GPU performance"""
@@ -115,14 +115,14 @@ def test_yolo_gpu():
         import torch
         
         # Load model
-        print("📥 Loading YOLOv8 model...")
+        print("[LOAD] Loading YOLOv8 model...")
         model = YOLO('yolov8n.pt')  # Nano model
         
         # Create test image
         test_image = np.random.randint(0, 255, (640, 640, 3), dtype=np.uint8)
         
         # CPU inference
-        print("\n📊 YOLO Inference Performance:")
+        print("\n[INFO] YOLO Inference Performance:")
         model.to('cpu')
         
         start = time.time()
@@ -147,12 +147,12 @@ def test_yolo_gpu():
             print(f"   GPU FPS: {10/gpu_time:.1f}")
             print(f"   Speedup: {cpu_time/gpu_time:.1f}x")
         else:
-            print("   ⚠️ GPU not available for YOLO")
+            print("   [WARNING] GPU not available for YOLO")
             
     except ImportError:
-        print("❌ Ultralytics (YOLO) not installed")
+        print("[ERROR] Ultralytics (YOLO) not installed")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
 
 def test_video_processing():
     """Test video processing with GPU"""
@@ -164,7 +164,7 @@ def test_video_processing():
         from ultralytics import YOLO
         
         # Create a test video
-        print("📹 Creating test video...")
+        print("[VIDEO] Creating test video...")
         width, height = 640, 480
         fps = 30
         frames = 100
@@ -183,7 +183,7 @@ def test_video_processing():
         model = YOLO('yolov8n.pt')
         
         # CPU processing
-        print("\n📊 Video Processing Performance:")
+        print("\n[INFO] Video Processing Performance:")
         model.to('cpu')
         
         start = time.time()
@@ -206,7 +206,7 @@ def test_video_processing():
             print(f"   Speedup: {cpu_time/gpu_time:.1f}x")
             
             # Batch processing test
-            print("\n📊 Batch Processing (8 frames at once):")
+            print("\n[INFO] Batch Processing (8 frames at once):")
             batch = np.stack(test_frames[:8])
             
             start = time.time()
@@ -216,34 +216,34 @@ def test_video_processing():
             print(f"   GPU batch FPS: {8/batch_time:.1f}")
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
 
 def check_gpu_status():
     """Check GPU status and utilization"""
-    print("\n📊 GPU Status:")
+    print("\n[INFO] GPU Status:")
     
     try:
         import GPUtil
         gpus = GPUtil.getGPUs()
         
         if not gpus:
-            print("❌ No GPUs found")
+            print("[ERROR] No GPUs found")
             return
         
         for i, gpu in enumerate(gpus):
-            print(f"\n🎮 GPU {i}: {gpu.name}")
+            print(f"\n[GPU] GPU {i}: {gpu.name}")
             print(f"   Memory: {gpu.memoryUsed:.0f}/{gpu.memoryTotal:.0f} MB ({gpu.memoryUtil*100:.1f}%)")
             print(f"   GPU Load: {gpu.load*100:.1f}%")
             print(f"   Temperature: {gpu.temperature}°C")
             
     except ImportError:
-        print("⚠️ GPUtil not installed. Install with: pip install gputil")
+        print("[WARNING] GPUtil not installed. Install with: pip install gputil")
     except Exception as e:
-        print(f"❌ Error checking GPU status: {e}")
+        print(f"[ERROR] Error checking GPU status: {e}")
 
 def main():
     """Run all GPU tests"""
-    print("🚀 GPU Performance Test for Video Processing")
+    print("[START] GPU Performance Test for Video Processing")
     print("=" * 50)
     
     # Check GPU status
@@ -255,8 +255,8 @@ def main():
     test_yolo_gpu()
     test_video_processing()
     
-    print("\n✅ Testing complete!")
-    print("\n💡 Tips for better GPU performance:")
+    print("\n[OK] Testing complete!")
+    print("\n[TIP] Tips for better GPU performance:")
     print("1. Use batch processing for multiple frames")
     print("2. Keep models loaded in GPU memory")
     print("3. Use FP16 (half precision) for faster inference")

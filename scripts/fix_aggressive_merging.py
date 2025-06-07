@@ -13,10 +13,10 @@ def fix_track_merging():
     gpu_detection_file = Path('processing/gpu_enhanced_detection.py')
     
     if not gpu_detection_file.exists():
-        print("❌ GPU detection file not found!")
+        print("[ERROR] GPU detection file not found!")
         return False
     
-    print("🔧 Fixing aggressive track merging...")
+    print("[CONFIG] Fixing aggressive track merging...")
     
     # Read the file
     with open(gpu_detection_file, 'r') as f:
@@ -29,7 +29,7 @@ def fix_track_merging():
         if "if overlap > min(len(existing_frames), len(current_frames)) * 0.3:" in line:
             # Change from 0.3 (30%) to 0.8 (80%) - much stricter
             lines[i] = line.replace("* 0.3:", "* 0.8:  # Increased from 0.3 to prevent merging different people")
-            print(f"  ✅ Fixed line {i+1}: Changed overlap threshold from 30% to 80%")
+            print(f"  [OK] Fixed line {i+1}: Changed overlap threshold from 30% to 80%")
             fixed = True
             break
     
@@ -37,10 +37,10 @@ def fix_track_merging():
         # Save the file
         with open(gpu_detection_file, 'w') as f:
             f.writelines(lines)
-        print("  ✅ File updated successfully!")
+        print("  [OK] File updated successfully!")
         return True
     else:
-        print("  ⚠️  Could not find the line to fix")
+        print("  [WARNING]  Could not find the line to fix")
         return False
 
 
@@ -90,7 +90,7 @@ def create_better_merge_function():
                     # Only merge if very close and gap is small
                     frame_gap = current_start - existing_end
                     if distance < 50 and frame_gap < 30:
-                        print(f"🔄 Merging consecutive track {person_id} into {existing_id}")
+                        print(f"[PROCESSING] Merging consecutive track {person_id} into {existing_id}")
                         existing_detections.extend(detections)
                         is_duplicate = True
                         break
@@ -104,7 +104,7 @@ def create_better_merge_function():
     for person_id in merged_tracks:
         merged_tracks[person_id].sort(key=lambda d: d['frame_number'])
     
-    print(f"✅ Track validation complete: {len(person_tracks)} tracks → {len(merged_tracks)} tracks")
+    print(f"[OK] Track validation complete: {len(person_tracks)} tracks -> {len(merged_tracks)} tracks")
     
     return merged_tracks
 '''
@@ -113,7 +113,7 @@ def create_better_merge_function():
     with open('processing/improved_track_validation.py', 'w') as f:
         f.write(improved_function)
     
-    print("\n📁 Created improved track validation function")
+    print("\n[FILE] Created improved track validation function")
     print("   This function only merges tracks that are:")
     print("   - Consecutive in time (not overlapping)")
     print("   - Spatially close at boundaries")
@@ -134,12 +134,12 @@ def explain_the_issue():
     print("4. Person B overlaps 30% with Person C")
     print("5. Result: A, B, and C all get merged into one person!")
     
-    print("\n🔧 THE FIX:")
+    print("\n[CONFIG] THE FIX:")
     print("- Increased overlap threshold from 30% to 80%")
     print("- This prevents merging different people")
     print("- Only truly duplicate tracks will be merged")
     
-    print("\n💡 BETTER SOLUTION:")
+    print("\n[TIP] BETTER SOLUTION:")
     print("- Never merge overlapping tracks (they're different people!)")
     print("- Only merge consecutive tracks that are close in space")
     print("- Use appearance features when available")
@@ -147,12 +147,12 @@ def explain_the_issue():
 
 def main():
     """Main function."""
-    print("🔧 Fixing Aggressive Track Merging")
+    print("[CONFIG] Fixing Aggressive Track Merging")
     print("="*50)
     
     # Apply the fix
     if fix_track_merging():
-        print("\n✅ Fix applied successfully!")
+        print("\n[OK] Fix applied successfully!")
         
         # Create improved function
         create_better_merge_function()
@@ -160,12 +160,12 @@ def main():
         # Explain the issue
         explain_the_issue()
         
-        print("\n🎯 NEXT STEPS:")
+        print("\n[TARGET] NEXT STEPS:")
         print("1. The merging issue is now fixed")
         print("2. Re-process your video to get proper person separation")
         print("3. Or use the Split Person feature to manually separate PERSON-0058")
     else:
-        print("\n❌ Could not apply fix automatically")
+        print("\n[ERROR] Could not apply fix automatically")
         print("Please manually edit gpu_enhanced_detection.py")
         print("Change the line with '* 0.3:' to '* 0.8:'")
 

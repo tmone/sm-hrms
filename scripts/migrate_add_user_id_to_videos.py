@@ -28,12 +28,12 @@ def add_user_id_field():
                     ADD COLUMN user_id INTEGER
                 """))
                 db.session.commit()
-                print("✅ Added user_id column")
+                print("[OK] Added user_id column")
             else:
-                print("✅ user_id column already exists")
+                print("[OK] user_id column already exists")
                 
         except Exception as e:
-            print(f"❌ Error adding user_id column: {e}")
+            print(f"[ERROR] Error adding user_id column: {e}")
             db.session.rollback()
             raise
 

@@ -24,10 +24,10 @@ try:
     print(f"   Model loaded: {model.loaded}")
     
     if model.loaded:
-        print(f"   ✅ Model components:")
-        print(f"      - Model: {'✓' if model.model is not None else '✗'}")
-        print(f"      - Scaler: {'✓' if model.scaler is not None else '✗'}")
-        print(f"      - Label encoder: {'✓' if model.label_encoder is not None else '✗'}")
+        print(f"   [OK] Model components:")
+        print(f"      - Model: {'[CHECK]' if model.model is not None else '✗'}")
+        print(f"      - Scaler: {'[CHECK]' if model.scaler is not None else '✗'}")
+        print(f"      - Label encoder: {'[CHECK]' if model.label_encoder is not None else '✗'}")
         print(f"      - Person mapping: {len(model.person_mapping)} persons")
         
         if model.person_mapping:
@@ -36,7 +36,7 @@ try:
                 print(f"      {idx}: {person_id}")
                 
 except Exception as e:
-    print(f"   ❌ Failed to load model: {e}")
+    print(f"   [ERROR] Failed to load model: {e}")
     import traceback
     traceback.print_exc()
 
@@ -72,16 +72,16 @@ if person_dir.exists():
                         print(f"      Class idx: {result['class_idx']}")
                         
                         if result['person_id'] == test_person:
-                            print(f"      ✅ Correctly recognized!")
+                            print(f"      [OK] Correctly recognized!")
                         elif result['person_id'] == 'unknown':
-                            print(f"      ⚠️  Not recognized (confidence too low)")
+                            print(f"      [WARNING]  Not recognized (confidence too low)")
                         else:
-                            print(f"      ❌ Misrecognized as {result['person_id']}")
+                            print(f"      [ERROR] Misrecognized as {result['person_id']}")
                     else:
                         print(f"\n   Threshold {threshold}: No result")
                         
             except Exception as e:
-                print(f"   ❌ Recognition failed: {e}")
+                print(f"   [ERROR] Recognition failed: {e}")
                 import traceback
                 traceback.print_exc()
     else:
@@ -89,8 +89,8 @@ if person_dir.exists():
 else:
     print(f"   Person directory not found: {person_dir}")
 
-print("\n✅ Test complete!")
-print("\n💡 If recognition is working, you should see:")
+print("\n[OK] Test complete!")
+print("\n[TIP] If recognition is working, you should see:")
 print("   - Model loaded successfully")
 print("   - Correct person IDs returned with good confidence")
 print("   - Lower thresholds = more recognitions but less accurate")

@@ -60,7 +60,7 @@ try:
         print(f"  GPU Time: {gpu_time:.3f}s")
         print(f"  Speedup: {cpu_time/gpu_time:.2f}x")
     else:
-        print("\n⚠️  CUDA is not available!")
+        print("\n[WARNING]  CUDA is not available!")
         print("  This usually means:")
         print("  1. PyTorch CPU-only version is installed")
         print("  2. CUDA toolkit is not installed")
@@ -68,7 +68,7 @@ try:
         print("\n  Run install_gpu_windows.bat to fix this.")
         
 except ImportError:
-    print("❌ PyTorch is not installed")
+    print("[ERROR] PyTorch is not installed")
     print()
 
 # Check OpenCV
@@ -86,7 +86,7 @@ try:
         print("  CUDA Support: Not available")
         
 except ImportError:
-    print("❌ OpenCV is not installed")
+    print("[ERROR] OpenCV is not installed")
 
 # Check YOLO/Ultralytics
 print("\n" + "-" * 40)
@@ -120,16 +120,16 @@ try:
         print(f"  Speedup: {cpu_time/gpu_time:.2f}x")
         
 except ImportError:
-    print("❌ Ultralytics is not installed")
+    print("[ERROR] Ultralytics is not installed")
 
 print("\n" + "=" * 60)
 
 # Summary and recommendations
 if 'torch' in sys.modules and torch.cuda.is_available():
-    print("✅ GPU acceleration is properly configured!")
+    print("[OK] GPU acceleration is properly configured!")
     print("   Your RTX 4070 Ti SUPER is ready for processing.")
 else:
-    print("⚠️  GPU acceleration is NOT configured.")
+    print("[WARNING]  GPU acceleration is NOT configured.")
     print("\nTo enable GPU support:")
     print("1. Run: install_gpu_windows.bat")
     print("2. Restart your application")

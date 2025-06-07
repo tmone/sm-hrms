@@ -60,7 +60,7 @@ def test_gpu_allocation():
     gpu_id = manager.acquire_gpu(worker_id, timeout=5.0)
     
     if gpu_id is not None:
-        logger.info(f"✅ Successfully acquired GPU {gpu_id} for {worker_id}")
+        logger.info(f"[OK] Successfully acquired GPU {gpu_id} for {worker_id}")
         
         # Check worker mapping
         mapping = manager.get_worker_gpu_mapping()
@@ -71,7 +71,7 @@ def test_gpu_allocation():
         
         # Release GPU
         manager.release_gpu(worker_id)
-        logger.info(f"✅ Released GPU {gpu_id}")
+        logger.info(f"[OK] Released GPU {gpu_id}")
         
         # Check available count
         available = manager.get_available_gpu_count()
@@ -79,7 +79,7 @@ def test_gpu_allocation():
         
         return True
     else:
-        logger.error("❌ Failed to acquire GPU")
+        logger.error("[ERROR] Failed to acquire GPU")
         return False
 
 
@@ -116,7 +116,7 @@ def test_monitoring():
     
     # Save history
     manager.save_monitoring_history("test_gpu_monitoring.json")
-    logger.info("✅ Monitoring test complete, history saved")
+    logger.info("[OK] Monitoring test complete, history saved")
     
     return True
 

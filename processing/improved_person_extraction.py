@@ -59,8 +59,8 @@ class ImprovedPersonExtractor:
         Returns:
             Extraction results dictionary
         """
-        print(f"🎥 Processing video: {video_path}")
-        print(f"📊 Total detections: {len(detections)}")
+        print(f"[MOVIE] Processing video: {video_path}")
+        print(f"[INFO] Total detections: {len(detections)}")
         
         # Step 1: Group detections by person ID
         persons_data = self._group_detections_by_person(detections)
@@ -79,14 +79,14 @@ class ImprovedPersonExtractor:
         
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
-            print(f"❌ Failed to open video: {video_path}")
+            print(f"[ERROR] Failed to open video: {video_path}")
             return results
         
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         
         for person_id, person_detections in persons_data.items():
-            print(f"\n🔍 Processing {person_id} ({len(person_detections)} detections)")
+            print(f"\n[SEARCH] Processing {person_id} ({len(person_detections)} detections)")
             
             # Select best images
             selected_detections = self._select_best_detections(
@@ -94,7 +94,7 @@ class ImprovedPersonExtractor:
             )
             
             if not selected_detections:
-                print(f"  ⚠️  No quality images found for {person_id}")
+                print(f"  [WARNING]  No quality images found for {person_id}")
                 continue
             
             # Create person folder
@@ -123,11 +123,11 @@ class ImprovedPersonExtractor:
                     'images_saved': len(saved_images)
                 })
                 
-                print(f"  ✅ Saved {len(saved_images)} images for {person_id}")
+                print(f"  [OK] Saved {len(saved_images)} images for {person_id}")
         
         cap.release()
         
-        print(f"\n✅ Extraction complete: {results['persons_extracted']} persons, "
+        print(f"\n[OK] Extraction complete: {results['persons_extracted']} persons, "
               f"{results['total_images']} total images")
         
         return results
@@ -330,7 +330,7 @@ class ImprovedPersonExtractor:
         """
         Refine tracks using appearance features to split incorrectly merged persons.
         """
-        print("\n🔍 Refining tracks with appearance features...")
+        print("\n[SEARCH] Refining tracks with appearance features...")
         
         # This would implement appearance-based track refinement
         # For now, return as-is

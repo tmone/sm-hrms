@@ -67,7 +67,7 @@ class PersonRecognitionInference:
             'confidence_scores': []
         })
         
-        print(f"🎥 Processing video: {video_path}")
+        print(f"[MOVIE] Processing video: {video_path}")
         print(f"   Total frames: {total_frames}, FPS: {fps}")
         
         while True:
@@ -177,7 +177,7 @@ class PersonRecognitionInference:
         results['processing_time'] = total_time
         results['processing_fps'] = processed_frames / total_time
         
-        print(f"✅ Video processing complete!")
+        print(f"[OK] Video processing complete!")
         print(f"   Time: {total_time:.1f}s")
         print(f"   Persons found: {len(results['persons_detected'])}")
         

@@ -11,7 +11,7 @@ from datetime import datetime
 
 def retrain_model():
     """Retrain the person recognition model"""
-    print("🔄 Starting person recognition model retraining...")
+    print("[PROCESSING] Starting person recognition model retraining...")
     
     trainer = PersonRecognitionTrainer()
     
@@ -19,7 +19,7 @@ def retrain_model():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_name = f"person_model_svm_{timestamp}"
     
-    print(f"📊 Creating new model: {model_name}")
+    print(f"[INFO] Creating new model: {model_name}")
     
     try:
         # Train the model
@@ -28,7 +28,7 @@ def retrain_model():
             model_type='svm'
         )
         
-        print("\n✅ Model training completed successfully!")
+        print("\n[OK] Model training completed successfully!")
         print(f"   Model saved as: {model_name}")
         print(f"   Number of persons: {metadata['num_persons']}")
         print(f"   Training samples: {metadata['num_train_samples']}")
@@ -43,12 +43,12 @@ def retrain_model():
             config['default_model'] = model_name
             with open(config_path, 'w') as f:
                 json.dump(config, f, indent=2)
-            print(f"\n✅ Updated default model to: {model_name}")
+            print(f"\n[OK] Updated default model to: {model_name}")
         
         return model_name
         
     except Exception as e:
-        print(f"\n❌ Error training model: {str(e)}")
+        print(f"\n[ERROR] Error training model: {str(e)}")
         import traceback
         traceback.print_exc()
         return None
@@ -58,12 +58,12 @@ if __name__ == '__main__':
     # Check if dataset exists
     dataset_path = 'datasets/person_features.pkl'
     if not os.path.exists(dataset_path):
-        print("❌ No person dataset found at datasets/person_features.pkl")
+        print("[ERROR] No person dataset found at datasets/person_features.pkl")
         print("   Please create a dataset first using the person recognition feature")
         sys.exit(1)
     
     # Ask for confirmation
-    print("⚠️  This will create a new person recognition model")
+    print("[WARNING]  This will create a new person recognition model")
     print("   The process may take a few minutes depending on dataset size")
     print()
     
@@ -75,4 +75,4 @@ if __name__ == '__main__':
             print(f"\n🎉 You can now use the model: {model_name}")
             print("   Update your application to use this model name")
     else:
-        print("❌ Training cancelled")
+        print("[ERROR] Training cancelled")

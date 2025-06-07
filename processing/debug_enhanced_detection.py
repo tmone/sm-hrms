@@ -101,7 +101,7 @@ class DebugPersonTracker:
                 default_model,
                 confidence_threshold=0.7
             )
-            logger.info("✅ Recognition model loaded successfully")
+            logger.info("[OK] Recognition model loaded successfully")
             
             # Check what the model contains
             if hasattr(self.recognition_model, 'trainer'):
@@ -185,7 +185,7 @@ class DebugPersonTracker:
                     
                     if recognition_result:
                         recognized_id, confidence = recognition_result
-                        logger.info(f"🎯 Frame {frame_number}: RECOGNIZED {recognized_id} with confidence {confidence:.2f}")
+                        logger.info(f"[TARGET] Frame {frame_number}: RECOGNIZED {recognized_id} with confidence {confidence:.2f}")
                     else:
                         logger.info(f"❓ Frame {frame_number}: NO RECOGNITION for detection {i}")
                         

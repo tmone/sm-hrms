@@ -35,7 +35,7 @@ def check_training_data(dataset_name):
     missing_classes = expected_classes - actual_classes
     
     if missing_classes:
-        print(f"\n⚠️  WARNING: Missing classes: {missing_classes}")
+        print(f"\n[WARNING]  WARNING: Missing classes: {missing_classes}")
         for i in missing_classes:
             print(f"   Class {i} ({person_ids[i]}) has no samples in y")
 

@@ -72,14 +72,14 @@ def test_attendance_aggregation():
                     print(f"   - Person: {record.person_id}, Date: {record.attendance_date}, Location: {record.attendance_location}")
                     print(f"     Check In: {record.check_in}, Check Out: {record.check_out}, Count: {record.detection_count}")
             else:
-                print("   ⚠️  No aggregated records found!")
+                print("   [WARNING]  No aggregated records found!")
                 
             # Try to count total aggregated records
             total_aggregated = base_query.count()
             print(f"\n   Total aggregated records: {total_aggregated}")
             
         except Exception as e:
-            print(f"   ❌ Error in aggregation query: {e}")
+            print(f"   [ERROR] Error in aggregation query: {e}")
             import traceback
             traceback.print_exc()
         

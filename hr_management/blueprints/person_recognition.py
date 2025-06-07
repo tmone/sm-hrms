@@ -128,7 +128,7 @@ def create_dataset():
                 pass
         
         # Create dataset
-        print(f"🔄 Creating dataset '{dataset_name}' with {len(person_ids)} persons...")
+        print(f"[PROCESSING] Creating dataset '{dataset_name}' with {len(person_ids)} persons...")
         dataset_info = creator.create_dataset_from_persons(person_ids, dataset_name)
         
         # Optionally augment dataset
@@ -163,7 +163,7 @@ def create_dataset():
         })
         
     except Exception as e:
-        print(f"❌ Dataset creation error: {str(e)}")
+        print(f"[ERROR] Dataset creation error: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
@@ -232,10 +232,10 @@ def train_model():
         from hr_management.processing.person_recognition_trainer import PersonRecognitionTrainer
         
         # Prepare training data
-        print(f"📊 Loading training data from dataset: {dataset_name}")
+        print(f"[INFO] Loading training data from dataset: {dataset_name}")
         X, y, person_ids = creator.prepare_training_data(dataset_name)
         
-        print(f"📊 Loaded data: X shape = {np.array(X).shape if len(X) > 0 else 'empty'}, unique persons = {len(set(y)) if len(y) > 0 else 0}")
+        print(f"[INFO] Loaded data: X shape = {np.array(X).shape if len(X) > 0 else 'empty'}, unique persons = {len(set(y)) if len(y) > 0 else 0}")
         
         if len(X) == 0:
             return jsonify({'success': False, 'error': 'No training data found'})
@@ -247,7 +247,7 @@ def train_model():
         
         # Warn if some persons have no data
         if unique_classes < len(person_ids):
-            print(f"⚠️  Warning: {len(person_ids) - unique_classes} person(s) have no valid training data")
+            print(f"[WARNING]  Warning: {len(person_ids) - unique_classes} person(s) have no valid training data")
         
         # Train model with continuous training parameters
         trainer = PersonRecognitionTrainer()
@@ -269,7 +269,7 @@ def train_model():
         })
         
     except Exception as e:
-        print(f"❌ Training error: {str(e)}")
+        print(f"[ERROR] Training error: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
@@ -336,7 +336,7 @@ def test_video():
         })
         
     except Exception as e:
-        print(f"❌ Video test error: {str(e)}")
+        print(f"[ERROR] Video test error: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
@@ -371,19 +371,19 @@ def test_image():
         confidence_threshold = float(request.form.get('confidence_threshold', 0.6))
         is_pre_cropped = request.form.get('is_pre_cropped', 'false').lower() == 'true'
         
-        print(f"🔍 Test image request - Model: {model_name}, Threshold: {confidence_threshold}, Pre-cropped: {is_pre_cropped}")
+        print(f"[SEARCH] Test image request - Model: {model_name}, Threshold: {confidence_threshold}, Pre-cropped: {is_pre_cropped}")
         
         inference = inference_class(model_name, confidence_threshold)
         
         # Use appropriate method based on whether image is pre-cropped
         if is_pre_cropped and hasattr(inference, 'process_cropped_image'):
-            print(f"📸 Processing as pre-cropped image: {image_path}")
+            print(f"[CAMERA] Processing as pre-cropped image: {image_path}")
             results = inference.process_cropped_image(str(image_path))
         else:
-            print(f"📸 Processing as full image: {image_path}")
+            print(f"[CAMERA] Processing as full image: {image_path}")
             results = inference.process_image(str(image_path))
         
-        print(f"📊 Results: {results}")
+        print(f"[INFO] Results: {results}")
         
         # Clean up
         shutil.rmtree(temp_dir)
@@ -394,7 +394,7 @@ def test_image():
         })
         
     except Exception as e:
-        print(f"❌ Image test error: {str(e)}")
+        print(f"[ERROR] Image test error: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})

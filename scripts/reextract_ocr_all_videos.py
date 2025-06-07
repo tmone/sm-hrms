@@ -22,7 +22,7 @@ def reextract_ocr_for_all_videos(force=False):
         # Check if OCR extractor is available
         try:
             ocr_extractor = VideoOCRExtractor(ocr_engine='easyocr')
-            print("✓ OCR extractor initialized successfully")
+            print("[CHECK] OCR extractor initialized successfully")
         except Exception as e:
             print(f"✗ Failed to initialize OCR extractor: {e}")
             print("\nMake sure you have installed OCR dependencies:")
@@ -57,7 +57,7 @@ def reextract_ocr_for_all_videos(force=False):
             
             try:
                 # Extract OCR data
-                print("  🔤 Extracting OCR data...")
+                print("  [TEXT] Extracting OCR data...")
                 
                 # Sample every 10 seconds for efficiency
                 fps = 30  # Assume 30fps if not known
@@ -76,14 +76,14 @@ def reextract_ocr_for_all_videos(force=False):
                     video.ocr_extraction_confidence = ocr_data.get('confidence', 0.0)
                     video.ocr_extraction_done = True
                     
-                    print(f"  ✓ Location: {video.ocr_location}")
-                    print(f"  ✓ Date: {video.ocr_video_date}")
-                    print(f"  ✓ Time: {video.ocr_video_time}")
-                    print(f"  ✓ Confidence: {video.ocr_extraction_confidence:.2%}")
+                    print(f"  [CHECK] Location: {video.ocr_location}")
+                    print(f"  [CHECK] Date: {video.ocr_video_date}")
+                    print(f"  [CHECK] Time: {video.ocr_video_time}")
+                    print(f"  [CHECK] Confidence: {video.ocr_extraction_confidence:.2%}")
                     
                     success_count += 1
                 else:
-                    print("  ⚠️  No OCR data extracted")
+                    print("  [WARNING]  No OCR data extracted")
                     video.ocr_extraction_done = True  # Mark as done even if no data
                     
             except Exception as e:
@@ -93,7 +93,7 @@ def reextract_ocr_for_all_videos(force=False):
         # Save all changes
         try:
             db.session.commit()
-            print(f"\n✅ Successfully processed {success_count}/{len(videos)} videos")
+            print(f"\n[OK] Successfully processed {success_count}/{len(videos)} videos")
         except Exception as e:
             print(f"\n✗ Failed to save changes: {e}")
             db.session.rollback()
@@ -126,7 +126,7 @@ def reset_and_reextract(video_id=None):
             video.ocr_extraction_confidence = None
         
         db.session.commit()
-        print("✓ OCR data reset successfully")
+        print("[CHECK] OCR data reset successfully")
         
         # Now re-extract
         reextract_ocr_for_all_videos(force=True)
@@ -153,7 +153,7 @@ def main():
             print("\nVideo OCR Status:")
             print("-" * 80)
             for v in videos:
-                ocr_status = "✓ Has OCR data" if v.ocr_extraction_done else "✗ No OCR data"
+                ocr_status = "[CHECK] Has OCR data" if v.ocr_extraction_done else "✗ No OCR data"
                 print(f"ID {v.id}: {v.filename}")
                 print(f"  Status: {ocr_status}")
                 if v.ocr_extraction_done:
@@ -182,7 +182,7 @@ def main():
                         video.ocr_extraction_confidence = ocr_data.get('confidence', 0.0)
                         video.ocr_extraction_done = True
                         app.db.session.commit()
-                        print("✓ OCR extraction completed")
+                        print("[CHECK] OCR extraction completed")
                 else:
                     print(f"Video with ID {args.video_id} not found")
         else:

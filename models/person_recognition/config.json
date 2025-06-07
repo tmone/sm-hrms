@@ -1,8 +1,8 @@
 {
-  "default_model": "refined_quick_20250606_054446",
+  "default_model": "person_model_svm_20250607_181818",
   "last_updated": "2025-06-06T05:44:48.389173",
   "note": "Fallback model set to allow deletion of previous default",
   "auto_refined": true,
   "refinement_type": "quick",
-  "updated_at": "2025-06-02T16:15:00.000000"
+  "updated_at": "2025-06-07T18:18:52.185942"
 }

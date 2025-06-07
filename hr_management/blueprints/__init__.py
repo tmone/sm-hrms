@@ -5,6 +5,8 @@ from .dashboard import dashboard_bp
 from .employees import employees_bp
 from .api import api_bp
 from .videos import videos_bp
+from .persons import persons_bp
+from .person_review import person_review_bp
 
 # Try to import blueprints that may have dependencies
 try:
@@ -23,6 +25,8 @@ __all__ = [
     'employees_bp',
     'api_bp',
     'videos_bp',
+    'persons_bp',
+    'person_review_bp',
     'face_recognition_bp',
     'gpu_management_bp'
 ]

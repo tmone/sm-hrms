@@ -617,6 +617,7 @@ def create_app(config_name=None):
         ('hr_management.blueprints.face_recognition', 'face_recognition_bp', '/face-recognition', 'Face Recognition'),
         ('hr_management.blueprints.api', 'api_bp', '/api', 'API'),
         ('hr_management.blueprints.persons', 'persons_bp', '/persons', 'Persons'),
+        ('hr_management.blueprints.person_review', 'person_review_bp', '/persons/review', 'Person Review'),
         ('hr_management.blueprints.attendance', 'attendance_bp', '/attendance', 'Attendance'),
         ('hr_management.blueprints.settings', 'settings_bp', '/settings', 'Settings'),
         ('hr_management.blueprints.person_recognition', 'person_recognition_bp', '/person-recognition', 'Person Recognition'),

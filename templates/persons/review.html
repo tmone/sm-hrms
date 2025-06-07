@@ -1,0 +1,510 @@
+{% extends "base.html" %}
+
+{% block title %}Review {{ person_id }} - {{ super() }}{% endblock %}
+
+{% block head %}
+{{ super() }}
+<style>
+.image-card {
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.image-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+
+.image-card.selected {
+    transform: scale(0.95);
+    background-color: rgba(59, 130, 246, 0.1);
+}
+
+.image-card.selected::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 3px solid #3b82f6;
+    border-radius: 0.5rem;
+    pointer-events: none;
+}
+
+.image-card.selected .selection-checkbox input[type="checkbox"] {
+    transform: scale(1.2);
+}
+
+.status-badge {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 10;
+}
+
+.selection-checkbox {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 10;
+}
+
+.confirmed { border-color: #10b981; }
+.unconfirmed { border-color: #f59e0b; }
+.deleted { opacity: 0.5; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800 dark:text-white">
+                    Review Images: {{ person_id }}
+                </h1>
+                <p class="text-gray-600 dark:text-gray-400 mt-2">
+                    {% if metadata.recognized %}
+                        <span class="text-green-600">
+                            <i class="fas fa-check-circle"></i> Recognized person 
+                            ({{ '%.1f'|format(metadata.recognition_confidence * 100) }}% confidence)
+                        </span>
+                    {% else %}
+                        <span class="text-gray-500">
+                            <i class="fas fa-user-plus"></i> New person
+                        </span>
+                    {% endif %}
+                </p>
+            </div>
+            <a href="{{ url_for('persons.index') }}" 
+               class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Persons
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
+            <div class="text-2xl font-bold text-gray-800 dark:text-white">{{ images|length }}</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">Total Images</div>
+        </div>
+        <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 shadow">
+            <div class="text-2xl font-bold text-green-600 dark:text-green-400">
+                {{ images|selectattr('status', 'equalto', 'confirmed')|list|length }}
+            </div>
+            <div class="text-sm text-green-700 dark:text-green-300">Confirmed</div>
+        </div>
+        <div class="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 shadow">
+            <div class="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                {{ images|selectattr('status', 'equalto', 'unconfirmed')|list|length }}
+            </div>
+            <div class="text-sm text-orange-700 dark:text-orange-300">Unconfirmed</div>
+        </div>
+        <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 shadow">
+            <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                {{ images|selectattr('in_dataset', 'equalto', true)|list|length }}
+            </div>
+            <div class="text-sm text-blue-700 dark:text-blue-300">In Dataset</div>
+        </div>
+    </div>
+
+    <!-- Action Toolbar -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-4 mb-6 shadow sticky top-0 z-30">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+            <div class="flex items-center gap-2">
+                <!-- Filter Toggle -->
+                <div class="flex items-center gap-2 mr-4">
+                    <label class="text-sm text-gray-600 dark:text-gray-400">Show:</label>
+                    <select id="filterStatus" onchange="filterImages()" 
+                            class="px-3 py-1 border rounded dark:bg-gray-700 dark:border-gray-600">
+                        <option value="unconfirmed">Unconfirmed Only</option>
+                        <option value="all">All Images</option>
+                        <option value="confirmed">Confirmed Only</option>
+                    </select>
+                </div>
+                
+                <button onclick="selectAll('unconfirmed')" 
+                        class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded">
+                    Select Unconfirmed
+                </button>
+                <button onclick="selectNone()" 
+                        class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
+                    Clear Selection
+                </button>
+                <span class="text-gray-600 dark:text-gray-400 ml-4">
+                    <span id="selectedCount">0</span> selected
+                </span>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button onclick="confirmSelected()" 
+                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50"
+                        id="confirmBtn" disabled>
+                    <i class="fas fa-check mr-2"></i>Confirm Selected
+                </button>
+                <button onclick="showMoveDialog()" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50"
+                        id="moveBtn" disabled>
+                    <i class="fas fa-exchange-alt mr-2"></i>Move to Person
+                </button>
+                <button onclick="deleteSelected()" 
+                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded disabled:opacity-50"
+                        id="deleteBtn" disabled>
+                    <i class="fas fa-trash mr-2"></i>Delete Selected
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Images Grid -->
+    <div id="imagesGrid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        {% if images|selectattr('status', 'equalto', 'unconfirmed')|list|length == 0 and images|length > 0 %}
+        <!-- All Confirmed Message -->
+        <div class="col-span-full">
+            <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-8 text-center">
+                <i class="fas fa-check-circle text-5xl text-green-500 mb-4"></i>
+                <h3 class="text-xl font-semibold text-green-700 dark:text-green-300 mb-2">
+                    All Images Confirmed!
+                </h3>
+                <p class="text-green-600 dark:text-green-400 mb-4">
+                    All {{ images|length }} images have been confirmed and added to the dataset.
+                </p>
+                <div class="flex gap-2 justify-center">
+                    <button onclick="document.getElementById('filterStatus').value='confirmed'; filterImages();"
+                            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                        View Confirmed Images
+                    </button>
+                    <a href="{{ url_for('persons.index') }}" 
+                       class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
+                        Back to Persons
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% for img in images %}
+        <div class="image-card bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg 
+                    border-2 {{ 'confirmed' if img.status == 'confirmed' else 'unconfirmed' }} cursor-pointer"
+             data-filename="{{ img.filename }}"
+             data-status="{{ img.status }}"
+             onclick="toggleImageSelection(this)">
+            
+            <!-- Selection Checkbox -->
+            <div class="selection-checkbox pointer-events-none">
+                <input type="checkbox" 
+                       value="{{ img.filename }}"
+                       onchange="updateSelection()"
+                       class="w-5 h-5 pointer-events-auto"
+                       onclick="event.stopPropagation()">
+            </div>
+            
+            <!-- Status Badge -->
+            <div class="status-badge">
+                {% if img.status == 'confirmed' %}
+                    <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                        <i class="fas fa-check"></i>
+                    </span>
+                {% elif img.in_dataset %}
+                    <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded" 
+                          title="In training dataset">
+                        <i class="fas fa-database"></i>
+                    </span>
+                {% else %}
+                    <span class="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded">
+                        <i class="fas fa-question"></i>
+                    </span>
+                {% endif %}
+            </div>
+            
+            <!-- Image -->
+            <img src="{{ url_for('persons.serve_person_image', filepath=img.path) }}" 
+                 class="w-full h-32 object-contain p-2 pointer-events-none"
+                 alt="{{ img.filename }}">
+            
+            <!-- Info -->
+            <div class="p-2 text-xs border-t border-gray-200 dark:border-gray-700">
+                {% if img.confidence %}
+                <div class="text-gray-600 dark:text-gray-400">
+                    Det: {{ '%.1f'|format(img.confidence * 100) }}%
+                </div>
+                {% endif %}
+                {% if img.recognized_as %}
+                <div class="text-blue-600 dark:text-blue-400">
+                    Rec: {{ img.recognized_as }}
+                </div>
+                {% endif %}
+                {% if img.frame_number %}
+                <div class="text-gray-500 dark:text-gray-500">
+                    Frame: {{ img.frame_number }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Move Dialog -->
+<div id="moveDialog" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+        <h3 class="text-lg font-semibold mb-4">Move Images to Person</h3>
+        <input type="text" 
+               id="targetPersonId" 
+               placeholder="Enter target person ID (e.g., PERSON-0001)"
+               class="w-full px-4 py-2 border rounded mb-4 dark:bg-gray-700 dark:border-gray-600">
+        <div class="flex gap-2">
+            <button onclick="moveSelected()" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex-1">
+                Move
+            </button>
+            <button onclick="closeMoveDialog()" 
+                    class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded flex-1">
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedImages = new Set();
+
+// Filter images on page load to show only unconfirmed
+window.addEventListener('DOMContentLoaded', () => {
+    filterImages();
+});
+
+function filterImages() {
+    const filterValue = document.getElementById('filterStatus').value;
+    const cards = document.querySelectorAll('.image-card');
+    
+    cards.forEach(card => {
+        const status = card.dataset.status;
+        
+        if (filterValue === 'all') {
+            card.style.display = '';
+        } else if (filterValue === status) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+    
+    // Update selection after filtering
+    updateSelection();
+}
+
+function toggleImageSelection(card) {
+    const checkbox = card.querySelector('input[type="checkbox"]');
+    checkbox.checked = !checkbox.checked;
+    updateSelection();
+}
+
+function updateSelection() {
+    selectedImages.clear();
+    const checkboxes = document.querySelectorAll('.image-card input[type="checkbox"]:checked');
+    
+    checkboxes.forEach(cb => {
+        selectedImages.add(cb.value);
+        cb.closest('.image-card').classList.add('selected');
+    });
+    
+    // Update unselected cards
+    document.querySelectorAll('.image-card input[type="checkbox"]:not(:checked)').forEach(cb => {
+        cb.closest('.image-card').classList.remove('selected');
+    });
+    
+    // Update UI
+    document.getElementById('selectedCount').textContent = selectedImages.size;
+    const hasSelection = selectedImages.size > 0;
+    document.getElementById('confirmBtn').disabled = !hasSelection;
+    document.getElementById('moveBtn').disabled = !hasSelection;
+    document.getElementById('deleteBtn').disabled = !hasSelection;
+}
+
+function selectAll(status = null) {
+    const selector = status ? `.image-card[data-status="${status}"] input[type="checkbox"]` : '.image-card input[type="checkbox"]';
+    document.querySelectorAll(selector).forEach(cb => cb.checked = true);
+    updateSelection();
+}
+
+function selectNone() {
+    document.querySelectorAll('.image-card input[type="checkbox"]').forEach(cb => cb.checked = false);
+    updateSelection();
+}
+
+async function confirmSelected() {
+    if (selectedImages.size === 0) return;
+    
+    const btn = document.getElementById('confirmBtn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Confirming...';
+    btn.disabled = true;
+    
+    try {
+        const response = await fetch(`/persons/review/{{ person_id }}/confirm`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({images: Array.from(selectedImages)})
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            
+            // Show success message
+            const message = document.createElement('div');
+            message.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+            message.innerHTML = `
+                <i class="fas fa-check-circle mr-2"></i>
+                Confirmed ${result.confirmed} images and added to dataset
+            `;
+            document.body.appendChild(message);
+            
+            // Remove confirmed images from view
+            selectedImages.forEach(imgName => {
+                const card = document.querySelector(`.image-card[data-filename="${imgName}"]`);
+                if (card) {
+                    card.style.transition = 'all 0.3s';
+                    card.style.opacity = '0';
+                    card.style.transform = 'scale(0.8)';
+                    setTimeout(() => card.remove(), 300);
+                }
+            });
+            
+            // Update counts
+            const unconfirmedCount = document.querySelectorAll('.image-card[data-status="unconfirmed"]').length - result.confirmed;
+            if (unconfirmedCount === 0) {
+                setTimeout(() => {
+                    window.location.href = '/persons';
+                }, 2000);
+            }
+            
+            // Clear selection
+            selectedImages.clear();
+            updateSelection();
+            
+            // Remove message after 3 seconds
+            setTimeout(() => message.remove(), 3000);
+        } else {
+            alert('Failed to confirm images');
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = selectedImages.size === 0;
+    }
+}
+
+function showMoveDialog() {
+    document.getElementById('moveDialog').classList.remove('hidden');
+}
+
+function closeMoveDialog() {
+    document.getElementById('moveDialog').classList.add('hidden');
+}
+
+async function moveSelected() {
+    const targetId = document.getElementById('targetPersonId').value.trim();
+    if (!targetId || selectedImages.size === 0) return;
+    
+    const response = await fetch(`/persons/review/{{ person_id }}/move`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            images: Array.from(selectedImages),
+            target_person_id: targetId
+        })
+    });
+    
+    if (response.ok) {
+        location.reload();
+    }
+}
+
+async function deleteSelected() {
+    if (selectedImages.size === 0) return;
+    
+    if (!confirm(`Delete ${selectedImages.size} images?`)) return;
+    
+    const btn = document.getElementById('deleteBtn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Deleting...';
+    btn.disabled = true;
+    
+    try {
+        const response = await fetch(`/persons/review/{{ person_id }}/delete`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({images: Array.from(selectedImages)})
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            
+            // Show success message
+            const message = document.createElement('div');
+            message.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+            message.innerHTML = `
+                <i class="fas fa-trash mr-2"></i>
+                Deleted ${result.deleted} images
+            `;
+            document.body.appendChild(message);
+            
+            // Remove deleted images from view
+            selectedImages.forEach(imgName => {
+                const card = document.querySelector(`.image-card[data-filename="${imgName}"]`);
+                if (card) {
+                    card.style.transition = 'all 0.3s';
+                    card.style.opacity = '0';
+                    card.style.transform = 'scale(0.8)';
+                    setTimeout(() => card.remove(), 300);
+                }
+            });
+            
+            // Clear selection
+            selectedImages.clear();
+            updateSelection();
+            
+            // Check if no more unconfirmed images
+            setTimeout(() => {
+                const remainingUnconfirmed = document.querySelectorAll('.image-card[data-status="unconfirmed"]').length;
+                const remainingConfirmed = document.querySelectorAll('.image-card[data-status="confirmed"]').length;
+                
+                if (remainingUnconfirmed === 0) {
+                    if (remainingConfirmed > 0) {
+                        // All remaining images are confirmed
+                        const successMsg = document.createElement('div');
+                        successMsg.className = 'fixed top-20 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+                        successMsg.innerHTML = `
+                            <i class="fas fa-check-circle mr-2"></i>
+                            All images are now confirmed!
+                        `;
+                        document.body.appendChild(successMsg);
+                        
+                        setTimeout(() => {
+                            window.location.href = '/persons';
+                        }, 2000);
+                    } else if (document.getElementById('filterStatus').value === 'unconfirmed') {
+                        // No images left at all
+                        window.location.href = '/persons';
+                    }
+                }
+            }, 500);
+            
+            // Remove message after 3 seconds
+            setTimeout(() => message.remove(), 3000);
+        } else {
+            alert('Failed to delete images');
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = selectedImages.size === 0;
+    }
+}
+</script>
+{% endblock %}

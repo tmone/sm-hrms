@@ -186,6 +186,20 @@
                         <div class="p-4 border-b border-gray-200 dark:border-gray-600">
                             <h3 class="font-semibold text-lg text-gray-800 dark:text-white">
                                 {{ person.person_id }}
+                                {% if person.recognized %}
+                                <span class="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded" title="Recognized with {{ '%.1f'|format(person.recognition_confidence * 100) }}% confidence">
+                                    <i class="fas fa-check-circle"></i> Recognized
+                                </span>
+                                {% endif %}
+                                {% if person.unconfirmed_count > 0 %}
+                                <span class="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded" title="{{ person.unconfirmed_count }} images need review">
+                                    <i class="fas fa-exclamation-circle"></i> {{ person.unconfirmed_count }} Unconfirmed
+                                </span>
+                                {% elif person.confirmed_count > 0 and person.unconfirmed_count == 0 %}
+                                <span class="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded" title="All {{ person.confirmed_count }} images confirmed">
+                                    <i class="fas fa-check-double"></i> All Confirmed
+                                </span>
+                                {% endif %}
                                 {% if person.missing_filesystem %}
                                 <span class="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded" title="Person data missing from filesystem">
                                     <i class="fas fa-exclamation-triangle"></i> Missing Files
@@ -240,7 +254,7 @@
                         
                         <!-- Action Buttons -->
                         <div class="p-4 bg-gray-100 dark:bg-gray-800 rounded-b-lg">
-                            <div class="grid grid-cols-2 gap-2">
+                            <div class="grid grid-cols-{% if person.unconfirmed_count > 0 %}3{% else %}2{% endif %} gap-2">
                                 {% if person.missing_filesystem %}
                                 <button disabled 
                                         class="bg-gray-300 text-gray-500 py-2 px-3 rounded text-sm cursor-not-allowed"
@@ -252,6 +266,13 @@
                                         class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-3 rounded text-sm transition duration-150 ease-in-out">
                                     <i class="fas fa-images mr-1"></i>View All
                                 </button>
+                                {% endif %}
+                                
+                                {% if person.unconfirmed_count > 0 %}
+                                <a href="{{ url_for('person_review.review_person', person_id=person.person_id) }}" 
+                                   class="bg-orange-500 hover:bg-orange-600 text-white py-2 px-3 rounded text-sm transition duration-150 ease-in-out text-center">
+                                    <i class="fas fa-check-circle mr-1"></i>Review
+                                </a>
                                 {% endif %}
                                 {% if person.video_id %}
                                 <a href="{{ url_for('videos.detail', id=person.video_id) }}" 

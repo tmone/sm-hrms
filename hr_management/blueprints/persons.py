@@ -79,6 +79,17 @@ def index():
                     # Calculate duration (handle case where times might be frames or seconds)
                     duration = last_appearance - first_appearance if last_appearance > first_appearance else 0
                     
+                    # Check for review status
+                    review_status_path = person_dir / 'review_status.json'
+                    unconfirmed_count = 0
+                    confirmed_count = 0
+                    if review_status_path.exists():
+                        with open(review_status_path) as f:
+                            review_status = json.load(f)
+                        summary = review_status.get('summary', {})
+                        unconfirmed_count = summary.get('unconfirmed', 0)
+                        confirmed_count = summary.get('confirmed', 0)
+                    
                     persons_data.append({
                         'person_id': metadata['person_id'],
                         'video_id': video_id,
@@ -91,7 +102,11 @@ def index():
                         'avg_confidence': metadata.get('avg_confidence', metadata.get('confidence', 0)),
                         'images': images,
                         'image_count': len(metadata.get('images', [])),
-                        'person_dir': str(person_dir.relative_to('processing/outputs'))
+                        'person_dir': str(person_dir.relative_to('processing/outputs')),
+                        'unconfirmed_count': unconfirmed_count,
+                        'confirmed_count': confirmed_count,
+                        'recognized': metadata.get('recognized', False),
+                        'recognition_confidence': metadata.get('recognition_confidence', 0)
                     })
     
     # Sort by person_id

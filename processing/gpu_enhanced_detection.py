@@ -209,9 +209,17 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                         model_name = latest_model.name
                         print(f"🎯 Using model: {model_name}")
                     else:
-                        # Try the default model
-                        model_name = 'refined_quick_20250606_054446'
-                        print(f"🎯 Using default model: {model_name}")
+                        # Try the default model from config
+                        config_path = Path("models/person_recognition/config.json")
+                        if config_path.exists():
+                            import json
+                            with open(config_path) as f:
+                                config = json.load(f)
+                            model_name = config.get('default_model', 'person_model_svm_20250607_181818')
+                            print(f"🎯 Using default model from config: {model_name}")
+                        else:
+                            model_name = 'person_model_svm_20250607_181818'
+                            print(f"🎯 Using fallback model: {model_name}")
                     
                     ui_style_recognizer = PersonRecognitionInferenceSimple(
                         model_name=model_name,

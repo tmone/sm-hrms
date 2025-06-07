@@ -29,7 +29,19 @@ def get_venv_python():
 class VenvRecognitionWrapper:
     """Run recognition in the virtual environment where it works"""
     
-    def __init__(self, model_name='refined_quick_20250606_054446'):
+    def __init__(self, model_name=None):
+        # If no model specified, get default from config
+        if model_name is None:
+            config_path = Path("models/person_recognition/config.json")
+            if config_path.exists():
+                with open(config_path) as f:
+                    config = json.load(f)
+                model_name = config.get('default_model', 'person_model_svm_20250607_181818')
+                print(f"📋 Using default model from config: {model_name}")
+            else:
+                model_name = 'person_model_svm_20250607_181818'
+                print(f"📋 Using fallback model: {model_name}")
+        
         self.model_name = model_name
         self.python_exe = get_venv_python()
         print(f"🐍 Using Python: {self.python_exe}")

@@ -2536,8 +2536,14 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                 db.session.close()
                 db.session.remove()
                 
-                # Run GPU detection (no DB operations)
-                result = gpu_person_detection_task(video_path, gpu_config, video_id, app)
+                # Run GPU detection with safety wrapper (no DB operations)
+                try:
+                    from processing.safe_gpu_wrapper import process_video_safely
+                    result = process_video_safely(video_path, video_id, gpu_config)
+                except ImportError:
+                    # Fallback to direct GPU detection if wrapper not available
+                    print("[WARNING] Safe wrapper not available, using direct GPU processing")
+                    result = gpu_person_detection_task(video_path, gpu_config, video_id, app)
                 
                 # Re-establish session after GPU processing
                 video_obj = Video.query.get(video_id)

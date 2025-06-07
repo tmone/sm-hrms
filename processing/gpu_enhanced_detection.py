@@ -202,6 +202,27 @@ def update_video_progress(video_id, progress, message="Processing...", app=None)
         print(f"[WARNING] Could not update progress: {e}")
         # Don't propagate the error - progress updates are non-critical
 
+def get_safe_batch_size():
+    """Calculate safe batch size based on available GPU memory"""
+    if not CUDA_AVAILABLE or not TORCH_AVAILABLE:
+        return 1
+    
+    try:
+        # Get GPU memory info
+        gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1024**3  # GB
+        available_mem = (torch.cuda.memory_reserved(0) - torch.cuda.memory_allocated(0)) / 1024**3
+        
+        # Conservative batch size calculation
+        if gpu_mem >= 8:  # 8GB+ GPU
+            return 2
+        elif gpu_mem >= 4:  # 4-8GB GPU
+            return 1
+        else:  # Less than 4GB
+            return 1
+    except:
+        return 1
+
+
 def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=None):
     """
     GPU-accelerated person detection with optimizations for large videos
@@ -209,9 +230,10 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
     try:
         # Default GPU configuration - more conservative for stability
         if gpu_config is None:
+            safe_batch_size = get_safe_batch_size()
             gpu_config = {
                 'use_gpu': CUDA_AVAILABLE,
-                'batch_size': 2 if CUDA_AVAILABLE else 1,  # Further reduced for stability
+                'batch_size': safe_batch_size,  # Dynamic based on GPU memory
                 'device': 'cuda:0' if CUDA_AVAILABLE else 'cpu',
                 'fp16': False,  # Disabled FP16 for stability
                 'num_workers': 2  # Reduced workers to prevent CPU overload
@@ -477,6 +499,8 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
         
         # Process video in batches for GPU efficiency
         batch_size = gpu_config['batch_size']
+        original_batch_size = batch_size  # Store original for reference
+        consecutive_errors = 0  # Track consecutive errors
         detections = []
         frame_batch = []
         frame_numbers = []
@@ -539,37 +563,81 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                         
                         print("[OK] Resources available, continuing processing...")
                 
-                # Run batch inference
-                if gpu_tracker:
-                    # Use GPU appearance tracker
-                    if THROTTLING_ENABLED:
-                        batch_detections = safe_gpu_operation(
-                            process_batch_gpu_with_tracker,
-                            model, frame_batch, frame_numbers, 
-                            gpu_config, gpu_tracker, fps,
-                            ui_style_recognizer=ui_style_recognizer
-                        )
+                # Run batch inference with error handling
+                try:
+                    if gpu_tracker:
+                        # Use GPU appearance tracker
+                        if THROTTLING_ENABLED:
+                            batch_detections = safe_gpu_operation(
+                                process_batch_gpu_with_tracker,
+                                model, frame_batch, frame_numbers, 
+                                gpu_config, gpu_tracker, fps,
+                                ui_style_recognizer=ui_style_recognizer
+                            )
+                        else:
+                            batch_detections = process_batch_gpu_with_tracker(
+                                model, frame_batch, frame_numbers, 
+                                gpu_config, gpu_tracker, fps,
+                                ui_style_recognizer=ui_style_recognizer
+                            )
                     else:
-                        batch_detections = process_batch_gpu_with_tracker(
-                            model, frame_batch, frame_numbers, 
-                            gpu_config, gpu_tracker, fps,
-                            ui_style_recognizer=ui_style_recognizer
-                        )
-                else:
-                    # Use simple position-based tracking
-                    if THROTTLING_ENABLED:
-                        batch_detections = safe_gpu_operation(
-                            process_batch_gpu,
-                            model, frame_batch, frame_numbers, 
-                            gpu_config, person_tracks, next_person_id,
-                            ui_style_recognizer=ui_style_recognizer
-                        )
+                        # Use simple position-based tracking
+                        if THROTTLING_ENABLED:
+                            batch_detections = safe_gpu_operation(
+                                process_batch_gpu,
+                                model, frame_batch, frame_numbers, 
+                                gpu_config, person_tracks, next_person_id,
+                                ui_style_recognizer=ui_style_recognizer
+                            )
+                        else:
+                            batch_detections = process_batch_gpu(
+                                model, frame_batch, frame_numbers, 
+                                gpu_config, person_tracks, next_person_id,
+                                ui_style_recognizer=ui_style_recognizer
+                            )
+                    
+                    # Reset error count on success
+                    consecutive_errors = 0
+                    
+                except Exception as e:
+                    consecutive_errors += 1
+                    print(f"[WARNING] Batch processing error (attempt {consecutive_errors}): {str(e)}")
+                    
+                    # Try to recover
+                    if "out of memory" in str(e).lower() and batch_size > 1:
+                        # Reduce batch size
+                        batch_size = max(1, batch_size // 2)
+                        print(f"[INFO] Reducing batch size to {batch_size} due to memory constraints")
+                        
+                        # Clear GPU memory
+                        if CUDA_AVAILABLE and torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                            import gc
+                            gc.collect()
+                        
+                        # Retry with smaller batch
+                        try:
+                            # Process frames one by one if needed
+                            batch_detections = []
+                            for i, (frame, frame_num) in enumerate(zip(frame_batch, frame_numbers)):
+                                single_det = process_batch_gpu(
+                                    model, [frame], [frame_num],
+                                    gpu_config, person_tracks, next_person_id,
+                                    ui_style_recognizer=ui_style_recognizer
+                                )
+                                batch_detections.extend(single_det)
+                        except Exception as e2:
+                            print(f"[ERROR] Failed even with batch size 1: {str(e2)}")
+                            batch_detections = []
                     else:
-                        batch_detections = process_batch_gpu(
-                            model, frame_batch, frame_numbers, 
-                            gpu_config, person_tracks, next_person_id,
-                            ui_style_recognizer=ui_style_recognizer
-                        )
+                        # Non-memory error or already at batch size 1
+                        if consecutive_errors >= 3:
+                            print(f"[ERROR] Too many consecutive errors, skipping batch")
+                            batch_detections = []
+                        else:
+                            # Wait and retry
+                            time.sleep(2.0 * consecutive_errors)
+                            continue  # Retry the same batch
                 
                 # Update next person ID
                 if batch_detections:
@@ -620,7 +688,22 @@ def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=No
                 if video_id:
                     print(f"[INFO] Progress: {int(progress)}% - Detecting persons: {processed_frames}/{total_frames} frames")
                 
-                # No checkpoint saving - removed for stability
+                # Periodic memory cleanup every 100 frames
+                if processed_frames % 100 == 0 and CUDA_AVAILABLE:
+                    try:
+                        # Log memory usage
+                        allocated = torch.cuda.memory_allocated(0) / 1024**3
+                        reserved = torch.cuda.memory_reserved(0) / 1024**3
+                        print(f"[GPU] Memory: {allocated:.1f}GB allocated, {reserved:.1f}GB reserved")
+                        
+                        # Clear cache if memory usage is high
+                        if allocated > 0.8 * torch.cuda.get_device_properties(0).total_memory / 1024**3:
+                            torch.cuda.empty_cache()
+                            import gc
+                            gc.collect()
+                            print("[INFO] Cleared GPU cache due to high memory usage")
+                    except Exception as e:
+                        logger.debug(f"Memory monitoring error: {e}")
             
             frame_count += 1
         

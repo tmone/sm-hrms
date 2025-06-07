@@ -761,13 +761,22 @@ def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, n
                     bbox_width = int(x2 - x1)
                     bbox_height = int(y2 - y1)
                     
-                    # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+                    # QUALITY FILTER 1: Skip persons with bounding box width < 128 pixels
                     # Small bounding boxes typically contain low-quality person images
                     # that are not suitable for face recognition training
                     MIN_BBOX_WIDTH = 128
                     
                     if bbox_width < MIN_BBOX_WIDTH:
-                        print(f"⚠️ Skipping person detection: bbox width {bbox_width}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                        logger.info(f"Skipping person detection: bbox width {bbox_width}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                        continue
+                    
+                    # QUALITY FILTER 2: Skip persons where height < 2 * width
+                    # This filters out poor detections where people are lying down or have incorrect bbox shapes
+                    # A standing person typically has height/width ratio between 2.0 to 3.0
+                    MIN_HEIGHT_WIDTH_RATIO = 2.0
+                    
+                    if bbox_height < (MIN_HEIGHT_WIDTH_RATIO * bbox_width):
+                        logger.info(f"Skipping person detection: bbox height {bbox_height}px < {MIN_HEIGHT_WIDTH_RATIO} * width {bbox_width}px (incorrect aspect ratio)")
                         continue
                     
                     # Simple tracking based on position
@@ -1095,6 +1104,10 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir, ui_style_re
                     if w < 128:
                         continue
                     
+                    # Skip incorrect aspect ratios
+                    if h < (2.0 * w):
+                        continue
+                    
                     # Extract person region
                     padding = 10
                     x1 = max(0, int(x - padding))
@@ -1192,13 +1205,21 @@ def extract_persons_data_gpu(video_path, person_tracks, persons_dir, ui_style_re
             if ret:
                 x, y, w, h = detection["bbox"]
                 
-                # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+                # QUALITY FILTER 1: Skip persons with bounding box width < 128 pixels
                 # Small bounding boxes typically contain low-quality person images
                 # that are not suitable for face recognition training
                 MIN_BBOX_WIDTH = 128
                 
                 if w < MIN_BBOX_WIDTH:
-                    print(f"⚠️ Skipping {person_id_str} frame {frame_number}: bbox width {w}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                    logger.info(f"Skipping {person_id_str} frame {frame_number}: bbox width {w}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                    continue
+                
+                # QUALITY FILTER 2: Skip persons where height < 2 * width
+                # This filters out poor detections where people are lying down or have incorrect bbox shapes
+                MIN_HEIGHT_WIDTH_RATIO = 2.0
+                
+                if h < (MIN_HEIGHT_WIDTH_RATIO * w):
+                    logger.info(f"Skipping {person_id_str} frame {frame_number}: bbox height {h}px < {MIN_HEIGHT_WIDTH_RATIO} * width {w}px (incorrect aspect ratio)")
                     continue
                 
                 # Extract person region with some padding

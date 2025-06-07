@@ -249,13 +249,22 @@ def detect_persons_yolo(filepath):
                                     # Calculate actual pixel width
                                     bbox_width_pixels = x2 - x1
                                     
-                                    # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+                                    # QUALITY FILTER 1: Skip persons with bounding box width < 128 pixels
                                     # Small bounding boxes typically contain low-quality person images
                                     # that are not suitable for face recognition training
                                     MIN_BBOX_WIDTH = 128
                                     
                                     if bbox_width_pixels < MIN_BBOX_WIDTH:
                                         print(f"⚠️ Skipping person detection: bbox width {bbox_width_pixels:.0f}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                                        continue
+                                    
+                                    # QUALITY FILTER 2: Skip persons where height < 2 * width
+                                    # This filters out poor detections where people are lying down or have incorrect bbox shapes
+                                    bbox_height_pixels = y2 - y1
+                                    MIN_HEIGHT_WIDTH_RATIO = 2.0
+                                    
+                                    if bbox_height_pixels < (MIN_HEIGHT_WIDTH_RATIO * bbox_width_pixels):
+                                        print(f"⚠️ Skipping person detection: bbox height {bbox_height_pixels:.0f}px < {MIN_HEIGHT_WIDTH_RATIO} * width {bbox_width_pixels:.0f}px (incorrect aspect ratio)")
                                         continue
                                     
                                     # Create detection record
@@ -376,13 +385,22 @@ def detect_persons_torch(filepath):
                         # Calculate actual pixel width
                         bbox_width_pixels = x2 - x1
                         
-                        # QUALITY FILTER: Skip persons with bounding box width < 128 pixels
+                        # QUALITY FILTER 1: Skip persons with bounding box width < 128 pixels
                         # Small bounding boxes typically contain low-quality person images
                         # that are not suitable for face recognition training
                         MIN_BBOX_WIDTH = 128
                         
                         if bbox_width_pixels < MIN_BBOX_WIDTH:
                             print(f"⚠️ Skipping person detection: bbox width {bbox_width_pixels:.0f}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                            continue
+                        
+                        # QUALITY FILTER 2: Skip persons where height < 2 * width
+                        # This filters out poor detections where people are lying down or have incorrect bbox shapes
+                        bbox_height_pixels = y2 - y1
+                        MIN_HEIGHT_WIDTH_RATIO = 2.0
+                        
+                        if bbox_height_pixels < (MIN_HEIGHT_WIDTH_RATIO * bbox_width_pixels):
+                            print(f"⚠️ Skipping person detection: bbox height {bbox_height_pixels:.0f}px < {MIN_HEIGHT_WIDTH_RATIO} * width {bbox_width_pixels:.0f}px (incorrect aspect ratio)")
                             continue
                         
                         person_code = f"PERSON-{person_counter:04d}"

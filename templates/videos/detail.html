@@ -233,8 +233,7 @@
                                data-video-type="detected"
                                data-video-path="{{ video.annotated_video_path }}">
                             <source src="{{ url_for('videos.stream_detected_video', filename=video.annotated_video_path) }}" type="video/mp4">
-                            <source src="{{ url_for('videos.serve_video_static', filename=video.annotated_video_path) }}" type="video/mp4">
-                            <source src="{{ url_for('videos.serve_detected_video', filename=video.annotated_video_path) }}" type="video/mp4">
+                            <source src="{{ url_for('videos.serve_annotated_video', filename=video.annotated_video_path) }}" type="video/mp4">
                             Your browser does not support the video tag.
                         </video>
                         <div class="mt-2 text-sm text-green-600 bg-green-50 p-2 rounded">

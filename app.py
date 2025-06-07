@@ -194,6 +194,15 @@ def create_app(config_name=None):
         ocr_extraction_done = db.Column(db.Boolean, default=False)
         ocr_extraction_confidence = db.Column(db.Float)
         
+        # Video chunking fields
+        parent_video_id = db.Column(db.Integer, db.ForeignKey('videos.id'))
+        chunk_index = db.Column(db.Integer)
+        total_chunks = db.Column(db.Integer)
+        is_chunk = db.Column(db.Boolean, default=False)
+        
+        # Employee relationship (uploader)
+        employee_id = db.Column(db.Integer, db.ForeignKey('employees.id'))
+        
         # Metadata
         created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
         updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -684,6 +693,25 @@ def main():
         print(f"   {status} {feature}")
     
     print("="*50)
+    
+    # Start chunk merge monitor
+    try:
+        from processing.chunk_merge_monitor import get_chunk_monitor
+        monitor = get_chunk_monitor(app)
+        print("✅ Chunk merge monitor started")
+    except Exception as e:
+        print(f"⚠️ Could not start chunk merge monitor: {e}")
+        
+    # Start scheduled cleanup service
+    try:
+        from processing.scheduled_cleanup import start_scheduled_cleanup
+        cleanup_service = start_scheduled_cleanup(cleanup_interval_hours=6)  # Run every 6 hours
+        print("✅ Scheduled cleanup service started (runs every 6 hours)")
+        
+        # Run immediate cleanup on startup to clean any leftover files
+        cleanup_service.run_immediate()
+    except Exception as e:
+        print(f"⚠️ Could not start scheduled cleanup: {e}")
     
     # Start the application
     try:

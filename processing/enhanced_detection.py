@@ -358,8 +358,26 @@ def create_annotated_video(video_path, person_tracks, output_dir, tracker=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_video_path = os.path.join(output_dir, f"{video_name}_annotated_{timestamp}.mp4")
     
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
+    # Use H.264 codec for web compatibility
+    # Try different H.264 fourcc codes
+    h264_codecs = ['avc1', 'H264', 'h264', 'x264']
+    out = None
+    
+    for codec in h264_codecs:
+        try:
+            fourcc = cv2.VideoWriter_fourcc(*codec)
+            out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
+            if out.isOpened():
+                logger.info(f"Using H.264 codec: {codec}")
+                break
+        except:
+            continue
+    
+    # Fallback to mp4v if H.264 not available
+    if not out or not out.isOpened():
+        logger.warning("H.264 not available, using mp4v")
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
     
     # Create frame-to-detections mapping for fast lookup
     frame_detections = {}
@@ -684,6 +702,16 @@ def process_video_with_enhanced_detection(video_path, output_base_dir="static/up
         with open(summary_path, 'w') as f:
             json.dump(summary, f, indent=2)
         
+        # Clean up non-PERSON directories
+        try:
+            from processing.cleanup_manager import get_cleanup_manager
+            cleanup_manager = get_cleanup_manager()
+            cleaned = cleanup_manager.cleanup_non_person_directories()
+            if cleaned > 0:
+                logger.info(f"Cleaned up {cleaned} non-PERSON directories")
+        except Exception as e:
+            logger.warning(f"Could not run cleanup: {e}")
+            
         logger.info(f"Enhanced processing completed. Output: {output_dir}")
         return {
             'success': True,

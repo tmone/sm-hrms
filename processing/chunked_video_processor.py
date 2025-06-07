@@ -24,12 +24,13 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from processing.enhanced_detection import EnhancedDetection
+from processing.enhanced_detection_class import EnhancedDetection
 from processing.video_quality_analyzer import VideoQualityAnalyzer, FrameExtractor
 from processing.enhanced_person_tracker import EnhancedPersonTracker
-from hr_management.processing.person_recognition_inference_simple import SimplePersonRecognitionInference
+from processing.simple_person_recognition_inference import SimplePersonRecognitionInference
 from processing.gpu_resource_manager import get_gpu_manager, cleanup_gpu_manager
 from processing.shared_state_manager_v2 import ImprovedSharedStateManager
+from processing.cleanup_manager import get_cleanup_manager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -46,7 +47,7 @@ class ChunkProcessor:
     """Processes a single video chunk"""
     
     def __init__(self, chunk_path: str, chunk_idx: int, output_dir: str,
-                 shared_state: SharedStateManager, worker_id: str,
+                 shared_state: ImprovedSharedStateManager, worker_id: str,
                  gpu_manager=None):
         self.chunk_path = chunk_path
         self.chunk_idx = chunk_idx
@@ -448,11 +449,38 @@ class ChunkedVideoProcessor:
             video_path, all_detections, output_dir
         )
         
-        # Clean up chunks
-        logger.info("Cleaning up temporary chunks")
+        # Clean up chunks using cleanup manager
+        logger.info("Cleaning up temporary chunks and files")
+        cleanup_manager = get_cleanup_manager()
+        
+        # Clean up chunk directories
         chunks_dir = os.path.join(output_dir, "chunks")
         if os.path.exists(chunks_dir):
-            shutil.rmtree(chunks_dir)
+            for chunk_dir in Path(chunks_dir).iterdir():
+                if chunk_dir.is_dir():
+                    cleanup_manager.cleanup_chunk_directory(chunk_dir)
+            # Remove the chunks directory itself
+            try:
+                shutil.rmtree(chunks_dir)
+            except:
+                pass
+                
+        # Clean up any non-person directories in chunk output
+        for i in range(len(chunk_paths)):
+            chunk_output_dir = os.path.join(output_dir, f"chunk_{i:03d}")
+            if os.path.exists(chunk_output_dir):
+                # Move PERSON crops to main output before cleanup
+                for person_crop in Path(chunk_output_dir).glob("PERSON-*.jpg"):
+                    person_id = person_crop.stem.split('_')[0]
+                    person_dir = Path(output_dir) / person_id
+                    person_dir.mkdir(exist_ok=True)
+                    shutil.move(str(person_crop), str(person_dir / person_crop.name))
+                
+                # Now remove the chunk output directory
+                try:
+                    shutil.rmtree(chunk_output_dir)
+                except:
+                    pass
             
         # Get final GPU report
         final_gpu_report = self.gpu_manager.get_monitoring_report()

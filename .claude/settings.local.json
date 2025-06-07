@@ -45,7 +45,9 @@
       "Bash(done)",
       "Bash(.venv/bin/python:*)",
       "Bash(curl:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(ffprobe:*)",
+      "Bash(ffmpeg:*)"
     ],
     "deny": []
   },

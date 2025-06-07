@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, send_from_directory, Response, send_file
-from flask_login import login_required
+from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 import os
 import uuid
@@ -30,8 +30,8 @@ def index():
     page = request.args.get('page', 1, type=int)
     per_page = 12
     
-    # Build query
-    query = Video.query
+    # Build query - exclude chunk videos from main list
+    query = Video.query.filter_by(is_chunk=False)
     
     if status:
         query = query.filter_by(status=status)
@@ -116,33 +116,77 @@ def upload():
                 description=request.form.get('description', ''),
                 priority=request.form.get('priority', 'normal'),
                 status='processing',  # Start processing immediately
-                processing_started_at=datetime.utcnow()
+                processing_started_at=datetime.utcnow(),
+                employee_id=current_user.id if current_user.is_authenticated else None
             )
             
             # Save to database
             db.session.add(video)
             db.session.commit()
             
-            # Auto-start person extraction with GPU acceleration
-            print(f"🚀 Auto-starting person extraction for uploaded video: {filename}")
+            # Check if video needs chunking
+            from processing.video_chunk_manager import VideoChunkManager
+            chunk_manager = VideoChunkManager()
             
-            # Processing options for auto-extraction
-            processing_options = {
-                'extract_persons': True,
-                'face_recognition': False,  # Can be enabled if needed
-                'extract_frames': False,
-                'use_enhanced_detection': True,
-                'use_gpu': True  # Enable GPU acceleration
-            }
-            
-            # Store processing options in video record
-            video.processing_log = f"Auto-extraction started at {datetime.utcnow()} with GPU acceleration"
-            db.session.commit()
-            
-            # Start enhanced processing with GPU
-            start_enhanced_gpu_processing(video, processing_options, current_app._get_current_object())
-            
-            flash(f'Video "{filename}" uploaded! Person extraction started automatically with GPU acceleration. The annotated video will be available for playback once processing is complete.', 'info')
+            if chunk_manager.should_chunk_video(upload_path, threshold=60):
+                # Large video - split into chunks
+                print(f"🔪 Video is large, splitting into chunks...")
+                video.status = 'chunking'
+                video.processing_log = f"Splitting video into chunks at {datetime.utcnow()}"
+                db.session.commit()
+                
+                # Split video into chunks
+                chunk_paths = chunk_manager.split_video_to_chunks(
+                    upload_path, 
+                    current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
+                )
+                
+                if chunk_paths:
+                    # Create database entries for chunks
+                    chunk_videos = chunk_manager.create_chunk_entries(
+                        video, chunk_paths, db, Video, 
+                        current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
+                    )
+                    
+                    # Process each chunk as a separate video
+                    for chunk_video in chunk_videos:
+                        print(f"🚀 Auto-starting extraction for chunk {chunk_video.chunk_index + 1}/{chunk_video.total_chunks}")
+                        
+                        processing_options = {
+                            'extract_persons': True,
+                            'face_recognition': False,
+                            'extract_frames': False,
+                            'use_enhanced_detection': True,
+                            'use_gpu': True
+                        }
+                        
+                        # Start processing for this chunk
+                        start_enhanced_gpu_processing(chunk_video, processing_options, current_app._get_current_object())
+                    
+                    flash(f'Large video "{filename}" uploaded! Split into {len(chunk_videos)} chunks for processing. Results will be merged automatically.', 'info')
+                else:
+                    flash('Failed to split video into chunks', 'error')
+            else:
+                # Small video - process normally
+                print(f"🚀 Auto-starting person extraction for uploaded video: {filename}")
+                
+                # Processing options for auto-extraction
+                processing_options = {
+                    'extract_persons': True,
+                    'face_recognition': False,  # Can be enabled if needed
+                    'extract_frames': False,
+                    'use_enhanced_detection': True,
+                    'use_gpu': True  # Enable GPU acceleration
+                }
+                
+                # Store processing options in video record
+                video.processing_log = f"Auto-extraction started at {datetime.utcnow()} with GPU acceleration"
+                db.session.commit()
+                
+                # Start enhanced processing with GPU
+                start_enhanced_gpu_processing(video, processing_options, current_app._get_current_object())
+                
+                flash(f'Video "{filename}" uploaded! Person extraction started automatically with GPU acceleration. The annotated video will be available for playback once processing is complete.', 'info')
             
             return redirect(url_for('videos.index'))
             
@@ -2005,7 +2049,7 @@ def detect_persons_yolo_frame(frame_path, frame_info):
         
         if model is None:
             # Download if not found
-            model = YOLO('yolov8n.pt')  # This will auto-download
+            model = YOLO('models/yolov8n.pt')  # This will auto-download
             print("📥 Downloaded YOLO model")
         
         # Read the frame

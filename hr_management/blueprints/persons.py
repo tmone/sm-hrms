@@ -429,14 +429,29 @@ def update_datasets_after_person_deletion(deleted_person_ids):
             
             # Remove deleted persons from dataset
             for person_id in deleted_person_ids:
-                if person_id in dataset_info['persons']:
+                if 'persons' in dataset_info and person_id in dataset_info['persons']:
                     # Remove person data
                     person_data = dataset_info['persons'].pop(person_id)
                     
-                    # Update totals
-                    dataset_info['total_images'] -= person_data.get('images_count', 0)
-                    dataset_info['total_faces'] -= person_data.get('faces_count', 0)
-                    dataset_info['total_embeddings'] -= person_data.get('embeddings_count', 0)
+                    # Update totals if they exist
+                    if 'total_images' in dataset_info:
+                        dataset_info['total_images'] -= person_data.get('images_count', 0)
+                    if 'total_faces' in dataset_info:
+                        dataset_info['total_faces'] -= person_data.get('faces_count', 0)
+                    if 'total_embeddings' in dataset_info:
+                        dataset_info['total_embeddings'] -= person_data.get('embeddings_count', 0)
+                    
+                    # Also update train/val totals if they exist
+                    if 'total_train_images' in dataset_info:
+                        dataset_info['total_train_images'] -= person_data.get('train_images_count', 0)
+                    if 'total_val_images' in dataset_info:
+                        dataset_info['total_val_images'] -= person_data.get('val_images_count', 0)
+                    if 'total_train_features' in dataset_info:
+                        dataset_info['total_train_features'] -= person_data.get('train_features_count', 0)
+                    if 'total_val_features' in dataset_info:
+                        dataset_info['total_val_features'] -= person_data.get('val_features_count', 0)
+                    if 'total_features' in dataset_info:
+                        dataset_info['total_features'] -= person_data.get('features_count', 0)
                     
                     # Remove person's files
                     for subdir in ['images', 'faces', 'features']:

@@ -29,7 +29,7 @@ from processing.video_quality_analyzer import VideoQualityAnalyzer, FrameExtract
 from processing.enhanced_person_tracker import EnhancedPersonTracker
 from processing.simple_person_recognition_inference import SimplePersonRecognitionInference
 from processing.gpu_resource_manager import get_gpu_manager, cleanup_gpu_manager
-from processing.shared_state_manager_v2 import ImprovedSharedStateManager
+from processing.shared_state_manager_improved import ImprovedSharedStateManagerV3 as ImprovedSharedStateManager
 from processing.cleanup_manager import get_cleanup_manager
 
 # Configure logging

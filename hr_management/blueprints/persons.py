@@ -300,9 +300,8 @@ def batch_test_persons():
             # Get all images for this person
             image_files = list(person_dir.glob("*.jpg")) + list(person_dir.glob("*.png"))
             
-            # Test ALL images (or limit if too many)
-            max_test_images = 100  # Increase limit to test more images
-            test_images = image_files[:max_test_images] if len(image_files) > max_test_images else image_files
+            # Test ALL images without limit
+            test_images = image_files  # Process all images, no limit
             
             predictions = defaultdict(list)
             images_to_move = defaultdict(list)  # Track which images should move where
@@ -928,7 +927,7 @@ def sync_metadata_with_database():
             # Update images list if needed
             if len(metadata.get('images', [])) != len(image_files):
                 metadata['images'] = []
-                for img_file in sorted(image_files)[:100]:  # Limit to first 100
+                for img_file in sorted(image_files):  # No limit, process all images
                     metadata['images'].append({
                         'filename': img_file.name,
                         'confidence': 0.95  # Default if not available
@@ -1104,6 +1103,267 @@ def remove_multiple():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
+
+
+@persons_bp.route('/remove-duplicates', methods=['POST'])
+@login_required
+def remove_duplicates_api():
+    """Remove duplicate images from selected persons or all persons"""
+    try:
+        data = request.get_json()
+        person_ids = data.get('person_ids', [])
+        create_backup = data.get('create_backup', True)
+        
+        persons_dir = Path('processing/outputs/persons')
+        
+        # Optional: Create backup directory
+        backup_dir = None
+        if create_backup:
+            backup_dir = Path('processing/outputs/duplicates_backup')
+            backup_dir.mkdir(exist_ok=True)
+        
+        results = []
+        total_removed = 0
+        
+        # Determine which persons to process
+        if person_ids:
+            # Process selected persons
+            persons_to_process = [persons_dir / pid for pid in person_ids if (persons_dir / pid).exists()]
+        else:
+            # Process all persons
+            persons_to_process = [d for d in persons_dir.iterdir() if d.is_dir() and d.name.startswith('PERSON-')]
+        
+        # Process each person
+        for person_dir in persons_to_process:
+            # Find duplicates
+            duplicates = find_duplicates_in_person(person_dir)
+            
+            if duplicates:
+                # Count duplicates
+                duplicate_count = sum(len(files) - 1 for files in duplicates.values())
+                
+                # Remove duplicates
+                removed_files = []
+                for hash_val, files in duplicates.items():
+                    files.sort(key=lambda x: x.name)
+                    
+                    # Keep first file, remove rest
+                    for remove_file in files[1:]:
+                        try:
+                            if backup_dir:
+                                # Create backup
+                                backup_path = backup_dir / person_dir.name
+                                backup_path.mkdir(exist_ok=True)
+                                backup_file = backup_path / remove_file.name
+                                shutil.copy2(remove_file, backup_file)
+                            
+                            # Remove the duplicate
+                            remove_file.unlink()
+                            removed_files.append(remove_file)
+                            
+                        except Exception as e:
+                            print(f"Error removing {remove_file.name}: {e}")
+                
+                # Update metadata
+                update_metadata_after_removal(person_dir, removed_files)
+                
+                results.append({
+                    'person_id': person_dir.name,
+                    'duplicates_found': duplicate_count,
+                    'duplicates_removed': len(removed_files)
+                })
+                
+                total_removed += len(removed_files)
+        
+        return jsonify({
+            'success': True,
+            'results': results,
+            'total_removed': total_removed,
+            'backup_created': create_backup
+        })
+        
+    except Exception as e:
+        print(f"[ERROR] Remove duplicates error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+
+def find_duplicates_in_person(person_dir):
+    """Find visually similar duplicate images in a person folder"""
+    try:
+        # Try to use the lightweight visual duplicate detector
+        from hr_management.processing.visual_duplicate_detector import VisualDuplicateDetector
+        
+        # Get all image files
+        image_files = list(person_dir.glob("*.jpg")) + list(person_dir.glob("*.png"))
+        
+        if len(image_files) < 2:
+            return {}
+        
+        print(f"[DUPLICATE CHECK] Checking {person_dir.name} for visual duplicates...")
+        
+        # Use visual duplicate detector
+        detector = VisualDuplicateDetector(similarity_threshold=0.90)
+        duplicates = detector.find_duplicates(image_files)
+        
+        # Sort groups by file size (keep largest)
+        for group_key in duplicates:
+            duplicates[group_key].sort(key=lambda x: x.stat().st_size, reverse=True)
+        
+        print(f"[DUPLICATE CHECK] Found {len(duplicates)} duplicate groups")
+        
+        return duplicates
+        
+    except ImportError:
+        print("[DUPLICATE CHECK] Visual duplicate detector not available, using simple comparison")
+        # Fallback to simpler method
+        return find_duplicates_simple(person_dir)
+    except Exception as e:
+        print(f"[DUPLICATE CHECK] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {}
+
+
+def find_duplicates_simple(person_dir):
+    """Simple duplicate detection using basic image comparison"""
+    # Get all image files
+    image_files = list(person_dir.glob("*.jpg")) + list(person_dir.glob("*.png"))
+    
+    if len(image_files) < 2:
+        return {}
+    
+    duplicates = {}
+    checked = set()
+    
+    for i in range(len(image_files)):
+        if image_files[i] in checked:
+            continue
+            
+        current_group = [image_files[i]]
+        
+        for j in range(i + 1, len(image_files)):
+            if image_files[j] in checked:
+                continue
+            
+            # Compare using simple visual similarity
+            similarity = calculate_visual_similarity_simple(image_files[i], image_files[j])
+            
+            if similarity >= 0.90:  # 90% threshold
+                current_group.append(image_files[j])
+                checked.add(image_files[j])
+        
+        if len(current_group) > 1:
+            # Sort by file size
+            current_group.sort(key=lambda x: x.stat().st_size, reverse=True)
+            duplicates[f"group_{len(duplicates)}"] = current_group
+            for img in current_group:
+                checked.add(img)
+    
+    return duplicates
+
+
+def calculate_visual_similarity_simple(img1_path, img2_path):
+    """Calculate simple visual similarity using OpenCV"""
+    try:
+        # Read images
+        img1 = cv2.imread(str(img1_path))
+        img2 = cv2.imread(str(img2_path))
+        
+        if img1 is None or img2 is None:
+            return 0.0
+        
+        # Resize to same size
+        size = (64, 64)
+        img1 = cv2.resize(img1, size)
+        img2 = cv2.resize(img2, size)
+        
+        # Calculate color histogram similarity
+        hist1 = cv2.calcHist([img1], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
+        hist1 = cv2.normalize(hist1, hist1).flatten()
+        
+        hist2 = cv2.calcHist([img2], [0, 1, 2], None, [8, 8, 8], [0, 256, 0, 256, 0, 256])
+        hist2 = cv2.normalize(hist2, hist2).flatten()
+        
+        # Calculate correlation
+        similarity = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
+        
+        return float(similarity)
+        
+    except Exception as e:
+        print(f"[VISUAL SIMILARITY] Error: {e}")
+        return 0.0
+
+
+def find_duplicates_by_size(person_dir):
+    """Fallback: Find potential duplicates by file size"""
+    size_map = defaultdict(list)
+    
+    image_files = list(person_dir.glob("*.jpg")) + list(person_dir.glob("*.png"))
+    
+    for img_file in image_files:
+        size = img_file.stat().st_size
+        size_map[size].append(img_file)
+    
+    # Return groups with same size
+    duplicates = {}
+    idx = 0
+    for size, files in size_map.items():
+        if len(files) > 1:
+            duplicates[f"size_group_{idx}"] = files
+            idx += 1
+    
+    return duplicates
+
+
+def get_file_hash(filepath):
+    """Calculate MD5 hash of a file"""
+    import hashlib
+    hash_md5 = hashlib.md5()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
+
+
+def update_metadata_after_removal(person_dir, removed_files):
+    """Update metadata.json after removing duplicates"""
+    metadata_path = person_dir / 'metadata.json'
+    
+    if not metadata_path.exists():
+        return
+    
+    try:
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+        
+        # Get list of removed filenames
+        removed_names = {f.name for f in removed_files}
+        
+        # Filter out removed images from metadata
+        original_count = len(metadata.get('images', []))
+        metadata['images'] = [
+            img for img in metadata.get('images', [])
+            if img['filename'] not in removed_names
+        ]
+        new_count = len(metadata['images'])
+        
+        if new_count < original_count:
+            # Update counts
+            metadata['total_images'] = new_count
+            metadata['total_detections'] = new_count
+            metadata['updated_at'] = datetime.now().isoformat()
+            metadata['duplicates_removed'] = original_count - new_count
+            
+            # Save updated metadata
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            
+            print(f"  Updated metadata: {original_count} -> {new_count} images")
+            
+    except Exception as e:
+        print(f"  Error updating metadata: {e}")
 
 
 @persons_bp.route('/reset-all', methods=['POST'])

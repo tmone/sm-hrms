@@ -96,55 +96,81 @@ def get_next_person_id():
     and maintaining a persistent counter file.
     This ensures unique IDs across all video processing sessions.
     """
+    import time
+    import threading
+    
     persons_dir = Path('processing/outputs/persons')
     persons_dir.mkdir(parents=True, exist_ok=True)
     
     # Path to the ID counter file
     counter_file = persons_dir / 'person_id_counter.json'
+    lock_file = persons_dir / 'person_id_counter.lock'
     
-    # First, check existing folders to find the maximum ID
-    existing_persons = list(persons_dir.glob('PERSON-*'))
-    max_folder_id = 0
-    
-    for person_folder in existing_persons:
+    # Simple file-based lock with retry
+    max_retries = 50
+    for retry in range(max_retries):
         try:
-            folder_name = person_folder.name
-            if folder_name.startswith('PERSON-'):
-                person_id = int(folder_name.replace('PERSON-', ''))
-                max_folder_id = max(max_folder_id, person_id)
-        except ValueError:
-            continue
+            # Try to create lock file exclusively
+            if not lock_file.exists():
+                lock_file.touch()
+                break
+        except:
+            pass
+        time.sleep(0.1)  # Wait 100ms before retry
     
-    # Check the counter file
-    max_counter_id = 0
-    if counter_file.exists():
-        try:
-            with open(counter_file, 'r') as f:
-                data = json.load(f)
-                max_counter_id = data.get('last_person_id', 0)
-        except Exception as e:
-            print(f"[WARNING] Error reading counter file: {e}")
-    
-    # Use the maximum of both
-    max_id = max(max_folder_id, max_counter_id)
-    next_id = max_id + 1
-    
-    # Update the counter file
     try:
-        with open(counter_file, 'w') as f:
-            json.dump({
-                'last_person_id': next_id,
-                'updated_at': datetime.now().isoformat(),
-                'total_persons': len(existing_persons)
-            }, f, indent=2)
-    except Exception as e:
-        print(f"[WARNING] Error updating counter file: {e}")
+        # First, check existing folders to find the maximum ID
+        existing_persons = list(persons_dir.glob('PERSON-*'))
+        max_folder_id = 0
+        
+        for person_folder in existing_persons:
+            try:
+                folder_name = person_folder.name
+                if folder_name.startswith('PERSON-'):
+                    person_id = int(folder_name.replace('PERSON-', ''))
+                    max_folder_id = max(max_folder_id, person_id)
+            except ValueError:
+                continue
+        
+        # Check the counter file
+        max_counter_id = 0
+        if counter_file.exists():
+            try:
+                with open(counter_file, 'r') as f:
+                    data = json.load(f)
+                    max_counter_id = data.get('last_person_id', 0)
+            except Exception as e:
+                print(f"[WARNING] Error reading counter file: {e}")
+        
+        # Use the maximum of both
+        max_id = max(max_folder_id, max_counter_id)
+        next_id = max_id + 1
+        
+        # Update the counter file
+        try:
+            with open(counter_file, 'w') as f:
+                json.dump({
+                    'last_person_id': next_id,
+                    'updated_at': datetime.now().isoformat(),
+                    'total_persons': len(existing_persons)
+                }, f, indent=2)
+        except Exception as e:
+            print(f"[WARNING] Error updating counter file: {e}")
+        
+        if sys.platform == 'win32':
+            # Use ASCII characters on Windows to avoid encoding issues
+            print(f"[INFO] Found {len(existing_persons)} existing persons, next ID will be: PERSON-{next_id:04d}")
+        else:
+            print(f"[INFO] Found {len(existing_persons)} existing persons, next ID will be: PERSON-{next_id:04d}")
     
-    if sys.platform == 'win32':
-        # Use ASCII characters on Windows to avoid encoding issues
-        print(f"[INFO] Found {len(existing_persons)} existing persons, next ID will be: PERSON-{next_id:04d}")
-    else:
-        print(f"[INFO] Found {len(existing_persons)} existing persons, next ID will be: PERSON-{next_id:04d}")
+    finally:
+        # Always remove lock file
+        try:
+            if lock_file.exists():
+                lock_file.unlink()
+        except:
+            pass
+    
     return next_id
 
 

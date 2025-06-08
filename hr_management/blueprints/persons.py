@@ -9,6 +9,9 @@ from pathlib import Path
 import shutil
 from datetime import datetime
 from sqlalchemy import func
+import cv2
+import numpy as np
+from collections import defaultdict
 
 persons_bp = Blueprint('persons', __name__, url_prefix='/persons')
 
@@ -247,6 +250,308 @@ def serve_person_image(filepath):
         return "Invalid file path", 403
     
     return send_file(str(file_path))
+
+
+@persons_bp.route('/api/batch-test', methods=['POST'])
+@login_required
+def batch_test_persons():
+    """Batch test selected persons for misidentification"""
+    try:
+        data = request.get_json()
+        person_ids = data.get('person_ids', [])
+        
+        if not person_ids:
+            return jsonify({'success': False, 'error': 'No persons selected'})
+        
+        print(f"[BATCH TEST] Testing {len(person_ids)} persons for misidentification")
+        
+        # Import recognition module
+        try:
+            from hr_management.processing.person_recognition_inference_simple import PersonRecognitionInferenceSimple as SimplePersonRecognitionInference
+        except ImportError:
+            # Fallback to the processing module version
+            from processing.simple_person_recognition_inference import SimplePersonRecognitionInference
+        
+        # Load the default model
+        config_path = Path("models/person_recognition/config.json")
+        with open(config_path) as f:
+            config = json.load(f)
+        model_name = config.get('default_model', 'person_model_svm_20250607_181818')
+        
+        recognizer = SimplePersonRecognitionInference(
+            model_name=model_name,
+            confidence_threshold=0.5  # Lower threshold to catch more potential matches
+        )
+        
+        # Get trained persons list
+        trained_persons = list(recognizer.person_id_mapping.values())
+        print(f"[BATCH TEST] Model trained on: {trained_persons}")
+        
+        results = []
+        persons_dir = Path('processing/outputs/persons')
+        
+        for person_id in person_ids:
+            person_dir = persons_dir / person_id
+            if not person_dir.exists():
+                continue
+            
+            print(f"[BATCH TEST] Testing {person_id}...")
+            
+            # Get all images for this person
+            image_files = list(person_dir.glob("*.jpg")) + list(person_dir.glob("*.png"))
+            
+            # Test ALL images (or limit if too many)
+            max_test_images = 100  # Increase limit to test more images
+            test_images = image_files[:max_test_images] if len(image_files) > max_test_images else image_files
+            
+            predictions = defaultdict(list)
+            images_to_move = defaultdict(list)  # Track which images should move where
+            
+            print(f"[BATCH TEST] Testing {len(test_images)} images from {person_id}")
+            
+            for img_path in test_images:
+                try:
+                    # Read and process image
+                    img = cv2.imread(str(img_path))
+                    if img is None:
+                        continue
+                    
+                    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    
+                    # Get prediction using process_cropped_image since images are already cropped
+                    result = recognizer.process_cropped_image(str(img_path))
+                    
+                    # Extract the first person result (since it's already cropped, should only be one)
+                    if result.get('persons') and len(result['persons']) > 0:
+                        person_result = result['persons'][0]
+                        predicted_id = person_result.get('person_id', 'unknown')
+                        confidence = person_result.get('confidence', 0.0)
+                    else:
+                        predicted_id = 'unknown'
+                        confidence = 0.0
+                    
+                    predictions[predicted_id].append({
+                        'image': img_path.name,
+                        'confidence': confidence
+                    })
+                    
+                    # Track images that should be moved to trained persons
+                    if predicted_id != 'unknown' and predicted_id in trained_persons and predicted_id != person_id:
+                        images_to_move[predicted_id].append({
+                            'image': img_path.name,
+                            'confidence': confidence,
+                            'full_path': str(img_path)
+                        })
+                    
+                except Exception as e:
+                    print(f"[BATCH TEST] Error processing {img_path.name}: {e}")
+            
+            # Analyze results for this person
+            person_result = {
+                'person_id': person_id,
+                'total_images': len(image_files),
+                'tested_images': len(test_images),
+                'predictions': {},
+                'misidentified': False,
+                'split_suggestions': [],
+                'images_to_move': images_to_move  # Include detailed move info
+            }
+            
+            # Count predictions
+            for pred_id, pred_list in predictions.items():
+                avg_confidence = np.mean([p['confidence'] for p in pred_list])
+                person_result['predictions'][pred_id] = {
+                    'count': len(pred_list),
+                    'percentage': len(pred_list) / len(test_images) * 100,
+                    'avg_confidence': avg_confidence,
+                    'images': pred_list
+                }
+            
+            # Check for misidentification
+            if person_id in trained_persons:
+                # This is a trained person - check if recognized correctly
+                if person_id not in predictions or len(predictions[person_id]) < len(test_images) * 0.5:
+                    person_result['misidentified'] = True
+                    person_result['issue'] = 'trained_not_recognized'
+            else:
+                # This is an untrained person - check if ANY images are recognized as trained persons
+                for trained_id in trained_persons:
+                    if trained_id in images_to_move and len(images_to_move[trained_id]) > 0:
+                        person_result['misidentified'] = True
+                        person_result['issue'] = 'untrained_recognized_as_trained'
+                        # Create split suggestion for each trained person detected
+                        person_result['split_suggestions'].append({
+                            'split_to': trained_id,
+                            'images': images_to_move[trained_id],
+                            'count': len(images_to_move[trained_id]),
+                            'confidence': np.mean([img['confidence'] for img in images_to_move[trained_id]])
+                        })
+            
+            results.append(person_result)
+        
+        # Generate summary
+        misidentified_count = sum(1 for r in results if r['misidentified'])
+        total_images_to_move = sum(len(r['images_to_move'][tid]) for r in results for tid in r['images_to_move'])
+        
+        # Create a summary of all moves needed
+        all_moves = {}
+        for result in results:
+            if result['images_to_move']:
+                for target_id, images in result['images_to_move'].items():
+                    if target_id not in all_moves:
+                        all_moves[target_id] = []
+                    all_moves[target_id].extend([{
+                        'source_person': result['person_id'],
+                        'image': img['image'],
+                        'confidence': img['confidence']
+                    } for img in images])
+        
+        return jsonify({
+            'success': True,
+            'tested_persons': len(results),
+            'misidentified_count': misidentified_count,
+            'total_images_to_move': total_images_to_move,
+            'results': results,
+            'model_info': {
+                'name': model_name,
+                'trained_persons': trained_persons
+            },
+            'move_summary': all_moves
+        })
+        
+    except Exception as e:
+        print(f"[BATCH TEST] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@persons_bp.route('/api/auto-split-merge', methods=['POST'])
+@login_required
+def auto_split_merge():
+    """Automatically split and merge persons based on test results"""
+    try:
+        data = request.get_json()
+        operations = data.get('operations', [])
+        
+        if not operations:
+            return jsonify({'success': False, 'error': 'No operations specified'})
+        
+        print(f"[AUTO SPLIT/MERGE] Processing {len(operations)} operations")
+        
+        results = []
+        persons_dir = Path('processing/outputs/persons')
+        
+        for op in operations:
+            op_type = op.get('type')
+            source_person = op.get('source_person')
+            target_person = op.get('target_person')
+            images = op.get('images', [])
+            
+            if op_type == 'split_merge':
+                # Split images from source and merge to target
+                print(f"[AUTO SPLIT/MERGE] Moving {len(images)} images from {source_person} to {target_person}")
+                
+                source_dir = persons_dir / source_person
+                target_dir = persons_dir / target_person
+                
+                if not source_dir.exists():
+                    results.append({
+                        'operation': op,
+                        'success': False,
+                        'error': f'Source person {source_person} not found'
+                    })
+                    continue
+                
+                # Ensure target directory exists
+                target_dir.mkdir(exist_ok=True)
+                
+                # Move images
+                moved_count = 0
+                for img_info in images:
+                    img_filename = img_info['image']
+                    src_path = source_dir / img_filename
+                    dst_path = target_dir / img_filename
+                    
+                    if src_path.exists():
+                        shutil.move(str(src_path), str(dst_path))
+                        moved_count += 1
+                
+                # Update metadata for both persons
+                update_person_metadata(source_person)
+                update_person_metadata(target_person)
+                
+                results.append({
+                    'operation': op,
+                    'success': True,
+                    'moved_count': moved_count
+                })
+                
+            elif op_type == 'merge_all':
+                # Merge entire person to target
+                merge_result = merge_persons(target_person, [source_person])
+                results.append({
+                    'operation': op,
+                    'success': merge_result['success'],
+                    'error': merge_result.get('error')
+                })
+        
+        # Sync metadata with database
+        sync_metadata_with_database()
+        
+        successful_ops = sum(1 for r in results if r['success'])
+        
+        return jsonify({
+            'success': True,
+            'total_operations': len(operations),
+            'successful_operations': successful_ops,
+            'results': results
+        })
+        
+    except Exception as e:
+        print(f"[AUTO SPLIT/MERGE] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+
+def update_person_metadata(person_id):
+    """Update metadata for a person after changes"""
+    persons_dir = Path('processing/outputs/persons')
+    person_dir = persons_dir / person_id
+    
+    if not person_dir.exists():
+        return
+    
+    metadata_path = person_dir / 'metadata.json'
+    
+    # Count actual images
+    image_files = list(person_dir.glob('*.jpg')) + list(person_dir.glob('*.png'))
+    
+    if metadata_path.exists():
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+    else:
+        metadata = {
+            'person_id': person_id,
+            'videos': []
+        }
+    
+    # Update image list
+    metadata['images'] = []
+    for img_file in sorted(image_files)[:1000]:  # Limit to 1000 images
+        metadata['images'].append({
+            'filename': img_file.name,
+            'confidence': 0.95
+        })
+    
+    metadata['total_detections'] = len(image_files)
+    metadata['total_images'] = len(image_files)
+    metadata['updated_at'] = datetime.now().isoformat()
+    
+    # Save updated metadata
+    with open(metadata_path, 'w') as f:
+        json.dump(metadata, f, indent=2)
 
 
 def merge_persons(primary_person_id, persons_to_merge):

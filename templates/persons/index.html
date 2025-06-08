@@ -127,6 +127,13 @@
                     Delete Selected (<span id="selectedCountDelete">0</span>)
                 </button>
                 
+                <!-- Test Recognition Button (Hidden by default) -->
+                <button onclick="testRecognition()" id="testBtn"
+                        class="hidden bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                    <i class="fas fa-microscope mr-2"></i>
+                    Test Recognition (<span id="selectedCountTest">0</span>)
+                </button>
+                
                 <!-- Select All/None (Hidden by default) -->
                 <div id="selectionControls" class="hidden flex items-center gap-2">
                     <button onclick="selectAll()" 
@@ -354,6 +361,69 @@
             <div class="flex justify-center">
                 <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recognition Test Results Modal -->
+<div class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50" id="recognitionTestModal">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-6xl shadow-lg rounded-lg bg-white dark:bg-gray-800">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold text-gray-800 dark:text-white">
+                <i class="fas fa-microscope mr-2"></i>Recognition Test Results
+            </h3>
+            <button onclick="closeTestModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <i class="fas fa-times text-2xl"></i>
+            </button>
+        </div>
+        
+        <div id="testResultsContainer" class="max-h-[80vh] overflow-y-auto">
+            <div class="flex justify-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            </div>
+        </div>
+        
+        <!-- Action buttons for auto split/merge -->
+        <div id="testActionButtons" class="hidden mt-4 flex justify-end gap-2">
+            <button onclick="showDetailedConfirmation()" 
+                    class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                <i class="fas fa-magic mr-2"></i>
+                Auto Split & Merge Misidentified
+            </button>
+            <button onclick="closeTestModal()" 
+                    class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Confirmation Modal -->
+<div class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50" id="confirmationModal">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-lg bg-white dark:bg-gray-800">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold text-gray-800 dark:text-white">
+                <i class="fas fa-exchange-alt mr-2"></i>Confirm Image Movements
+            </h3>
+            <button onclick="closeConfirmationModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <i class="fas fa-times text-2xl"></i>
+            </button>
+        </div>
+        
+        <div id="confirmationContent" class="max-h-[70vh] overflow-y-auto">
+            <!-- Content will be populated dynamically -->
+        </div>
+        
+        <div class="mt-4 flex justify-end gap-2 border-t pt-4">
+            <button onclick="proceedWithAutoSplitMerge()" 
+                    class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                <i class="fas fa-check mr-2"></i>
+                Confirm & Process
+            </button>
+            <button onclick="closeConfirmationModal()" 
+                    class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out">
+                Cancel
+            </button>
         </div>
     </div>
 </div>
@@ -635,11 +705,14 @@ function updateSelection() {
     
     const selectedCount = document.getElementById('selectedCount');
     const selectedCountDelete = document.getElementById('selectedCountDelete');
+    const selectedCountTest = document.getElementById('selectedCountTest');
     const mergeBtn = document.getElementById('mergeBtn');
     const deleteBtn = document.getElementById('deleteBtn');
+    const testBtn = document.getElementById('testBtn');
     
     selectedCount.textContent = selectedPersons.size;
     selectedCountDelete.textContent = selectedPersons.size;
+    selectedCountTest.textContent = selectedPersons.size;
     
     if (selectedPersons.size >= 2) {
         mergeBtn.classList.remove('hidden');
@@ -649,8 +722,10 @@ function updateSelection() {
     
     if (selectedPersons.size >= 1) {
         deleteBtn.classList.remove('hidden');
+        testBtn.classList.remove('hidden');
     } else {
         deleteBtn.classList.add('hidden');
+        testBtn.classList.add('hidden');
     }
 }
 
@@ -755,5 +830,553 @@ function deleteSelected() {
         alert('Failed to delete persons');
     });
 }
+
+// Recognition testing functionality
+let testResults = null;
+
+function testRecognition() {
+    if (selectedPersons.size === 0) {
+        alert('Please select at least one person to test');
+        return;
+    }
+    
+    const modal = document.getElementById('recognitionTestModal');
+    const container = document.getElementById('testResultsContainer');
+    const actionButtons = document.getElementById('testActionButtons');
+    
+    modal.classList.remove('hidden');
+    actionButtons.classList.add('hidden');
+    
+    // Show loading
+    container.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-8">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+            <p class="text-gray-600 dark:text-gray-400">Testing recognition for ${selectedPersons.size} person(s)...</p>
+            <p class="text-sm text-gray-500 dark:text-gray-500 mt-2">This may take a few moments</p>
+        </div>
+    `;
+    
+    // Send test request
+    fetch('/persons/api/batch-test', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            person_ids: Array.from(selectedPersons)
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            testResults = data;
+            displayTestResults(data);
+            
+            // Show action buttons if there are misidentifications
+            if (data.misidentified_count > 0) {
+                actionButtons.classList.remove('hidden');
+            }
+        } else {
+            container.innerHTML = `
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                    Error: ${data.error || 'Failed to test recognition'}
+                </div>
+            `;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        container.innerHTML = `
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                Failed to test recognition
+            </div>
+        `;
+    });
+}
+
+function displayTestResults(data) {
+    const container = document.getElementById('testResultsContainer');
+    
+    let html = `
+        <div class="mb-4">
+            <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <h4 class="font-semibold text-blue-800 dark:text-blue-200 mb-2">Test Summary</h4>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-blue-600 dark:text-blue-300">Tested Persons:</span>
+                        <span class="font-medium text-blue-800 dark:text-blue-100">${data.tested_persons}</span>
+                    </div>
+                    <div>
+                        <span class="text-blue-600 dark:text-blue-300">Misidentified:</span>
+                        <span class="font-medium ${data.misidentified_count > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}">${data.misidentified_count}</span>
+                    </div>
+                    <div>
+                        <span class="text-blue-600 dark:text-blue-300">Images to Move:</span>
+                        <span class="font-medium ${data.total_images_to_move > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-600 dark:text-gray-400'}">${data.total_images_to_move || 0}</span>
+                    </div>
+                    <div>
+                        <span class="text-blue-600 dark:text-blue-300">Model:</span>
+                        <span class="font-medium text-blue-800 dark:text-blue-100">${data.model_info.name.split('/').pop()}</span>
+                    </div>
+                </div>
+                <div class="mt-2 text-xs text-blue-600 dark:text-blue-300">
+                    Trained persons: ${data.model_info.trained_persons.join(', ')}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Display results for each person
+    html += '<div class="space-y-4">';
+    
+    data.results.forEach(result => {
+        const isTrainedPerson = data.model_info.trained_persons.includes(result.person_id);
+        
+        html += `
+            <div class="border ${result.misidentified ? 'border-red-300 dark:border-red-700' : 'border-gray-200 dark:border-gray-700'} rounded-lg p-4 ${result.misidentified ? 'bg-red-50 dark:bg-red-900/20' : ''}">
+                <div class="flex justify-between items-start mb-2">
+                    <h5 class="font-semibold text-lg ${result.misidentified ? 'text-red-700 dark:text-red-300' : 'text-gray-800 dark:text-white'}">
+                        ${result.person_id}
+                        ${isTrainedPerson ? '<span class="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Trained</span>' : '<span class="ml-2 text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded">Untrained</span>'}
+                    </h5>
+                    <span class="text-sm text-gray-500">
+                        ${result.tested_images}/${result.total_images} images tested
+                    </span>
+                </div>
+        `;
+        
+        if (Object.keys(result.predictions).length > 0) {
+            html += '<div class="space-y-2">';
+            
+            // Sort predictions by count
+            const sortedPredictions = Object.entries(result.predictions).sort((a, b) => b[1].count - a[1].count);
+            
+            sortedPredictions.forEach(([predId, predData]) => {
+                const isCorrect = predId === result.person_id;
+                const isMisidentified = predId !== 'unknown' && predId !== result.person_id && data.model_info.trained_persons.includes(predId);
+                
+                html += `
+                    <div class="flex items-center justify-between p-2 rounded ${isMisidentified ? 'bg-orange-100 dark:bg-orange-900/30' : 'bg-gray-100 dark:bg-gray-700'}">
+                        <div class="flex items-center">
+                            <span class="font-medium ${isCorrect ? 'text-green-600' : isMisidentified ? 'text-orange-600' : 'text-gray-600'}">
+                                ${predId}
+                            </span>
+                            <span class="ml-2 text-sm text-gray-500">
+                                (${predData.percentage.toFixed(1)}% - ${predData.count} images)
+                            </span>
+                        </div>
+                        <span class="text-sm text-gray-500">
+                            Avg confidence: ${(predData.avg_confidence * 100).toFixed(1)}%
+                        </span>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+        }
+        
+        // Show suggestions for misidentified persons
+        if (result.split_suggestions && result.split_suggestions.length > 0) {
+            html += `
+                <div class="mt-3 p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded">
+                    <p class="text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-2">
+                        <i class="fas fa-lightbulb mr-1"></i>
+                        Images to Move:
+                    </p>
+            `;
+            
+            result.split_suggestions.forEach(suggestion => {
+                html += `
+                    <div class="mb-2">
+                        <div class="text-sm font-medium text-yellow-700 dark:text-yellow-300">
+                            → Move ${suggestion.count} images to ${suggestion.split_to} (avg ${(suggestion.confidence * 100).toFixed(1)}% confidence)
+                        </div>
+                `;
+                
+                // Show first few image names
+                if (suggestion.images && suggestion.images.length > 0) {
+                    html += '<div class="ml-4 text-xs text-yellow-600 dark:text-yellow-400">';
+                    const showImages = suggestion.images.slice(0, 5);
+                    showImages.forEach(img => {
+                        html += `<div>• ${img.image} (${(img.confidence * 100).toFixed(1)}%)</div>`;
+                    });
+                    if (suggestion.images.length > 5) {
+                        html += `<div>... and ${suggestion.images.length - 5} more</div>`;
+                    }
+                    html += '</div>';
+                }
+                
+                html += '</div>';
+            });
+            
+            html += '</div>';
+        }
+        
+        html += '</div>';
+    });
+    
+    html += '</div>';
+    
+    // Add move summary if there are images to move
+    if (data.move_summary && Object.keys(data.move_summary).length > 0) {
+        html += `
+            <div class="mt-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                <h4 class="font-semibold text-green-800 dark:text-green-200 mb-3">
+                    <i class="fas fa-exchange-alt mr-2"></i>
+                    Move Summary
+                </h4>
+                <div class="space-y-2">
+        `;
+        
+        Object.entries(data.move_summary).forEach(([targetPerson, images]) => {
+            html += `
+                <div class="text-sm">
+                    <span class="font-medium text-green-700 dark:text-green-300">
+                        ${targetPerson} will receive ${images.length} images:
+                    </span>
+                    <ul class="ml-4 mt-1 text-xs text-green-600 dark:text-green-400">
+            `;
+            
+            // Group by source person
+            const bySource = {};
+            images.forEach(img => {
+                if (!bySource[img.source_person]) bySource[img.source_person] = 0;
+                bySource[img.source_person]++;
+            });
+            
+            Object.entries(bySource).forEach(([source, count]) => {
+                html += `<li>• ${count} from ${source}</li>`;
+            });
+            
+            html += `
+                    </ul>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+function closeTestModal() {
+    document.getElementById('recognitionTestModal').classList.add('hidden');
+    testResults = null;
+}
+
+// Store operations globally for confirmation
+let pendingOperations = [];
+
+function showDetailedConfirmation() {
+    if (!testResults || testResults.misidentified_count === 0) {
+        alert('No misidentifications to process');
+        return;
+    }
+    
+    // Collect all split/merge operations
+    pendingOperations = [];
+    
+    testResults.results.forEach(result => {
+        if (result.misidentified && result.split_suggestions) {
+            result.split_suggestions.forEach(suggestion => {
+                pendingOperations.push({
+                    type: 'split_merge',
+                    source_person: result.person_id,
+                    target_person: suggestion.split_to,
+                    images: suggestion.images
+                });
+            });
+        }
+    });
+    
+    if (pendingOperations.length === 0) {
+        alert('No automatic operations available');
+        return;
+    }
+    
+    // Build detailed confirmation content
+    const container = document.getElementById('confirmationContent');
+    let html = `
+        <div class="mb-4">
+            <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <h4 class="font-semibold text-blue-800 dark:text-blue-200 mb-2">
+                    <i class="fas fa-info-circle mr-2"></i>Operation Summary
+                </h4>
+                <p class="text-blue-700 dark:text-blue-300">
+                    Found ${pendingOperations.length} operation(s) to move ${pendingOperations.reduce((sum, op) => sum + op.images.length, 0)} images total.
+                </p>
+            </div>
+        </div>
+    `;
+    
+    // Group operations by target person
+    const groupedByTarget = {};
+    pendingOperations.forEach(op => {
+        if (!groupedByTarget[op.target_person]) {
+            groupedByTarget[op.target_person] = [];
+        }
+        groupedByTarget[op.target_person].push(op);
+    });
+    
+    // Display operations grouped by target
+    html += '<div class="space-y-4">';
+    
+    Object.entries(groupedByTarget).forEach(([targetPerson, ops]) => {
+        const totalImages = ops.reduce((sum, op) => sum + op.images.length, 0);
+        
+        html += `
+            <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <h5 class="font-semibold text-lg text-gray-800 dark:text-white">
+                            <i class="fas fa-folder-open mr-2 text-green-600"></i>
+                            Move to ${targetPerson}
+                        </h5>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">${totalImages} images will be moved here</p>
+                    </div>
+                    <div class="flex -space-x-3" id="targetPreview-${targetPerson}">
+                        <!-- Target person preview images will be loaded here -->
+                        <div class="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-600 animate-pulse"></div>
+                        <div class="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-600 animate-pulse"></div>
+                        <div class="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-600 animate-pulse"></div>
+                    </div>
+                </div>
+        `;
+        
+        // Show source persons and their images
+        ops.forEach(op => {
+            html += `
+                <div class="ml-4 mb-3">
+                    <div class="font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <i class="fas fa-folder mr-1 text-gray-500"></i>
+                        From ${op.source_person} <span class="text-sm text-gray-500">(${op.images.length} images)</span>
+                    </div>
+                    <div class="ml-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            `;
+            
+            // Show image thumbnails with names
+            op.images.forEach((img, idx) => {
+                if (idx < 6) { // Show first 6 images
+                    html += `
+                        <div class="flex items-center space-x-2 bg-gray-50 dark:bg-gray-700 rounded p-2">
+                            <img src="/persons/serve/persons/${op.source_person}/${img.image}" 
+                                 class="w-12 h-12 object-cover object-top rounded" 
+                                 alt="${img.image}"
+                                 onerror="this.src='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"48\" height=\"48\" fill=\"%23666\"><rect width=\"48\" height=\"48\" fill=\"%23f3f4f6\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".3em\" font-family=\"sans-serif\" font-size=\"10\" fill=\"%23666\">No preview</text></svg>'">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate" title="${img.image}">
+                                    ${img.image.substring(0, 20)}...
+                                </p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">
+                                    Confidence: ${(img.confidence * 100).toFixed(1)}%
+                                </p>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+            
+            if (op.images.length > 6) {
+                html += `
+                    <div class="flex items-center justify-center bg-gray-50 dark:bg-gray-700 rounded p-2 col-span-full">
+                        <p class="text-sm text-gray-600 dark:text-gray-400">
+                            <i class="fas fa-ellipsis-h mr-2"></i>
+                            And ${op.images.length - 6} more images...
+                        </p>
+                    </div>
+                `;
+            }
+            
+            html += `
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+    });
+    
+    html += '</div>';
+    
+    // Warning message
+    html += `
+        <div class="mt-6 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+            <p class="text-sm text-yellow-800 dark:text-yellow-200">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                <strong>Note:</strong> This operation will permanently move these images. The source persons will have fewer images after this operation.
+            </p>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+    
+    // Show confirmation modal
+    document.getElementById('confirmationModal').classList.remove('hidden');
+    
+    // Load preview images for each target person
+    // Use setTimeout to ensure DOM is ready and load sequentially to avoid rate limiting
+    setTimeout(() => {
+        const targetPersons = Object.keys(groupedByTarget);
+        console.log(`Loading previews for ${targetPersons.length} target persons:`, targetPersons);
+        
+        // Load previews with a small delay between each to avoid overwhelming the server
+        targetPersons.forEach((targetPerson, index) => {
+            setTimeout(() => {
+                loadTargetPersonPreview(targetPerson);
+            }, index * 150); // 150ms delay between each request
+        });
+    }, 100);
+}
+
+async function loadTargetPersonPreview(personId) {
+    console.log(`Loading preview for ${personId}`);
+    
+    try {
+        // Fetch preview images for the target person
+        const response = await fetch(`/persons/api/${personId}/images`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        const previewContainer = document.getElementById(`targetPreview-${personId}`);
+        if (!previewContainer) {
+            console.error(`Preview container not found for ${personId}`);
+            return;
+        }
+        
+        let previewHtml = '';
+        const maxPreviews = 3;
+        
+        if (data.images && data.images.length > 0) {
+            // Show up to 3 preview images
+            data.images.slice(0, maxPreviews).forEach((img, idx) => {
+                previewHtml += `
+                    <div class="relative ${idx > 0 ? '-ml-3' : ''}" style="z-index: ${maxPreviews - idx}">
+                        <img src="/persons/serve/${img.path}" 
+                             class="w-12 h-12 rounded-full object-cover object-top border-2 border-white dark:border-gray-800 shadow-sm"
+                             alt="${personId}"
+                             title="${personId} - ${(img.confidence * 100).toFixed(0)}% confidence"
+                             onerror="this.onerror=null; this.src='data:image/svg+xml,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'48\\' height=\\'48\\' fill=\\'%23666\\'><rect width=\\'48\\' height=\\'48\\' fill=\\'%23e5e7eb\\'/><text x=\\'50%\\' y=\\'50%\\' text-anchor=\\'middle\\' dy=\\'.3em\\' font-family=\\'sans-serif\\' font-size=\\'20\\' fill=\\'%236b7280\\'>?</text></svg>'">
+                    </div>
+                `;
+            });
+            
+            // Add count indicator if more than 3 images
+            if (data.total_images > maxPreviews) {
+                previewHtml += `
+                    <div class="relative -ml-3 w-12 h-12 rounded-full bg-gray-300 dark:bg-gray-600 border-2 border-white dark:border-gray-800 shadow-sm flex items-center justify-center" style="z-index: 0">
+                        <span class="text-xs font-medium text-gray-700 dark:text-gray-300">+${data.total_images - maxPreviews}</span>
+                    </div>
+                `;
+            }
+            console.log(`✓ Loaded ${data.images.length} images for ${personId}`);
+        } else {
+            // No images found, show placeholder
+            previewHtml = `
+                <div class="w-12 h-12 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
+                    <i class="fas fa-user text-gray-500 dark:text-gray-400"></i>
+                </div>
+            `;
+            console.log(`No images found for ${personId}`);
+        }
+        
+        previewContainer.innerHTML = previewHtml;
+        
+    } catch (error) {
+        console.error(`Error loading preview for ${personId}:`, error);
+        // Show error placeholder
+        const previewContainer = document.getElementById(`targetPreview-${personId}`);
+        if (previewContainer) {
+            previewContainer.innerHTML = `
+                <div class="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center">
+                    <i class="fas fa-exclamation text-red-500 dark:text-red-400"></i>
+                </div>
+            `;
+        }
+    }
+}
+
+function closeConfirmationModal() {
+    document.getElementById('confirmationModal').classList.add('hidden');
+}
+
+function proceedWithAutoSplitMerge() {
+    // Close confirmation modal
+    closeConfirmationModal();
+    
+    // Show processing in the test results container
+    const container = document.getElementById('testResultsContainer');
+    container.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-8">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+            <p class="text-gray-600 dark:text-gray-400">Processing ${pendingOperations.length} operations...</p>
+            <p class="text-sm text-gray-500 dark:text-gray-500 mt-2">Moving ${pendingOperations.reduce((sum, op) => sum + op.images.length, 0)} images...</p>
+        </div>
+    `;
+    
+    // Send auto split/merge request
+    fetch('/persons/api/auto-split-merge', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            operations: pendingOperations
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message with details
+            container.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-8">
+                    <div class="text-green-500 mb-4">
+                        <i class="fas fa-check-circle fa-4x"></i>
+                    </div>
+                    <h4 class="text-xl font-semibold text-gray-800 dark:text-white mb-2">Operation Successful!</h4>
+                    <p class="text-gray-600 dark:text-gray-400">Successfully processed ${data.successful_operations} operations</p>
+                    <button onclick="location.reload()" 
+                            class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out">
+                        <i class="fas fa-sync mr-2"></i>Refresh Page
+                    </button>
+                </div>
+            `;
+        } else {
+            alert(`Error: ${data.error || 'Failed to process operations'}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to process operations');
+    });
+}
+
+// Keep the old function for backward compatibility
+function autoSplitMerge() {
+    showDetailedConfirmation();
+}
+
+// Close modals on escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const testModal = document.getElementById('recognitionTestModal');
+        const confirmModal = document.getElementById('confirmationModal');
+        
+        if (!testModal.classList.contains('hidden')) {
+            closeTestModal();
+        } else if (!confirmModal.classList.contains('hidden')) {
+            closeConfirmationModal();
+        }
+    }
+});
 </script>
 {% endblock %}

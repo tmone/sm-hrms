@@ -55,7 +55,7 @@ with open(r'{}', 'w') as f:
 """.format(
                 os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                 video_path,
-                json.dumps(gpu_config or {}),
+                repr(gpu_config or {}),  # Fix boolean serialization
                 video_id or 'None',
                 result_file
             )

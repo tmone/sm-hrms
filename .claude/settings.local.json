@@ -47,7 +47,11 @@
       "Bash(curl:*)",
       "Bash(timeout:*)",
       "Bash(ffprobe:*)",
-      "Bash(ffmpeg:*)"
+      "Bash(ffmpeg:*)",
+      "Bash(./.venv/Scripts/python.exe scripts/test_batch_recognition_fix.py:*)",
+      "Bash(./.venv/Scripts/python.exe scripts/test_batch_function_direct.py:*)",
+      "Bash(./.venv/Scripts/python.exe scripts/test_detailed_confirmation.py:*)",
+      "Bash(./.venv/Scripts/python.exe scripts/test_enhanced_modal_preview.py:*)"
     ],
     "deny": []
   },

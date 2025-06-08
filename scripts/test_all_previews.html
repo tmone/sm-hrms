@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Preview Loading</title>
+    <script>
+        // Simulate the preview loading for multiple persons
+        function testMultiplePreviewLoading() {
+            // Create test containers
+            const container = document.getElementById('test-container');
+            const testPersons = ['PERSON-0019', 'PERSON-0021', 'PERSON-0002'];
+            
+            testPersons.forEach(personId => {
+                const div = document.createElement('div');
+                div.className = 'preview-group';
+                div.innerHTML = `
+                    <h3>${personId}</h3>
+                    <div id="targetPreview-${personId}" style="display: flex; gap: -10px;">
+                        <div style="width: 48px; height: 48px; background: #ccc; border-radius: 50%; animation: pulse 2s infinite;">Loading...</div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+            
+            // Simulate loading previews with delay
+            testPersons.forEach((personId, index) => {
+                setTimeout(() => {
+                    console.log(`Loading preview for ${personId}`);
+                    const previewContainer = document.getElementById(`targetPreview-${personId}`);
+                    if (previewContainer) {
+                        // Simulate loaded images
+                        previewContainer.innerHTML = `
+                            <div style="width: 48px; height: 48px; background: url('https://via.placeholder.com/48/${Math.random().toString(16).substr(2, 6)}/ffffff?text=${personId.substr(-2)}') center/cover; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"></div>
+                            <div style="width: 48px; height: 48px; background: url('https://via.placeholder.com/48/${Math.random().toString(16).substr(2, 6)}/ffffff?text=${personId.substr(-2)}') center/cover; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-left: -12px;"></div>
+                            <div style="width: 48px; height: 48px; background: url('https://via.placeholder.com/48/${Math.random().toString(16).substr(2, 6)}/ffffff?text=${personId.substr(-2)}') center/cover; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-left: -12px;"></div>
+                        `;
+                        console.log(`✓ Loaded preview for ${personId}`);
+                    } else {
+                        console.error(`✗ Container not found for ${personId}`);
+                    }
+                }, index * 150);
+            });
+        }
+        
+        // Run test when page loads
+        window.onload = testMultiplePreviewLoading;
+    </script>
+    <style>
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .preview-group {
+            margin: 20px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Testing Preview Loading for Multiple Persons</h1>
+    <p>Check console for loading status. All three persons should show preview images.</p>
+    <div id="test-container"></div>
+</body>
+</html>

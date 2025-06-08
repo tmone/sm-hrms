@@ -3093,6 +3093,180 @@ else:
         pass
 
 
+def gpu_process_chunk_direct(video, processing_options, app):
+    """Process chunk directly in current thread (for GPU queue workers)"""
+    import sys
+    import os
+    from datetime import datetime
+    
+    # This is the same logic as gpu_process_in_background but without thread creation
+    try:
+        # Get database and models from app context
+        db = app.db
+        Video = app.Video
+        DetectedPerson = app.DetectedPerson
+        sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+        
+        # Re-fetch the video object in this thread's session
+        video_obj = Video.query.get(video.id)
+        if not video_obj:
+            print(f"[ERROR] Video {video.id} not found in database")
+            return
+        
+        print(f"[START] Processing chunk {video_obj.filename} (direct mode, no thread spawning)")
+        
+        # Get video path
+        upload_folder = app.config.get('UPLOAD_FOLDER', 'static/uploads')
+        video_path = os.path.join(upload_folder, video_obj.file_path)
+        
+        # Check if video file exists
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"Video file not found: {video_path}")
+        
+        print(f"[OK] Video file exists: {video_path} ({os.path.getsize(video_path)} bytes)")
+        
+        # Step 1: Clear existing detections
+        print(f"[DELETE] Step 1/5: Clearing existing detection data for video {video_obj.id}")
+        video_obj.processing_progress = 5
+        db.session.commit()
+        
+        existing_detections = DetectedPerson.query.filter_by(video_id=video_obj.id).all()
+        if existing_detections:
+            detection_count = len(existing_detections)
+            for detection in existing_detections:
+                db.session.delete(detection)
+            db.session.commit()
+            print(f"   [OK] Deleted {detection_count} existing detections")
+        
+        # Step 2: Run GPU-accelerated person detection
+        print(f"[AI] Step 2/5: Running GPU-accelerated person detection...")
+        video_obj.processing_progress = 20
+        db.session.commit()
+        
+        # Import GPU-optimized detection module
+        try:
+            from processing.gpu_enhanced_detection import gpu_person_detection_task
+            print("[GPU] Using GPU-accelerated detection")
+            gpu_available = True
+        except ImportError:
+            print("[WARNING] GPU detection module not found, falling back to CPU detection")
+            gpu_available = False
+            try:
+                from processing.enhanced_detection import enhanced_person_detection_task
+                # Create wrapper to match gpu_person_detection_task signature
+                def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=None):
+                    # enhanced_person_detection_task only takes video_path
+                    return enhanced_person_detection_task(video_path)
+            except ImportError:
+                from processing.enhanced_detection_fallback import enhanced_person_detection_task
+                # Create wrapper to match gpu_person_detection_task signature
+                def gpu_person_detection_task(video_path, gpu_config=None, video_id=None, app=None):
+                    # enhanced_person_detection_task only takes video_path
+                    return enhanced_person_detection_task(video_path)
+        
+        # Configure GPU processing with conservative settings
+        gpu_config = {
+            'use_gpu': processing_options.get('use_gpu', True) and gpu_available,
+            'batch_size': 4 if gpu_available else 2,  # Reduced batch size for stability
+            'device': 'cuda:0' if gpu_available else 'cpu',
+            'fp16': True if gpu_available else False,  # Use half precision on GPU
+            'num_workers': 0  # Disable DataLoader workers to prevent multiplication
+        }
+        
+        print(f"[GPU] GPU Config: {gpu_config}")
+        
+        # Get video ID before calling task to avoid lazy loading
+        video_id = video_obj.id
+        
+        # Close session before long-running GPU task
+        db.session.close()
+        db.session.remove()
+        
+        # Run GPU detection with safety wrapper (no DB operations)
+        try:
+            from processing.safe_gpu_wrapper import process_video_safely
+            result = process_video_safely(video_path, video_id, gpu_config)
+        except ImportError:
+            # Fallback to direct GPU detection if wrapper not available
+            print("[WARNING] Safe wrapper not available, using direct GPU processing")
+            result = gpu_person_detection_task(video_path, gpu_config, video_id, app)
+        
+        # Re-establish session after GPU processing
+        video_obj = Video.query.get(video_id)
+        if not video_obj:
+            raise Exception("Video not found after GPU processing")
+        
+        if 'error' in result:
+            raise Exception(f"GPU detection failed: {result['error']}")
+        
+        # Process the results
+        print(f"[SAVE] GPU detection completed, processing results...")
+        person_detections = result.get('detections', [])
+        
+        # Save person detections
+        video_obj.processing_progress = 60
+        db.session.commit()
+        
+        # Save detections in batches
+        batch_size = 100
+        for i in range(0, len(person_detections), batch_size):
+            batch = person_detections[i:i+batch_size]
+            for detection in batch:
+                # Extract bbox values
+                bbox = detection.get('bbox', {})
+                bbox_x = bbox.get('x', 0) if isinstance(bbox, dict) else (bbox[0] if isinstance(bbox, (list, tuple)) and len(bbox) >= 4 else 0)
+                bbox_y = bbox.get('y', 0) if isinstance(bbox, dict) else (bbox[1] if isinstance(bbox, (list, tuple)) and len(bbox) >= 4 else 0)
+                bbox_width = bbox.get('width', 0) if isinstance(bbox, dict) else (bbox[2] if isinstance(bbox, (list, tuple)) and len(bbox) >= 4 else 0)
+                bbox_height = bbox.get('height', 0) if isinstance(bbox, dict) else (bbox[3] if isinstance(bbox, (list, tuple)) and len(bbox) >= 4 else 0)
+                
+                detected_person = DetectedPerson(
+                    video_id=video_obj.id,
+                    timestamp=detection.get('timestamp', 0),
+                    frame_number=detection.get('frame', 0),
+                    person_id=detection.get('person_id', 'unknown'),
+                    bbox_x=bbox_x,
+                    bbox_y=bbox_y,
+                    bbox_width=bbox_width,
+                    bbox_height=bbox_height,
+                    confidence=detection.get('confidence', 0.0),
+                    track_id=detection.get('track_id', 0)
+                )
+                db.session.add(detected_person)
+            db.session.commit()
+            print(f"   [PROGRESS] Saved {min(i+batch_size, len(person_detections))}/{len(person_detections)} detections")
+        
+        # Update video status
+        video_obj.status = 'completed'  # Use 'status' field from the model
+        video_obj.processing_progress = 100
+        video_obj.processing_completed_at = datetime.utcnow()  # Use correct field name
+        
+        # Store annotated video path if available
+        if result.get('annotated_video_path'):
+            video_obj.annotated_video_path = result['annotated_video_path']
+        
+        db.session.commit()
+        
+        print(f"[OK] Chunk processing completed for video {video_obj.id}")
+        print(f"   - Total detections: {len(person_detections)}")
+        
+    except Exception as e:
+        print(f"[ERROR] Chunk processing failed: {str(e)}")
+        import traceback
+        print(f"[TRACE] {traceback.format_exc()}")
+        
+        # Update video status to failed
+        try:
+            video_obj = Video.query.get(video.id)
+            if video_obj:
+                video_obj.status = 'failed'  # Use 'status' field from the model
+                video_obj.processing_progress = 0
+                video_obj.error_message = str(e)  # Use 'error_message' field from the model
+                
+                db.session.commit()
+        except Exception as db_error:
+            print(f"[ERROR] Failed to update database: {db_error}")
+
+
 # Module-level function for GPU queue processing
 def process_video_chunk(video_path, chunk_info, app):
     """Process a video chunk within the GPU queue"""
@@ -3114,10 +3288,12 @@ def process_video_chunk(video_path, chunk_info, app):
             'use_gpu': True
         })
         
-        print(f"[GPU] Processing chunk {chunk_info['index']+1}/{chunk_info['total']} in GPU queue")
+        print(f"[GPU] Processing chunk {chunk_info['index']+1}/{chunk_info['total']} in GPU queue (worker thread)")
         
-        # Start processing
-        start_enhanced_gpu_processing(chunk_video, processing_options, app)
+        # Call the background processing function directly (without creating new thread)
+        # since we're already in a GPU queue worker thread
+        with app.app_context():
+            gpu_process_chunk_direct(chunk_video, processing_options, app)
         
         # After processing completes, check if all chunks are done
         parent_video_id = chunk_info.get('parent_video_id')

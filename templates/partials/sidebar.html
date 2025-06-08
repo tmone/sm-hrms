@@ -49,6 +49,16 @@
             </li>
             
             <li>
+                <a href="{{ url_for('persons.index') }}" 
+                   class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors
+                          {% if request.endpoint and request.endpoint.startswith('persons') %}bg-blue-700{% endif %}">
+                    <i class="fas fa-user-friends mr-3"></i>
+                    Detected Persons
+                </a>
+            </li>
+            
+            {# Face Recognition Features - Hidden as not integrated
+            <li>
                 <a href="{{ url_for('face_recognition.datasets') }}" 
                    class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors
                           {% if request.endpoint == 'face_recognition.datasets' %}bg-blue-700{% endif %}">
@@ -74,6 +84,25 @@
                     Recognition
                 </a>
             </li>
+            #}
+            
+            <li>
+                <a href="{{ url_for('person_recognition.index') }}" 
+                   class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors
+                          {% if request.endpoint and request.endpoint.startswith('person_recognition') %}bg-blue-700{% endif %}">
+                    <i class="fas fa-user-check mr-3"></i>
+                    Person Recognition
+                </a>
+            </li>
+            
+            <li>
+                <a href="{{ url_for('gpu_management.index') }}" 
+                   class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors
+                          {% if request.endpoint and request.endpoint.startswith('gpu_management') %}bg-blue-700{% endif %}">
+                    <i class="fas fa-microchip mr-3"></i>
+                    GPU Management
+                </a>
+            </li>
             
             <!-- Reporting Section -->
             <li class="mt-6">
@@ -83,7 +112,9 @@
             </li>
             
             <li>
-                <a href="#" class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors">
+                <a href="{{ url_for('attendance.index') }}" 
+                   class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors
+                          {% if request.endpoint and request.endpoint.startswith('attendance') %}bg-blue-700{% endif %}">
                     <i class="fas fa-chart-bar mr-3"></i>
                     Attendance Reports
                 </a>
@@ -113,6 +144,22 @@
                     </div>
                     <span x-show="queue > 0" x-text="queue" 
                           class="bg-red-500 text-white text-xs rounded-full px-2 py-1 min-w-[20px] text-center"></span>
+                </a>
+            </li>
+            
+            <!-- Settings Section -->
+            <li class="mt-6">
+                <div class="px-4 py-2 text-blue-200 text-sm font-semibold uppercase tracking-wide">
+                    System
+                </div>
+            </li>
+            
+            <li>
+                <a href="{{ url_for('settings.index') }}" 
+                   class="flex items-center px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors
+                          {% if request.endpoint and request.endpoint.startswith('settings') %}bg-blue-700{% endif %}">
+                    <i class="fas fa-cog mr-3"></i>
+                    Settings
                 </a>
             </li>
             

@@ -21,7 +21,7 @@ def test_video_management():
         print(f"Demo login: {login_response.status_code}")
         
         if login_response.status_code != 302:
-            print("❌ Failed to login")
+            print("[ERROR] Failed to login")
             return False
         
         # Test video management page
@@ -29,36 +29,36 @@ def test_video_management():
         print(f"Video management page: {video_response.status_code}")
         
         if video_response.status_code == 200:
-            print("✅ Video management is ENABLED and working!")
+            print("[OK] Video management is ENABLED and working!")
             
             # Check if it contains upload functionality
             if "Upload Video" in video_response.text or "upload" in video_response.text.lower():
-                print("✅ Video upload functionality detected")
+                print("[OK] Video upload functionality detected")
                 
             # Test upload page
             upload_response = session.get(f"{base_url}/videos/upload")
             if upload_response.status_code == 200:
-                print("✅ Video upload page accessible")
+                print("[OK] Video upload page accessible")
             else:
-                print(f"⚠️ Video upload page returned: {upload_response.status_code}")
+                print(f"[WARNING] Video upload page returned: {upload_response.status_code}")
                 
             return True
             
         elif video_response.status_code == 302:
-            print("⚠️ Video management redirected (might be disabled)")
+            print("[WARNING] Video management redirected (might be disabled)")
             return False
         else:
             # Check if we get the "not available" page
             if "not available" in video_response.text.lower():
-                print("❌ Video management is DISABLED")
+                print("[ERROR] Video management is DISABLED")
                 print("    The application is showing 'Video Management Not Available' page")
                 return False
             else:
-                print(f"❌ Unexpected response: {video_response.status_code}")
+                print(f"[ERROR] Unexpected response: {video_response.status_code}")
                 return False
                 
     except Exception as e:
-        print(f"❌ Error testing video management: {e}")
+        print(f"[ERROR] Error testing video management: {e}")
         return False
 
 def test_face_recognition():
@@ -80,17 +80,17 @@ def test_face_recognition():
         
         if face_response.status_code == 200:
             if "not available" not in face_response.text.lower():
-                print("✅ Face recognition is ENABLED and working!")
+                print("[OK] Face recognition is ENABLED and working!")
                 return True
             else:
-                print("❌ Face recognition is DISABLED")
+                print("[ERROR] Face recognition is DISABLED")
                 return False
         else:
-            print(f"❌ Face recognition returned: {face_response.status_code}")
+            print(f"[ERROR] Face recognition returned: {face_response.status_code}")
             return False
             
     except Exception as e:
-        print(f"❌ Error testing face recognition: {e}")
+        print(f"[ERROR] Error testing face recognition: {e}")
         return False
 
 def main():
@@ -102,17 +102,17 @@ def main():
     
     print("\n" + "=" * 50)
     print("RESULTS:")
-    print(f"✅ Video Management: {'ENABLED' if video_working else 'DISABLED'}")
-    print(f"✅ Face Recognition: {'ENABLED' if face_working else 'DISABLED'}")
+    print(f"[OK] Video Management: {'ENABLED' if video_working else 'DISABLED'}")
+    print(f"[OK] Face Recognition: {'ENABLED' if face_working else 'DISABLED'}")
     
     if video_working and face_working:
         print("\n🎉 All advanced features are working!")
         return 0
     elif video_working or face_working:
-        print("\n⚠️ Some features are working")
+        print("\n[WARNING] Some features are working")
         return 0
     else:
-        print("\n❌ Advanced features are disabled")
+        print("\n[ERROR] Advanced features are disabled")
         print("\nTo enable them:")
         print("1. Make sure the application models are loaded correctly")
         print("2. Restart the application")

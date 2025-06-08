@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Dataset: {{ dataset_name }} - {{ super() }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Page Header -->
+    <div class="mb-6">
+        <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center">
+                <a href="{{ url_for('person_recognition.index') }}" class="text-blue-600 hover:text-blue-800 mr-2">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
+                <h1 class="text-3xl font-bold text-gray-800 dark:text-white">
+                    Dataset: {{ dataset_name }}
+                </h1>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="trainFromDataset('{{ dataset_name }}')" 
+                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                    <i class="fas fa-brain mr-2"></i>
+                    Train Model
+                </button>
+                <button onclick="deleteDataset('{{ dataset_name }}')" 
+                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                    <i class="fas fa-trash-alt mr-2"></i>
+                    Delete Dataset
+                </button>
+            </div>
+        </div>
+        <p class="text-gray-600 dark:text-gray-400">
+            Created: {{ dataset_info.created_at }}
+        </p>
+    </div>
+
+    <!-- Dataset Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-blue-100 dark:bg-blue-900 rounded-full">
+                    <i class="fas fa-users text-blue-600 dark:text-blue-400 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Persons</p>
+                    <p class="text-2xl font-semibold">{{ dataset_info.persons|length }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-green-100 dark:bg-green-900 rounded-full">
+                    <i class="fas fa-images text-green-600 dark:text-green-400 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Total Images</p>
+                    <p class="text-2xl font-semibold">{{ dataset_info.total_images }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-purple-100 dark:bg-purple-900 rounded-full">
+                    <i class="fas fa-chart-pie text-purple-600 dark:text-purple-400 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Train/Val Split</p>
+                    <p class="text-lg font-semibold">
+                        {% if dataset_info.total_train_images is defined %}
+                            {{ dataset_info.total_train_images }}/{{ dataset_info.total_val_images }}
+                        {% else %}
+                            {{ dataset_info.total_images }}
+                        {% endif %}
+                    </p>
+                    {% if dataset_info.split_ratio is defined %}
+                    <p class="text-xs text-gray-500">{{ dataset_info.split_ratio }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="p-3 bg-yellow-100 dark:bg-yellow-900 rounded-full">
+                    <i class="fas fa-magic text-yellow-600 dark:text-yellow-400 text-xl"></i>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Augmentation</p>
+                    <p class="text-2xl font-semibold">
+                        {% if dataset_info.augmentation_factor is defined %}
+                            {{ dataset_info.augmentation_factor }}x
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="mb-6">
+        <button onclick="trainFromDataset('{{ dataset_name }}')" 
+                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+            <i class="fas fa-brain mr-2"></i>
+            Train Model with this Dataset
+        </button>
+    </div>
+
+    <!-- Person Details -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-xl font-semibold text-gray-800 dark:text-white">
+                Persons in Dataset
+            </h2>
+        </div>
+        
+        <div class="p-6">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                    <thead>
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Person ID
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Total Images
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Train Images
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Val Images
+                            </th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Features
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                        {% for person in person_stats %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900 dark:text-white">
+                                    {{ person.person_id }}
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                {{ person.images_count }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                {% if person.train_images_count is defined %}
+                                    {{ person.train_images_count }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                {% if person.val_images_count is defined %}
+                                    {{ person.val_images_count }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                {{ person.features_count|default(person.embeddings_count) }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Redirect to main page to show train modal
+function trainFromDataset(datasetName) {
+    window.location.href = '{{ url_for("person_recognition.index") }}?train=' + encodeURIComponent(datasetName);
+}
+
+// Delete dataset function
+function deleteDataset(datasetName) {
+    if (confirm(`Are you sure you want to delete the dataset "${datasetName}"? This action cannot be undone.`)) {
+        // Create a form and submit it
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/person-recognition/datasets/' + encodeURIComponent(datasetName) + '/delete';
+        
+        // Add CSRF token if needed
+        const csrfToken = document.querySelector('meta[name="csrf-token"]');
+        if (csrfToken) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'csrf_token';
+            input.value = csrfToken.content;
+            form.appendChild(input);
+        }
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
+{% endblock %}

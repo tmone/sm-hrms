@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Test Page</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Attendance UI Test Page</h1>
+        
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Test Results</h2>
+            <div id="test-results" class="space-y-2">
+                <p class="text-gray-500">Running tests...</p>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4">Sample Attendance Data</h2>
+            <div id="sample-data" class="overflow-x-auto">
+                <p class="text-gray-500">Loading sample data...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Test attendance endpoints
+        async function testEndpoints() {
+            const results = document.getElementById('test-results');
+            const endpoints = [
+                { name: 'Summary API', url: '/attendance/summary?days=7' },
+                { name: 'Daily Report API', url: '/attendance/daily?format=json' },
+                { name: 'Attendance Page', url: '/attendance/' }
+            ];
+            
+            results.innerHTML = '';
+            
+            for (const endpoint of endpoints) {
+                const div = document.createElement('div');
+                div.className = 'flex items-center justify-between p-2 border-b';
+                
+                try {
+                    const response = await fetch(endpoint.url);
+                    const statusClass = response.ok ? 'text-green-600' : 'text-red-600';
+                    div.innerHTML = `
+                        <span>${endpoint.name}</span>
+                        <span class="${statusClass}">
+                            ${response.ok ? '✓ OK' : '✗ Error'} (${response.status})
+                        </span>
+                    `;
+                    
+                    // If it's an API endpoint and successful, show sample data
+                    if (response.ok && endpoint.url.includes('format=json')) {
+                        const data = await response.json();
+                        showSampleData(data);
+                    }
+                } catch (error) {
+                    div.innerHTML = `
+                        <span>${endpoint.name}</span>
+                        <span class="text-red-600">✗ ${error.message}</span>
+                    `;
+                }
+                
+                results.appendChild(div);
+            }
+        }
+        
+        // Show sample data
+        function showSampleData(data) {
+            const container = document.getElementById('sample-data');
+            
+            if (data.attendance_data && Array.isArray(data.attendance_data)) {
+                const table = document.createElement('table');
+                table.className = 'min-w-full divide-y divide-gray-200';
+                
+                table.innerHTML = `
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Person ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        ${data.attendance_data.slice(0, 5).map(record => `
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">${record.person_id || 'N/A'}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">${record.location || 'N/A'}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">${record.date || 'N/A'}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">${record.duration_minutes || 0} min</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                `;
+                
+                container.innerHTML = '';
+                container.appendChild(table);
+                
+                if (data.attendance_data.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500">No attendance data found</p>';
+                }
+            } else {
+                container.innerHTML = '<pre class="text-xs">' + JSON.stringify(data, null, 2) + '</pre>';
+            }
+        }
+        
+        // Run tests on load
+        testEndpoints();
+    </script>
+</body>
+</html>

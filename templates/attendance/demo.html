@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Attendance Demo - What You Should See</h1>
+        
+        <!-- Expected View -->
+        <div class="mb-8">
+            <h2 class="text-2xl font-semibold mb-4">This is what the attendance page should show:</h2>
+            
+            <div class="bg-gray-50 rounded-lg p-4 border border-gray-200 mb-4">
+                <h3 class="font-semibold text-gray-800 mb-2">From the TANG TRET video on December 5, 2025:</h3>
+                <ul class="space-y-1 text-gray-700">
+                    <li class="ml-4">- Person 2 was present from 08:55:22 to 08:55:24 (2 seconds)</li>
+                    <li class="ml-4">- Person 3 was present from 08:55:22 to 08:55:27 (5 seconds)</li>
+                    <li class="ml-4">- Person 4 was present from 08:55:22 to 08:55:25 (3 seconds)</li>
+                    <li class="ml-4">- Person 5 was present from 08:55:22 to 08:55:29 (7 seconds)</li>
+                    <li class="ml-4">- Person 6 was present from 08:55:24 to 08:55:35 (10 seconds)</li>
+                    <li class="ml-4">- Person 8 was present from 08:55:27 to 08:55:32 (5 seconds)</li>
+                    <li class="ml-4 text-gray-600">- Location: TANG TRET</li>
+                    <li class="ml-4 text-gray-600">- Date: December 5, 2025</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Live Data Test -->
+        <div class="mb-8">
+            <h2 class="text-2xl font-semibold mb-4">Live Data from Your Database:</h2>
+            <div id="liveData" class="bg-white rounded-lg shadow-md p-6">
+                <p class="text-gray-500">Loading...</p>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="bg-blue-50 rounded-lg p-6 border border-blue-200">
+            <h3 class="text-lg font-semibold text-blue-800 mb-2">How to Access Attendance:</h3>
+            <ol class="list-decimal list-inside space-y-2 text-blue-700">
+                <li>Go to <a href="/auth/login" class="underline">http://localhost:5001/auth/login</a></li>
+                <li>Login with:
+                    <ul class="ml-6 mt-1">
+                        <li>Email: <code class="bg-blue-100 px-1">admin@stepmedia.com</code></li>
+                        <li>Password: (leave empty)</li>
+                    </ul>
+                </li>
+                <li>After login, go to <a href="/attendance/" class="underline">http://localhost:5001/attendance/</a></li>
+                <li>Or try the daily report: <a href="/attendance/daily?date=2025-12-05" class="underline">Daily Report for Dec 5</a></li>
+            </ol>
+        </div>
+
+        <!-- Debug Info -->
+        <div class="mt-8 bg-gray-800 text-white rounded-lg p-6">
+            <h3 class="text-lg font-semibold mb-2">Debug Information:</h3>
+            <pre id="debugInfo" class="text-sm">Loading debug info...</pre>
+        </div>
+    </div>
+
+    <script>
+    // Fetch live data
+    async function loadLiveData() {
+        try {
+            // Try to fetch attendance data
+            const response = await fetch('/attendance/daily?format=json&date=2025-12-05');
+            
+            if (response.status === 302) {
+                document.getElementById('liveData').innerHTML = `
+                    <p class="text-red-600">Redirected to login. You need to login first!</p>
+                    <a href="/auth/login" class="text-blue-600 underline">Go to Login</a>
+                `;
+                return;
+            }
+            
+            if (!response.ok) {
+                document.getElementById('liveData').innerHTML = `
+                    <p class="text-red-600">Error: HTTP ${response.status}</p>
+                `;
+                return;
+            }
+            
+            const data = await response.json();
+            
+            if (data.attendance_data && data.attendance_data.length > 0) {
+                let html = '<div class="bg-gray-50 rounded-lg p-4 border border-gray-200">';
+                html += '<h3 class="font-semibold text-gray-800 mb-2">Actual data from your database:</h3>';
+                html += '<ul class="space-y-1 text-gray-700">';
+                
+                data.attendance_data.forEach(record => {
+                    const personNum = record.person_id.replace('PERSON-', '').replace(/^0+/, '');
+                    html += `<li class="ml-4">- Person ${personNum} was present from ${record.clock_in || record.first_seen} to ${record.clock_out || record.last_seen} (${Math.round(record.duration_seconds)} seconds)</li>`;
+                });
+                
+                html += `<li class="ml-4 text-gray-600">- Location: ${data.attendance_data[0].location}</li>`;
+                html += `<li class="ml-4 text-gray-600">- Date: ${data.attendance_data[0].date}</li>`;
+                html += '</ul></div>';
+                
+                document.getElementById('liveData').innerHTML = html;
+                
+                // Show debug info
+                document.getElementById('debugInfo').textContent = JSON.stringify({
+                    status: 'Success',
+                    records: data.attendance_data.length,
+                    sample: data.attendance_data[0]
+                }, null, 2);
+            } else {
+                document.getElementById('liveData').innerHTML = '<p class="text-orange-600">No attendance data found for 2025-12-05</p>';
+            }
+            
+        } catch (error) {
+            document.getElementById('liveData').innerHTML = `
+                <p class="text-red-600">Error loading data: ${error.message}</p>
+                <p class="text-sm text-gray-600 mt-2">This usually means you need to login first.</p>
+            `;
+            
+            document.getElementById('debugInfo').textContent = `Error: ${error.message}`;
+        }
+    }
+    
+    // Load on page load
+    loadLiveData();
+    </script>
+</body>
+</html>

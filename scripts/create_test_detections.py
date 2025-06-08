@@ -37,7 +37,7 @@ def create_test_detections(video_id):
         for detection in existing:
             db.session.delete(detection)
         
-        print(f"🗑️ Cleared {len(existing)} existing detections")
+        print(f"[DELETE] Cleared {len(existing)} existing detections")
         
         # Create test detections with proper numeric data
         test_detections = [
@@ -105,14 +105,14 @@ def create_test_detections(video_id):
             db.session.add(detection)
             created_count += 1
             
-            print(f"   ✅ Created detection {i+1}: {detection_data['timestamp']}s at [{detection_data['bbox_x']}, {detection_data['bbox_y']}, {detection_data['bbox_width']}x{detection_data['bbox_height']}]")
+            print(f"   [OK] Created detection {i+1}: {detection_data['timestamp']}s at [{detection_data['bbox_x']}, {detection_data['bbox_y']}, {detection_data['bbox_width']}x{detection_data['bbox_height']}]")
         
         try:
             db.session.commit()
-            print(f"✅ Successfully created {created_count} test detections for video {video_id}")
+            print(f"[OK] Successfully created {created_count} test detections for video {video_id}")
             return True
         except Exception as e:
-            print(f"❌ Error creating test detections: {e}")
+            print(f"[ERROR] Error creating test detections: {e}")
             db.session.rollback()
             return False
 
@@ -124,7 +124,7 @@ def list_videos():
         from app import Video
         
         videos = Video.query.all()
-        print("📹 Available videos:")
+        print("[VIDEO] Available videos:")
         for video in videos:
             print(f"   {video.id}: {video.title} ({video.status})")
         
@@ -138,7 +138,7 @@ if __name__ == "__main__":
     videos = list_videos()
     
     if not videos:
-        print("❌ No videos found in database!")
+        print("[ERROR] No videos found in database!")
         sys.exit(1)
     
     # Get video ID from user or use first video
@@ -146,24 +146,24 @@ if __name__ == "__main__":
         try:
             video_id = int(sys.argv[1])
         except ValueError:
-            print("❌ Invalid video ID. Please provide a numeric video ID.")
+            print("[ERROR] Invalid video ID. Please provide a numeric video ID.")
             sys.exit(1)
     else:
         video_id = videos[0].id
-        print(f"🎯 Using first video (ID: {video_id})")
+        print(f"[TARGET] Using first video (ID: {video_id})")
     
     # Verify video exists
     video_exists = any(v.id == video_id for v in videos)
     if not video_exists:
-        print(f"❌ Video with ID {video_id} not found!")
+        print(f"[ERROR] Video with ID {video_id} not found!")
         sys.exit(1)
     
     # Create test detections
     success = create_test_detections(video_id)
     
     if success:
-        print(f"\n✅ Test detections created successfully for video {video_id}!")
+        print(f"\n[OK] Test detections created successfully for video {video_id}!")
         print("Now you can test the jumpToDetection function in the web interface.")
     else:
-        print(f"\n❌ Failed to create test detections!")
+        print(f"\n[ERROR] Failed to create test detections!")
         sys.exit(1)

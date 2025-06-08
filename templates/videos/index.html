@@ -22,8 +22,7 @@
                     <select name="status" id="status" 
                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="">All Status</option>
-                        <option value="uploaded" {% if request.args.get('status') == 'uploaded' %}selected{% endif %}>Ready (Web-Compatible)</option>
-                        <option value="converting" {% if request.args.get('status') == 'converting' %}selected{% endif %}>Converting</option>
+                        <option value="uploaded" {% if request.args.get('status') == 'uploaded' %}selected{% endif %}>Uploaded</option>
                         <option value="processing" {% if request.args.get('status') == 'processing' %}selected{% endif %}>Processing</option>
                         <option value="completed" {% if request.args.get('status') == 'completed' %}selected{% endif %}>Completed</option>
                         <option value="failed" {% if request.args.get('status') == 'failed' %}selected{% endif %}>Failed</option>
@@ -54,8 +53,32 @@
             </form>
         </div>
 
+        <!-- Actions and View Mode Toggle -->
+        <div class="flex justify-between mb-4">
+            <!-- Batch OCR Button -->
+            <a href="{{ url_for('videos.batch_ocr') }}" 
+               class="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                Batch OCR Extraction
+            </a>
+            
+            <!-- View Mode Toggle -->
+            <div class="bg-white rounded-lg shadow-sm p-1 inline-flex">
+                <button onclick="setViewMode('table')" id="tableViewBtn"
+                        class="px-3 py-1 rounded text-sm font-medium transition-colors view-mode-btn">
+                    <i class="fas fa-list mr-1"></i> Table
+                </button>
+                <button onclick="setViewMode('grid')" id="gridViewBtn" 
+                        class="px-3 py-1 rounded text-sm font-medium transition-colors view-mode-btn">
+                    <i class="fas fa-th mr-1"></i> Grid
+                </button>
+            </div>
+        </div>
+
         <!-- Videos List -->
-        <div class="bg-white rounded-lg shadow-md">
+        <div class="bg-white rounded-lg shadow-md" id="tableView">
             {% if videos %}
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
@@ -97,16 +120,35 @@
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
                                           {% if video.status == 'completed' %}bg-green-100 text-green-800
-                                          {% elif video.status == 'converting' %}bg-blue-100 text-blue-800
                                           {% elif video.status == 'processing' %}bg-yellow-100 text-yellow-800
+                                          {% elif video.status == 'chunking' %}bg-blue-100 text-blue-800
+                                          {% elif video.status == 'chunking_complete' %}bg-indigo-100 text-indigo-800
                                           {% elif video.status == 'failed' %}bg-red-100 text-red-800
                                           {% elif video.status == 'uploaded' %}bg-green-100 text-green-800
                                           {% else %}bg-gray-100 text-gray-800{% endif %}">
-                                        {% if video.status == 'converting' %}
+                                        {% if video.status == 'processing' %}
                                             <span class="flex items-center" id="status-{{ video.id }}">
+                                                <div class="animate-spin rounded-full h-3 w-3 border-b-2 border-yellow-600 mr-1"></div>
+                                                <span id="status-text-{{ video.id }}">
+                                                    {% if video.is_chunk %}
+                                                        Chunk {{ video.chunk_index + 1 }}/{{ video.total_chunks }}
+                                                    {% else %}
+                                                        Processing
+                                                    {% endif %}
+                                                </span>
+                                                <span id="progress-{{ video.id }}" class="ml-1 text-xs">
+                                                    {% if video.processing_progress %}({{ video.processing_progress }}%){% endif %}
+                                                </span>
+                                            </span>
+                                        {% elif video.status == 'chunking' %}
+                                            <span class="flex items-center">
                                                 <div class="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-1"></div>
-                                                <span id="status-text-{{ video.id }}">Converting</span>
-                                                <span id="progress-{{ video.id }}" class="ml-1 text-xs"></span>
+                                                Splitting...
+                                            </span>
+                                        {% elif video.status == 'chunking_complete' %}
+                                            <span class="flex items-center">
+                                                <div class="animate-pulse rounded-full h-3 w-3 bg-indigo-600 mr-1"></div>
+                                                Merging...
                                             </span>
                                         {% elif video.status == 'uploaded' %}
                                             ✅ Ready
@@ -123,25 +165,15 @@
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <div class="flex items-center space-x-2">
-                                        <!-- View Button - Disabled during conversion -->
-                                        {% if video.status == 'converting' %}
-                                            <span class="inline-flex items-center p-1 text-gray-400 cursor-not-allowed" 
-                                                  title="Converting... View disabled">
-                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                                </svg>
-                                            </span>
-                                        {% else %}
-                                            <a href="{{ url_for('videos.detail', id=video.id) }}" 
-                                               class="inline-flex items-center p-1 text-blue-600 hover:text-blue-900" 
-                                               title="View Details">
-                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                                                </svg>
-                                            </a>
-                                        {% endif %}
+                                        <!-- View Button -->
+                                        <a href="{{ url_for('videos.detail', id=video.id) }}" 
+                                           class="inline-flex items-center p-1 text-blue-600 hover:text-blue-900" 
+                                           title="View Details">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                            </svg>
+                                        </a>
                                         
                                         <!-- Process Button (for uploaded and completed videos) -->
                                         {% if video.status == 'uploaded' or video.status == 'completed' %}
@@ -174,19 +206,143 @@
                                         {% endif %}
                                         
                                         <!-- Delete Button -->
-                                        <button onclick="deleteVideo({{ video.id }}, '{{ video.filename }}')"
-                                                class="inline-flex items-center p-1 text-red-600 hover:text-red-900" 
-                                                title="Delete Video">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                                            </svg>
-                                        </button>
+                                        <form action="{{ url_for('videos.delete', id=video.id) }}" method="POST" class="inline" 
+                                              onsubmit="return confirm('Are you sure you want to delete &quot;{{ video.filename }}&quot;? This action cannot be undone.')">
+                                            <button type="submit"
+                                                    class="inline-flex items-center p-1 text-red-600 hover:text-red-900" 
+                                                    title="Delete Video">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                        </form>
                                     </div>
                                 </td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
+                </div>
+            {% else %}
+                <div class="p-12 text-center">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">No videos found</h3>
+                    <p class="mt-1 text-sm text-gray-500">Get started by uploading your first video.</p>
+                    <div class="mt-6">
+                        <button onclick="openUploadModal()" 
+                           class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                            Upload Video
+                        </button>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Grid View -->
+        <div class="hidden" id="gridView">
+            {% if videos %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {% for video in videos %}
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-200">
+                        <!-- Video Preview -->
+                        <div class="relative aspect-video bg-gray-900">
+                            {% if video.status == 'completed' and video.annotated_video_path %}
+                                <video class="w-full h-full object-cover" 
+                                       id="preview-{{ video.id }}"
+                                       muted
+                                       loop
+                                       preload="metadata"
+                                       onmouseover="this.play()"
+                                       onmouseout="this.pause(); this.currentTime=0;"
+                                       onerror="handlePreviewError({{ video.id }})">
+                                    <source src="{{ url_for('videos.serve_video_static', filename=video.annotated_video_path) }}" type="video/mp4">
+                                </video>
+                                <!-- Play overlay -->
+                                <div class="absolute inset-0 flex items-center justify-center pointer-events-none video-overlay">
+                                    <div class="bg-black bg-opacity-50 rounded-full p-3">
+                                        <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M8 5v10l7-5z"/>
+                                        </svg>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="w-full h-full flex items-center justify-center">
+                                    <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                    </svg>
+                                </div>
+                            {% endif %}
+                            
+                            <!-- Status Badge -->
+                            <div class="absolute top-2 right-2">
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
+                                      {% if video.status == 'completed' %}bg-green-100 text-green-800
+                                      {% elif video.status == 'processing' %}bg-yellow-100 text-yellow-800
+                                      {% elif video.status == 'failed' %}bg-red-100 text-red-800
+                                      {% elif video.status == 'uploaded' %}bg-green-100 text-green-800
+                                      {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    {{ video.status.title() }}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <!-- Video Info -->
+                        <div class="p-4">
+                            <h3 class="font-medium text-gray-900 truncate mb-1" title="{{ video.filename }}">
+                                {{ video.filename }}
+                            </h3>
+                            <div class="text-sm text-gray-500 space-y-1">
+                                <div class="flex justify-between">
+                                    <span>Duration:</span>
+                                    <span>{{ "%.1f"|format(video.duration) if video.duration else "--" }}s</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Persons:</span>
+                                    <span>{{ video.person_count or 0 }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Size:</span>
+                                    <span>{{ (video.file_size / 1024 / 1024) | round(1) }} MB</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Actions -->
+                            <div class="mt-3 flex justify-between items-center">
+                                <a href="{{ url_for('videos.detail', id=video.id) }}" 
+                                   class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                    View Details
+                                </a>
+                                <div class="flex space-x-2">
+                                    {% if video.status == 'uploaded' or video.status == 'completed' %}
+                                    <form action="{{ url_for('videos.process_video', id=video.id) }}" method="POST" class="inline">
+                                        <input type="hidden" name="extract_persons" value="true">
+                                        <button type="submit" 
+                                                class="text-green-600 hover:text-green-800" 
+                                                title="Process Video">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                            </svg>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    
+                                    <form action="{{ url_for('videos.delete', id=video.id) }}" method="POST" class="inline" 
+                                          onsubmit="return confirm('Delete {{ video.filename }}?')">
+                                        <button type="submit"
+                                                class="text-red-600 hover:text-red-800" 
+                                                title="Delete Video">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                            </svg>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
             {% else %}
                 <div class="p-12 text-center">
@@ -228,8 +384,8 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
                         </svg>
                         <p class="text-gray-600 mb-2">Drop video file here or click to browse</p>
-                        <p class="text-sm text-gray-400">MP4, AVI, MOV files up to 2GB</p>
-                        <input type="file" id="videoFile" name="video_file" accept="video/*" class="hidden">
+                        <p class="text-sm text-gray-400">MP4, AVI, MOV, MKV, WMV, FLV, WEBM files up to 2GB</p>
+                        <input type="file" id="videoFile" name="video_file" accept="video/*,.mp4,.avi,.mov,.mkv,.wmv,.flv,.webm" class="hidden">
                     </div>
                     
                     <!-- Selected File Info -->
@@ -259,133 +415,285 @@
     </div>
 </div>
 
+<style>
+/* View mode button styles */
+.view-mode-btn {
+    background-color: transparent;
+    color: #6b7280;
+}
+
+.view-mode-btn.active {
+    background-color: #3b82f6;
+    color: white;
+}
+
+/* Video card styles */
+.aspect-video {
+    aspect-ratio: 16/9;
+}
+
+.video-overlay {
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+video:hover + .video-overlay {
+    opacity: 0;
+}
+
+/* Grid responsive */
+@media (max-width: 640px) {
+    .grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+</style>
+
 <script>
 console.log('🔄 Videos index page loaded - Enhanced progress tracking v2.0');
 
-function openUploadModal() {
+// View mode functions
+window.setViewMode = function(mode) {
+    const tableView = document.getElementById('tableView');
+    const gridView = document.getElementById('gridView');
+    const tableBtn = document.getElementById('tableViewBtn');
+    const gridBtn = document.getElementById('gridViewBtn');
+    
+    if (mode === 'grid') {
+        tableView.classList.add('hidden');
+        gridView.classList.remove('hidden');
+        tableBtn.classList.remove('active');
+        gridBtn.classList.add('active');
+        localStorage.setItem('videoViewMode', 'grid');
+    } else {
+        tableView.classList.remove('hidden');
+        gridView.classList.add('hidden');
+        tableBtn.classList.add('active');
+        gridBtn.classList.remove('active');
+        localStorage.setItem('videoViewMode', 'table');
+    }
+}
+
+// Handle video preview errors
+window.handlePreviewError = function(videoId) {
+    const video = document.getElementById(`preview-${videoId}`);
+    if (video) {
+        // Hide the video and show fallback
+        video.style.display = 'none';
+        const parent = video.parentElement;
+        const fallback = document.createElement('div');
+        fallback.className = 'w-full h-full flex items-center justify-center bg-gray-100';
+        fallback.innerHTML = `
+            <div class="text-center">
+                <svg class="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>
+                </svg>
+                <p class="text-sm text-gray-500">Preview unavailable</p>
+            </div>
+        `;
+        parent.appendChild(fallback);
+    }
+}
+
+// Define functions in global scope immediately
+window.openUploadModal = function() {
     document.getElementById('uploadModal').classList.remove('hidden');
 }
 
-function closeUploadModal() {
+window.closeUploadModal = function() {
     document.getElementById('uploadModal').classList.add('hidden');
     document.getElementById('uploadForm').reset();
     document.getElementById('fileInfo').classList.add('hidden');
     document.getElementById('uploadBtn').disabled = true;
 }
 
-// Drag and drop functionality
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('videoFile');
-const fileInfo = document.getElementById('fileInfo');
-const fileName = document.getElementById('fileName');
-const fileSize = document.getElementById('fileSize');
-const uploadBtn = document.getElementById('uploadBtn');
-
-// Click to browse
-dropZone.addEventListener('click', () => fileInput.click());
-
-// Drag and drop events
-dropZone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropZone.classList.add('border-blue-400', 'bg-blue-50');
-});
-
-dropZone.addEventListener('dragleave', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('border-blue-400', 'bg-blue-50');
-});
-
-dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+// Initialize upload functionality after DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Initializing upload functionality...');
     
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-        handleFileSelection(files[0]);
-    }
-});
-
-// File input change
-fileInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-        handleFileSelection(e.target.files[0]);
-    }
-});
-
-function handleFileSelection(file) {
-    // Check if it's a video file
-    if (!file.type.startsWith('video/')) {
-        alert('Please select a video file');
+    // Restore saved view mode
+    const savedMode = localStorage.getItem('videoViewMode') || 'table';
+    setViewMode(savedMode);
+    
+    // Get elements
+    const dropZone = document.getElementById('dropZone');
+    let fileInput = document.getElementById('videoFile');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const uploadBtn = document.getElementById('uploadBtn');
+    
+    // Only set up events if elements exist
+    if (!dropZone || !fileInput) {
+        console.error('Upload elements not found');
         return;
     }
     
-    // Check file size (2GB limit)
-    if (file.size > 2 * 1024 * 1024 * 1024) {
-        alert('File size must be less than 2GB');
-        return;
-    }
-    
-    // Update file info
-    fileName.textContent = file.name;
-    fileSize.textContent = (file.size / 1024 / 1024).toFixed(1) + ' MB';
-    fileInfo.classList.remove('hidden');
-    uploadBtn.disabled = false;
-    
-    // Set the file to input
-    const dataTransfer = new DataTransfer();
-    dataTransfer.items.add(file);
-    fileInput.files = dataTransfer.files;
-}
+    // Click to browse
+    dropZone.addEventListener('click', () => {
+        fileInput = document.getElementById('videoFile'); // Re-get the element
+        fileInput.click();
+    });
 
-// Close modal when clicking outside
-document.getElementById('uploadModal').addEventListener('click', (e) => {
-    if (e.target.id === 'uploadModal') {
-        closeUploadModal();
-    }
-});
+    // Drag and drop events
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('border-blue-400', 'bg-blue-50');
+    });
 
-// Delete video function
-function deleteVideo(videoId, filename) {
-    if (confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`)) {
-        // Create form and submit
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = `/videos/${videoId}/delete`;
+    dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-blue-400', 'bg-blue-50');
         
-        // Add CSRF token if needed (you might need to add this)
-        const csrfToken = document.querySelector('meta[name=csrf-token]');
-        if (csrfToken) {
-            const csrfInput = document.createElement('input');
-            csrfInput.type = 'hidden';
-            csrfInput.name = 'csrf_token';
-            csrfInput.value = csrfToken.getAttribute('content');
-            form.appendChild(csrfInput);
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleFileSelection(files[0]);
+        }
+    });
+
+    // File input change
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            window.selectedVideoFile = null; // Clear drag-drop file
+            handleFileSelection(e.target.files[0]);
+        }
+    });
+
+    // Form submit handler
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        // If we have a drag-and-drop file and no file input selection
+        if (window.selectedVideoFile && (!fileInput.files || fileInput.files.length === 0)) {
+            e.preventDefault();
+            
+            // Create FormData and append the file
+            const formData = new FormData(this);
+            formData.append('video_file', window.selectedVideoFile);
+            
+            // Show uploading state
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+            
+            // Submit via fetch
+            fetch(this.action, {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                if (response.redirected) {
+                    window.location.href = response.url;
+                } else {
+                    return response.text();
+                }
+            })
+            .catch(error => {
+                console.error('Upload error:', error);
+                alert('Failed to upload video. Please try again.');
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload';
+            });
+        }
+    });
+
+    // Close modal when clicking outside
+    document.getElementById('uploadModal').addEventListener('click', (e) => {
+        if (e.target.id === 'uploadModal') {
+            closeUploadModal();
+        }
+    });
+
+    // Define handleFileSelection inside DOMContentLoaded
+    function handleFileSelection(file) {
+        console.log('File selected:', file.name, 'Type:', file.type, 'Size:', file.size);
+        
+        // Check if it's a video file (some browsers might not set proper MIME type)
+        const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv', 'webm'];
+        const fileExtension = file.name.split('.').pop().toLowerCase();
+        
+        if (!file.type.startsWith('video/') && !videoExtensions.includes(fileExtension)) {
+            alert('Please select a video file (MP4, AVI, MOV, MKV, WMV, FLV, WEBM)');
+            return;
         }
         
-        document.body.appendChild(form);
-        form.submit();
+        // Check file size (2GB limit)
+        if (file.size > 2 * 1024 * 1024 * 1024) {
+            alert('File size must be less than 2GB');
+            return;
+        }
+        
+        // Update file info
+        fileName.textContent = file.name;
+        fileSize.textContent = (file.size / 1024 / 1024).toFixed(1) + ' MB';
+        fileInfo.classList.remove('hidden');
+        uploadBtn.disabled = false;
+        
+        // Store the file for form submission
+        // Note: We can't directly set files on file input in some browsers
+        // So we'll handle it differently for drag-and-drop
+        window.selectedVideoFile = file;
+        
+        // For regular file input selection, it's already set
+        // For drag-and-drop, we'll handle it on form submit
+    }
+}); // End of DOMContentLoaded
+
+// Alternative delete video function using fetch (for future use)
+async function deleteVideoAjax(videoId, filename) {
+    if (confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`)) {
+        try {
+            const response = await fetch(`/videos/${videoId}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin' // Important for cookies
+            });
+            
+            if (response.ok) {
+                // Reload the page to show updated list
+                window.location.reload();
+            } else {
+                alert('Failed to delete video. Please try again.');
+                console.error('Delete failed:', response.status, response.statusText);
+            }
+        } catch (error) {
+            console.error('Delete error:', error);
+            alert('Error deleting video. Please try again.');
+        }
     }
 }
 
-// Auto-refresh page if there are converting videos
+// Legacy delete function (kept for reference)
+function deleteVideo(videoId, filename) {
+    // This function is no longer used since we're using HTML forms
+    // but kept here for reference
+    console.log('Legacy deleteVideo function called. Using form submission instead.');
+}
+
+// Auto-refresh page if there are processing videos
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 DOMContentLoaded - Starting video progress tracking setup...');
     
-    // Check for spinner elements (converting videos have spinners)
+    // Check for spinner elements (processing videos have spinners)
     const spinners = document.querySelectorAll('.animate-spin');
     
-    // Check for converting text elements using proper JavaScript
-    const convertingElements = Array.from(document.querySelectorAll('span')).filter(span => 
-        span.textContent && span.textContent.includes('Converting')
+    // Check for processing text elements
+    const processingElements = Array.from(document.querySelectorAll('span')).filter(span => 
+        span.textContent && span.textContent.includes('Processing')
     );
     
-    console.log(`🔍 DOM Analysis: Found ${spinners.length} spinners and ${convertingElements.length} converting text elements`);
+    console.log(`🔍 DOM Analysis: Found ${spinners.length} spinners and ${processingElements.length} processing elements`);
     
     if (spinners.length > 0) {
-        console.log('🔄 Found converting videos, setting up real-time status updates...');
+        console.log('🔄 Found active videos, setting up real-time status updates...');
         
-        // Get converting video IDs from status elements
-        const convertingVideos = [];
+        // Get active video IDs from status elements
+        const activeVideos = [];
         const statusElements = document.querySelectorAll('[id^="status-"]');
         
         console.log(`🔍 Found ${statusElements.length} status elements`);
@@ -394,19 +702,18 @@ document.addEventListener('DOMContentLoaded', function() {
             const videoIdStr = element.id.replace('status-', '');
             const videoId = parseInt(videoIdStr);
             
-            // Only add valid video IDs (not NaN) and check if element contains "Converting" text
-            if (!isNaN(videoId) && element.textContent && element.textContent.includes('Converting')) {
-                convertingVideos.push(videoId);
-                console.log(`📋 Found converting video: ${videoId} (element ID: ${element.id})`);
-            } else {
-                console.log(`⚠️ Skipping element ${element.id}: videoId=${videoId}, isConverting=${element.textContent ? element.textContent.includes('Converting') : false}`);
+            // Check if element contains "Processing" text
+            if (!isNaN(videoId) && element.textContent && 
+                element.textContent.includes('Processing')) {
+                activeVideos.push(videoId);
+                console.log(`📋 Found active video: ${videoId} (element ID: ${element.id})`);
             }
         });
         
-        console.log('🔄 Converting videos array:', convertingVideos);
+        console.log('🔄 Active videos array:', activeVideos);
         
         // Verify corresponding progress elements exist
-        convertingVideos.forEach(videoId => {
+        activeVideos.forEach(videoId => {
             const statusTextEl = document.getElementById(`status-text-${videoId}`);
             const progressEl = document.getElementById(`progress-${videoId}`);
             console.log(`🔍 Video ${videoId} elements:`, {
@@ -415,80 +722,58 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
         
-        // Update status every 3 seconds using the API
+        // Update status every 2 seconds
         setInterval(function() {
-            updateConvertingVideosStatus(convertingVideos);
-        }, 3000);
+            updateActiveVideosStatus(activeVideos);
+        }, 2000);
         
         // Initial status check
-        updateConvertingVideosStatus(convertingVideos);
+        updateActiveVideosStatus(activeVideos);
         
         // Show notification to user
         setTimeout(function() {
             if (spinners.length > 0) {
-                console.log('📱 Videos are converting in background...');
+                console.log('📱 Videos are processing in background...');
             }
         }, 2000);
     }
 });
 
-function updateConvertingVideosStatus(videoIds) {
-    console.log('📡 Fetching processing queue status for videos:', videoIds);
+function updateActiveVideosStatus(videoIds) {
+    console.log('📡 Fetching status for active videos:', videoIds);
     
-    fetch('/api/processing-queue')
-        .then(response => {
-            console.log('📡 API Response status:', response.status);
-            return response.json();
-        })
-        .then(data => {
-            console.log('📊 Processing queue data received:', data);
-            
-            // Check if we're getting the old simple response
-            if (data.count !== undefined && !data.active_tasks) {
-                console.log('⚠️ Getting old API response format - server may need restart');
-                console.log('🔄 Old response:', data);
-                console.log('🔄 Falling back to page refresh...');
-                setTimeout(() => window.location.reload(), 5000);
-                return;
-            }
-            
-            // Check if we have the new enhanced response
-            if (data.endpoint_version) {
-                console.log('✅ Using enhanced API endpoint version:', data.endpoint_version);
-            }
-            
-            if (data.active_tasks && Array.isArray(data.active_tasks)) {
-                console.log(`📊 Found ${data.active_tasks.length} active tasks`);
-                
-                // Update each converting video with real-time data
-                data.active_tasks.forEach(task => {
-                    console.log('🔄 Processing task:', task);
-                    const videoId = task.video_id;
+    // Update each video's status individually
+    videoIds.forEach(videoId => {
+        // Check if it's a processing video
+        const statusEl = document.getElementById(`status-text-${videoId}`);
+        if (statusEl && statusEl.textContent.includes('Processing')) {
+            // Fetch processing status
+            fetch(`/videos/api/${videoId}/processing-status`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log(`📊 Processing status for video ${videoId}:`, data);
                     
-                    if (videoIds.includes(videoId)) {
-                        console.log(`🎯 Updating video ${videoId} with progress ${task.progress}%`);
-                        updateVideoStatus(videoId, task);
-                    } else {
-                        console.log(`⚠️ Task video ${videoId} not in converting list:`, videoIds);
+                    // Update progress
+                    const progressEl = document.getElementById(`progress-${videoId}`);
+                    if (progressEl && data.progress !== undefined) {
+                        progressEl.textContent = `(${data.progress}%)`;
                     }
-                });
-                
-                // Check for videos that are no longer converting
-                videoIds.forEach(videoId => {
-                    const hasActiveTask = data.active_tasks.some(task => task.video_id === videoId);
-                    if (!hasActiveTask) {
-                        console.log(`✅ Video ${videoId} may have completed - checking status...`);
-                        checkVideoCompletion(videoId);
+                    
+                    // Check if completed
+                    if (data.status === 'completed') {
+                        console.log(`✅ Video ${videoId} processing completed!`);
+                        // Reload page to show updated status
+                        setTimeout(() => window.location.reload(), 1000);
+                    } else if (data.status === 'failed') {
+                        console.log(`❌ Video ${videoId} processing failed`);
+                        setTimeout(() => window.location.reload(), 1000);
                     }
+                })
+                .catch(error => {
+                    console.error(`❌ Error fetching processing status for video ${videoId}:`, error);
                 });
-            } else {
-                console.log('⚠️ No active_tasks array found in response');
-                console.log('📊 Response structure:', Object.keys(data));
-            }
-        })
-        .catch(error => {
-            console.error('❌ Error fetching queue status:', error);
-        });
+        }
+    });
 }
 
 function updateVideoStatus(videoId, task) {
@@ -505,9 +790,9 @@ function updateVideoStatus(videoId, task) {
     });
     
     if (statusText && progress) {
-        statusText.textContent = 'Converting';
+        statusText.textContent = 'Processing';
         progress.textContent = `(${task.progress.toFixed(1)}%)`;
-        progress.style.color = '#2563eb'; // Blue color
+        progress.style.color = '#eab308'; // Yellow color
         
         console.log(`✅ Successfully updated video ${videoId}: ${task.progress.toFixed(1)}% - ${task.message}`);
         console.log('📝 Updated elements:', {
@@ -587,9 +872,9 @@ window.forceUpdateProgress = function(videoId, progress) {
     });
     
     if (statusText && progressSpan) {
-        statusText.textContent = 'Converting';
+        statusText.textContent = 'Processing';
         progressSpan.textContent = `(${progress}%)`;
-        progressSpan.style.color = '#2563eb';
+        progressSpan.style.color = '#eab308';
         console.log(`✅ Force updated video ${videoId} to ${progress}%`);
     } else {
         console.error(`❌ Could not find elements for video ${videoId}`);
@@ -601,35 +886,6 @@ window.forceUpdateProgress = function(videoId, progress) {
 console.log('🔧 Force update function available: window.forceUpdateProgress(videoId, percentage)');
 console.log('💡 Example: forceUpdateProgress(1, 75.5)');
 
-// Helper function to find converting videos and their IDs
-window.findConvertingVideos = function() {
-    const statusElements = document.querySelectorAll('[id^="status-"]');
-    const convertingVideos = [];
-    
-    console.log(`🔍 Found ${statusElements.length} status elements:`);
-    
-    statusElements.forEach(element => {
-        const videoId = element.id.replace('status-', '');
-        const statusText = element.querySelector(`#status-text-${videoId}`);
-        const progressElement = element.querySelector(`#progress-${videoId}`);
-        
-        console.log(`📋 Video ${videoId}:`, {
-            statusElement: !!element,
-            statusText: statusText ? statusText.textContent : 'not found',
-            progressElement: !!progressElement,
-            fullElementId: element.id
-        });
-        
-        if (statusText && statusText.textContent.includes('Converting')) {
-            convertingVideos.push(parseInt(videoId));
-        }
-    });
-    
-    console.log(`🎯 Converting videos found: [${convertingVideos.join(', ')}]`);
-    return convertingVideos;
-};
-
-console.log('🔍 Helper function available: window.findConvertingVideos()');
 </script>
 
 {% endblock %}

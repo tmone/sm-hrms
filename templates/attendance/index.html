@@ -1,0 +1,515 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance Records{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">Attendance Records</h1>
+        <p class="text-gray-600">View and export attendance data from surveillance videos</p>
+    </div>
+
+    <!-- Filter Panel -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-7 gap-4">
+            <!-- Quick Filters -->
+            <div class="md:col-span-3">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Quick Filters</label>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="applyFilter('today')" class="filter-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition">Today</button>
+                    <button onclick="applyFilter('week')" class="filter-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition">This Week</button>
+                    <button onclick="applyFilter('month')" class="filter-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition">This Month</button>
+                    <button onclick="showCustomRange()" class="filter-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition">Custom Range</button>
+                    <button onclick="applyFilter('all')" class="filter-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition">All Data</button>
+                </div>
+            </div>
+
+            <!-- Person ID Filter -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Person ID</label>
+                <input type="text" id="personIdFilter" placeholder="PERSON-XXXX" 
+                       onkeyup="handlePersonIdFilter(event)" onblur="handlePersonIdFilter(event)"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md">
+            </div>
+
+            <!-- Location Filter -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Location</label>
+                <select id="locationFilter" onchange="loadAttendanceData()" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <option value="">All Locations</option>
+                </select>
+            </div>
+
+            <!-- Sort Order -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                <select id="sortOrder" onchange="loadAttendanceData()" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <option value="desc">Latest First</option>
+                    <option value="asc">Oldest First</option>
+                </select>
+            </div>
+
+            <!-- Export Selected -->
+            <div class="flex items-end">
+                <button onclick="exportSelected()" class="w-full px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition disabled:bg-gray-300" id="exportBtn" disabled>
+                    Export Selected
+                </button>
+            </div>
+        </div>
+
+        <!-- Custom Date Range (Hidden by default) -->
+        <div id="customRangePanel" class="hidden mt-4 p-4 bg-gray-50 rounded-md">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                    <input type="date" id="startDate" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                    <input type="date" id="endDate" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                </div>
+                <div class="flex items-end">
+                    <button onclick="applyCustomRange()" class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition mr-2">Apply</button>
+                    <button onclick="hideCustomRange()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Selection Controls -->
+    <div class="bg-white rounded-lg shadow-md p-4 mb-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded">
+                <label for="selectAllCheckbox" class="text-sm font-medium text-gray-700">Select All</label>
+                <span id="selectionCount" class="text-sm text-gray-500">0 selected</span>
+            </div>
+            <div class="text-sm text-gray-600">
+                <span id="totalRecords">0</span> total records
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendance List -->
+    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <input type="checkbox" id="headerSelectAll" onchange="toggleSelectAll()" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded">
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Person ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check In</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check Out</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Confidence</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="attendanceTableBody" class="bg-white divide-y divide-gray-200">
+                    <tr>
+                        <td colspan="9" class="px-6 py-4 text-center text-gray-500">Loading attendance data...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div id="paginationContainer" class="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+            <div class="flex-1 flex justify-between sm:hidden">
+                <button onclick="previousPage()" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    Previous
+                </button>
+                <button onclick="nextPage()" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    Next
+                </button>
+            </div>
+            <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm text-gray-700">
+                        Showing <span id="startRecord">0</span> to <span id="endRecord">0</span> of <span id="totalPaginationRecords">0</span> results
+                    </p>
+                </div>
+                <div>
+                    <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" id="paginationButtons">
+                        <!-- Pagination buttons will be inserted here -->
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentPage = 1;
+let totalPages = 1;
+let currentFilter = 'all';
+let selectedRecords = new Set();
+let allRecords = [];
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadAttendanceData();
+});
+
+// Load attendance data
+async function loadAttendanceData(page = 1) {
+    currentPage = page;
+    
+    const locationFilter = document.getElementById('locationFilter').value;
+    const personIdFilter = document.getElementById('personIdFilter').value;
+    const sortOrder = document.getElementById('sortOrder').value;
+    
+    let url = `/attendance/list?page=${page}&per_page=20&sort=${sortOrder}&filter=${currentFilter}`;
+    
+    if (locationFilter) {
+        url += `&location=${encodeURIComponent(locationFilter)}`;
+    }
+    
+    if (personIdFilter) {
+        url += `&person_id=${encodeURIComponent(personIdFilter)}`;
+    }
+    
+    if (currentFilter === 'custom') {
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+        if (startDate && endDate) {
+            url += `&start_date=${startDate}&end_date=${endDate}`;
+        }
+    }
+    
+    try {
+        const response = await fetch(url, {
+            credentials: 'same-origin',  // Include cookies for authentication
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        
+        // Check if response is ok
+        if (!response.ok) {
+            console.error('Response not OK:', response.status, response.statusText);
+            // Check if it's a redirect to login
+            if (response.status === 401 || response.redirected) {
+                window.location.href = '/auth/login';
+                return;
+            }
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        allRecords = data.records;
+        renderTable(data.records);
+        renderPagination(data.pagination);
+        updateLocationFilter(data.filters.locations);
+        updateSelectionCount();
+        
+        // Update total records count
+        document.getElementById('totalRecords').textContent = data.pagination.total;
+    } catch (error) {
+        console.error('Error loading attendance data:', error);
+        console.error('Error details:', {
+            url: url,
+            error: error.message,
+            stack: error.stack
+        });
+        showError(`Failed to load attendance data: ${error.message}`);
+    }
+}
+
+// Render table
+function renderTable(records) {
+    const tbody = document.getElementById('attendanceTableBody');
+    
+    if (records.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="px-6 py-4 text-center text-gray-500">No attendance records found</td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = records.map(record => `
+        <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+                <input type="checkbox" value="${record.id}" onchange="toggleRecordSelection('${record.id}')" 
+                       ${selectedRecords.has(record.id) ? 'checked' : ''} 
+                       class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded record-checkbox">
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${formatDate(record.date)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${record.person_id}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${record.location}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${formatTime(record.check_in)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${formatTime(record.check_out)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${record.duration_formatted}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${record.confidence}%</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600">
+                <a href="/videos/${record.video_id}?t=${record.first_timestamp}" class="hover:underline">View Video</a>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Render pagination
+function renderPagination(pagination) {
+    totalPages = pagination.pages;
+    
+    // Update pagination info
+    const startRecord = (pagination.page - 1) * pagination.per_page + 1;
+    const endRecord = Math.min(pagination.page * pagination.per_page, pagination.total);
+    
+    document.getElementById('startRecord').textContent = pagination.total > 0 ? startRecord : 0;
+    document.getElementById('endRecord').textContent = endRecord;
+    document.getElementById('totalPaginationRecords').textContent = pagination.total;
+    
+    // Generate pagination buttons
+    const paginationButtons = document.getElementById('paginationButtons');
+    let buttonsHTML = '';
+    
+    // Previous button
+    buttonsHTML += `
+        <button onclick="previousPage()" ${!pagination.has_prev ? 'disabled' : ''} 
+                class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed">
+            <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+            </svg>
+        </button>
+    `;
+    
+    // Page numbers
+    for (let i = 1; i <= Math.min(pagination.pages, 5); i++) {
+        const isActive = i === pagination.page;
+        buttonsHTML += `
+            <button onclick="loadAttendanceData(${i})" 
+                    class="relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                        isActive 
+                            ? 'z-10 bg-blue-50 border-blue-500 text-blue-600' 
+                            : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                    }">
+                ${i}
+            </button>
+        `;
+    }
+    
+    if (pagination.pages > 5) {
+        buttonsHTML += `<span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">...</span>`;
+        buttonsHTML += `
+            <button onclick="loadAttendanceData(${pagination.pages})" 
+                    class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                ${pagination.pages}
+            </button>
+        `;
+    }
+    
+    // Next button
+    buttonsHTML += `
+        <button onclick="nextPage()" ${!pagination.has_next ? 'disabled' : ''} 
+                class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed">
+            <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+            </svg>
+        </button>
+    `;
+    
+    paginationButtons.innerHTML = buttonsHTML;
+}
+
+// Navigation functions
+function previousPage() {
+    if (currentPage > 1) {
+        loadAttendanceData(currentPage - 1);
+    }
+}
+
+function nextPage() {
+    if (currentPage < totalPages) {
+        loadAttendanceData(currentPage + 1);
+    }
+}
+
+// Filter functions
+function applyFilter(filter) {
+    currentFilter = filter;
+    
+    // Update button states
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('bg-blue-500', 'text-white');
+        btn.classList.add('bg-gray-200', 'text-gray-700');
+    });
+    
+    event.target.classList.remove('bg-gray-200', 'text-gray-700');
+    event.target.classList.add('bg-blue-500', 'text-white');
+    
+    // Hide custom range panel
+    document.getElementById('customRangePanel').classList.add('hidden');
+    
+    // Reset to page 1 and load data
+    loadAttendanceData(1);
+}
+
+function showCustomRange() {
+    document.getElementById('customRangePanel').classList.remove('hidden');
+    
+    // Set default dates
+    const today = new Date();
+    const lastWeek = new Date(today);
+    lastWeek.setDate(today.getDate() - 7);
+    
+    document.getElementById('startDate').value = lastWeek.toISOString().split('T')[0];
+    document.getElementById('endDate').value = today.toISOString().split('T')[0];
+}
+
+function hideCustomRange() {
+    document.getElementById('customRangePanel').classList.add('hidden');
+}
+
+function applyCustomRange() {
+    currentFilter = 'custom';
+    
+    // Update button states
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('bg-blue-500', 'text-white');
+        btn.classList.add('bg-gray-200', 'text-gray-700');
+    });
+    
+    loadAttendanceData(1);
+}
+
+// Update location filter dropdown
+function updateLocationFilter(locations) {
+    const select = document.getElementById('locationFilter');
+    const currentValue = select.value;
+    
+    select.innerHTML = '<option value="">All Locations</option>';
+    locations.forEach(location => {
+        select.innerHTML += `<option value="${location}" ${currentValue === location ? 'selected' : ''}>${location}</option>`;
+    });
+}
+
+// Selection functions
+function toggleSelectAll() {
+    const isChecked = document.getElementById('selectAllCheckbox').checked || document.getElementById('headerSelectAll').checked;
+    
+    // Sync both checkboxes
+    document.getElementById('selectAllCheckbox').checked = isChecked;
+    document.getElementById('headerSelectAll').checked = isChecked;
+    
+    if (isChecked) {
+        // Select all records on current page
+        allRecords.forEach(record => selectedRecords.add(record.id));
+    } else {
+        // Deselect all records on current page
+        allRecords.forEach(record => selectedRecords.delete(record.id));
+    }
+    
+    // Update checkboxes in table
+    document.querySelectorAll('.record-checkbox').forEach(checkbox => {
+        checkbox.checked = isChecked;
+    });
+    
+    updateSelectionCount();
+}
+
+function toggleRecordSelection(recordId) {
+    if (selectedRecords.has(recordId)) {
+        selectedRecords.delete(recordId);
+    } else {
+        selectedRecords.add(recordId);
+    }
+    
+    updateSelectionCount();
+}
+
+function updateSelectionCount() {
+    const count = selectedRecords.size;
+    document.getElementById('selectionCount').textContent = `${count} selected`;
+    
+    // Enable/disable export button
+    document.getElementById('exportBtn').disabled = count === 0;
+    
+    // Update select all checkbox state
+    const allSelected = allRecords.length > 0 && allRecords.every(record => selectedRecords.has(record.id));
+    document.getElementById('selectAllCheckbox').checked = allSelected;
+    document.getElementById('headerSelectAll').checked = allSelected;
+}
+
+// Export function
+async function exportSelected() {
+    if (selectedRecords.size === 0) {
+        alert('Please select at least one record to export');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/attendance/export-selected', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                selected_ids: Array.from(selectedRecords)
+            })
+        });
+        
+        if (response.ok) {
+            // Download the file
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `attendance_export_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            // Clear selection
+            selectedRecords.clear();
+            updateSelectionCount();
+            loadAttendanceData(currentPage);
+        } else {
+            const error = await response.json();
+            alert('Export failed: ' + (error.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Export error:', error);
+        alert('Failed to export records');
+    }
+}
+
+// Handle Person ID filter
+function handlePersonIdFilter(event) {
+    // Allow Enter key to trigger search
+    if (event.key === 'Enter' || event.type === 'blur') {
+        loadAttendanceData(1);
+    }
+}
+
+// Helper functions
+function formatDate(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function formatTime(timeStr) {
+    if (!timeStr) return '-';
+    return timeStr.substring(0, 8); // Return HH:MM:SS
+}
+
+function showError(message) {
+    const tbody = document.getElementById('attendanceTableBody');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="9" class="px-6 py-4 text-center text-red-500">${message}</td>
+        </tr>
+    `;
+}
+</script>
+{% endblock %}

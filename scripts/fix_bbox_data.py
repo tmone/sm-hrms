@@ -33,11 +33,11 @@ def fix_bbox_data():
         # Import the model
         from app import DetectedPerson
         
-        print("🔍 Scanning for corrupted bounding box data...")
+        print("[SEARCH] Scanning for corrupted bounding box data...")
         
         # Get all detections
         detections = DetectedPerson.query.all()
-        print(f"📊 Found {len(detections)} detection records")
+        print(f"[INFO] Found {len(detections)} detection records")
         
         fixed_count = 0
         deleted_count = 0
@@ -54,13 +54,13 @@ def fix_bbox_data():
             # Check if any bbox field contains binary data
             for field_name, value in original_data.items():
                 if isinstance(value, (bytes, bytearray)):
-                    print(f"❌ Found binary data in {field_name} for detection {detection.id}: {value}")
+                    print(f"[ERROR] Found binary data in {field_name} for detection {detection.id}: {value}")
                     needs_fix = True
                 elif isinstance(value, str) and value.startswith("b'"):
-                    print(f"❌ Found string-encoded binary data in {field_name} for detection {detection.id}: {value}")
+                    print(f"[ERROR] Found string-encoded binary data in {field_name} for detection {detection.id}: {value}")
                     needs_fix = True
                 elif value is None:
-                    print(f"⚠️ Found NULL value in {field_name} for detection {detection.id}")
+                    print(f"[WARNING] Found NULL value in {field_name} for detection {detection.id}")
                     needs_fix = True
             
             if needs_fix:
@@ -74,16 +74,16 @@ def fix_bbox_data():
                         detection.bbox_width = fixed_bbox['width']
                         detection.bbox_height = fixed_bbox['height']
                         
-                        print(f"✅ Fixed detection {detection.id}: {fixed_bbox}")
+                        print(f"[OK] Fixed detection {detection.id}: {fixed_bbox}")
                         fixed_count += 1
                     else:
                         # Cannot fix, delete the record
-                        print(f"🗑️ Deleting unfixable detection {detection.id}")
+                        print(f"[DELETE] Deleting unfixable detection {detection.id}")
                         db.session.delete(detection)
                         deleted_count += 1
                         
                 except Exception as e:
-                    print(f"❌ Error fixing detection {detection.id}: {e}")
+                    print(f"[ERROR] Error fixing detection {detection.id}: {e}")
                     # Delete problematic records
                     db.session.delete(detection)
                     deleted_count += 1
@@ -91,12 +91,12 @@ def fix_bbox_data():
         # Commit changes
         try:
             db.session.commit()
-            print(f"✅ Database cleanup completed:")
-            print(f"   🔧 Fixed: {fixed_count} records")
-            print(f"   🗑️ Deleted: {deleted_count} records")
-            print(f"   📊 Total processed: {len(detections)} records")
+            print(f"[OK] Database cleanup completed:")
+            print(f"   [CONFIG] Fixed: {fixed_count} records")
+            print(f"   [DELETE] Deleted: {deleted_count} records")
+            print(f"   [INFO] Total processed: {len(detections)} records")
         except Exception as e:
-            print(f"❌ Error committing changes: {e}")
+            print(f"[ERROR] Error committing changes: {e}")
             db.session.rollback()
             return False
     
@@ -170,12 +170,12 @@ def fix_single_detection(detection, original_data):
     return None
 
 if __name__ == "__main__":
-    print("🔧 Starting database bounding box repair...")
+    print("[CONFIG] Starting database bounding box repair...")
     success = fix_bbox_data()
     
     if success:
-        print("\n✅ Database repair completed successfully!")
+        print("\n[OK] Database repair completed successfully!")
         print("You can now test the jumpToDetection function.")
     else:
-        print("\n❌ Database repair failed!")
+        print("\n[ERROR] Database repair failed!")
         sys.exit(1)

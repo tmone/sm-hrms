@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}Merge Persons - {{ super() }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Page Header -->
+    <div class="mb-6">
+        <h1 class="text-3xl font-bold text-gray-800 dark:text-white mb-2">
+            <i class="fas fa-code-branch mr-2"></i>Merge Persons
+        </h1>
+        <p class="text-gray-600 dark:text-gray-400">
+            Combine multiple person detections into a single identity
+        </p>
+    </div>
+
+    <!-- Instructions -->
+    <div class="bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg p-4 mb-6">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-info-circle text-blue-400 text-xl mt-1"></i>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-sm font-medium text-blue-800 dark:text-blue-200">How to merge persons</h3>
+                <div class="mt-2 text-sm text-blue-700 dark:text-blue-300">
+                    <ol class="list-decimal list-inside space-y-1">
+                        <li>Select a primary person to keep (all data will be merged into this person)</li>
+                        <li>Select one or more persons to merge (these will be deleted after merging)</li>
+                        <li>Click "Merge Selected Persons" to combine them</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('persons.merge') }}" id="mergeForm">
+        <!-- Step 1: Primary Person Selection -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-xl font-semibold text-gray-800 dark:text-white flex items-center">
+                    <span class="bg-blue-500 text-white rounded-full w-8 h-8 flex items-center justify-center mr-3 text-sm">1</span>
+                    Select Primary Person (to keep)
+                </h2>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mt-2">This person ID will be kept and all other selected persons will be merged into it.</p>
+            </div>
+            
+            <div class="p-6">
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4" id="primaryPersons">
+                    {% for person in persons %}
+                        <div class="person-select-card relative" data-person-id="{{ person.person_id }}">
+                            <input type="radio" 
+                                   name="primary_person" 
+                                   value="{{ person.person_id }}" 
+                                   id="primary_{{ person.person_id }}"
+                                   class="sr-only primary-radio">
+                            <label for="primary_{{ person.person_id }}" class="block cursor-pointer">
+                                <div class="border-2 border-gray-300 dark:border-gray-600 rounded-lg p-3 hover:border-blue-500 transition-colors">
+                                    {% if person.first_image %}
+                                        <img src="{{ url_for('persons.serve_person_image', filepath=person.first_image) }}" 
+                                             class="w-full h-24 object-cover rounded mb-2">
+                                    {% else %}
+                                        <div class="w-full h-24 bg-gray-200 dark:bg-gray-700 rounded mb-2 flex items-center justify-center">
+                                            <i class="fas fa-user text-gray-400 text-2xl"></i>
+                                        </div>
+                                    {% endif %}
+                                    <p class="text-xs font-semibold text-center text-gray-800 dark:text-white">{{ person.person_id }}</p>
+                                    <p class="text-xs text-center text-gray-500 dark:text-gray-400">{{ person.total_detections }} detections</p>
+                                </div>
+                            </label>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Persons to Merge -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-xl font-semibold text-gray-800 dark:text-white flex items-center">
+                    <span class="bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center mr-3 text-sm">2</span>
+                    Select Persons to Merge (will be deleted)
+                </h2>
+                <p class="text-sm text-gray-600 dark:text-gray-400 mt-2">These persons will be merged into the primary person and then deleted.</p>
+            </div>
+            
+            <div class="p-6">
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4" id="mergePersons">
+                    {% for person in persons %}
+                        <div class="merge-person-container relative" data-person-id="{{ person.person_id }}">
+                            <input type="checkbox" 
+                                   name="persons_to_merge" 
+                                   value="{{ person.person_id }}" 
+                                   id="merge_{{ person.person_id }}"
+                                   class="sr-only merge-checkbox">
+                            <label for="merge_{{ person.person_id }}" class="block cursor-pointer">
+                                <div class="border-2 border-gray-300 dark:border-gray-600 rounded-lg p-3 hover:border-red-500 transition-colors">
+                                    {% if person.first_image %}
+                                        <img src="{{ url_for('persons.serve_person_image', filepath=person.first_image) }}" 
+                                             class="w-full h-24 object-cover rounded mb-2">
+                                    {% else %}
+                                        <div class="w-full h-24 bg-gray-200 dark:bg-gray-700 rounded mb-2 flex items-center justify-center">
+                                            <i class="fas fa-user text-gray-400 text-2xl"></i>
+                                        </div>
+                                    {% endif %}
+                                    <p class="text-xs font-semibold text-center text-gray-800 dark:text-white">{{ person.person_id }}</p>
+                                    <p class="text-xs text-center text-gray-500 dark:text-gray-400">{{ person.total_detections }} detections</p>
+                                </div>
+                            </label>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex justify-between items-center">
+            <a href="{{ url_for('persons.index') }}" 
+               class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition duration-150 ease-in-out inline-flex items-center">
+                <i class="fas fa-arrow-left mr-2"></i>Cancel
+            </a>
+            
+            <button type="submit" 
+                    id="mergeButton" 
+                    class="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg transition duration-150 ease-in-out inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled>
+                <i class="fas fa-code-branch mr-2"></i>
+                <span id="mergeButtonText">Merge Selected Persons</span>
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+/* Selected states */
+.primary-radio:checked + label > div {
+    border-color: #3B82F6;
+    background-color: #EFF6FF;
+}
+
+.primary-radio:checked + label > div::before {
+    content: "PRIMARY";
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #3B82F6;
+    color: white;
+    padding: 2px 12px;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.merge-checkbox:checked + label > div {
+    border-color: #EF4444;
+    background-color: #FEF2F2;
+}
+
+.merge-checkbox:checked + label > div::before {
+    content: "MERGE";
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #EF4444;
+    color: white;
+    padding: 2px 12px;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.merge-person-container.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+    .primary-radio:checked + label > div {
+        background-color: #1E3A8A;
+    }
+    
+    .merge-checkbox:checked + label > div {
+        background-color: #991B1B;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const primaryRadios = document.querySelectorAll('.primary-radio');
+    const mergeCheckboxes = document.querySelectorAll('.merge-checkbox');
+    const mergeButton = document.getElementById('mergeButton');
+    const mergeButtonText = document.getElementById('mergeButtonText');
+    const mergeForm = document.getElementById('mergeForm');
+    
+    // Handle primary person selection
+    primaryRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            updateMergeOptions();
+            updateMergeButton();
+        });
+    });
+    
+    // Handle merge checkboxes
+    mergeCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            updateMergeButton();
+        });
+    });
+    
+    // Update which persons can be merged
+    function updateMergeOptions() {
+        const selectedPrimary = document.querySelector('.primary-radio:checked');
+        
+        if (selectedPrimary) {
+            const primaryId = selectedPrimary.value;
+            
+            // Enable all merge options first
+            document.querySelectorAll('.merge-person-container').forEach(container => {
+                container.classList.remove('disabled');
+            });
+            
+            // Disable the primary person in merge options
+            const primaryInMerge = document.querySelector(`.merge-person-container[data-person-id="${primaryId}"]`);
+            if (primaryInMerge) {
+                primaryInMerge.classList.add('disabled');
+                const checkbox = primaryInMerge.querySelector('.merge-checkbox');
+                if (checkbox) {
+                    checkbox.checked = false;
+                }
+            }
+        }
+    }
+    
+    // Update merge button state
+    function updateMergeButton() {
+        const selectedPrimary = document.querySelector('.primary-radio:checked');
+        const selectedMerge = document.querySelectorAll('.merge-checkbox:checked');
+        
+        const isValid = selectedPrimary && selectedMerge.length > 0;
+        mergeButton.disabled = !isValid;
+        
+        if (isValid) {
+            const count = selectedMerge.length;
+            mergeButtonText.textContent = `Merge ${count} Person${count > 1 ? 's' : ''} into ${selectedPrimary.value}`;
+        } else {
+            mergeButtonText.textContent = 'Merge Selected Persons';
+        }
+    }
+    
+    // Confirm before merging
+    mergeForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const selectedPrimary = document.querySelector('.primary-radio:checked');
+        const selectedMerge = document.querySelectorAll('.merge-checkbox:checked');
+        
+        if (!selectedPrimary || selectedMerge.length === 0) {
+            alert('Please select a primary person and at least one person to merge.');
+            return;
+        }
+        
+        const mergeIds = Array.from(selectedMerge).map(cb => cb.value);
+        const mergeList = mergeIds.join(', ');
+        
+        const confirmMessage = `Are you sure you want to merge the following persons into ${selectedPrimary.value}?\n\n` +
+                             `Persons to merge (will be deleted): ${mergeList}\n\n` +
+                             `This action cannot be undone.`;
+        
+        if (confirm(confirmMessage)) {
+            this.submit();
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -55,6 +55,9 @@ coverage.xml
 local_settings.py
 db.sqlite3
 
+# Application logs
+logs/
+
 # Flask stuff:
 instance/
 .webassets-cache
@@ -146,4 +149,8 @@ hr_management/processing/temp/*
 # OS specific
 .DS_Store
 Thumbs.db
-.claude/settings.local.json
+.claude/
+processing/outputs/
+datasets/
+models/
+processing/checkpoints/

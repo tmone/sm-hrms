@@ -7,56 +7,76 @@ import json
 import numpy as np
 from datetime import datetime
 
+# Set up logging
+try:
+    from config_logging import get_logger
+    logger = get_logger(__name__)
+except:
+    import logging
+    logger = logging.getLogger(__name__)
+
+# Import checkpoint manager
+try:
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    from processing.checkpoint_manager import get_checkpoint_manager, VideoProcessingCheckpoint
+    checkpoint_manager = get_checkpoint_manager()
+    CHECKPOINT_ENABLED = True
+except:
+    logger.warning("Checkpoint system not available")
+    CHECKPOINT_ENABLED = False
+    checkpoint_manager = None
+
 # Check available backends
-print("🔍 Checking available AI model backends...")
+print("[SEARCH] Checking available AI model backends...")
 
 # OpenCV backend
 try:
     import cv2
     CV2_AVAILABLE = True
-    print("✅ OpenCV available")
+    print("[OK] OpenCV available")
 except ImportError:
     CV2_AVAILABLE = False
-    print("❌ OpenCV not available")
+    print("[ERROR] OpenCV not available")
 
 # PyTorch backend  
 try:
     import torch
     import torchvision
     TORCH_AVAILABLE = True
-    print("✅ PyTorch + TorchVision available")
+    print("[OK] PyTorch + TorchVision available")
 except ImportError:
     TORCH_AVAILABLE = False
-    print("❌ PyTorch not available")
+    print("[ERROR] PyTorch not available")
 
 # YOLO (Ultralytics) backend
 try:
     from ultralytics import YOLO
     YOLO_AVAILABLE = True
-    print("✅ YOLO (Ultralytics) available")
+    print("[OK] YOLO (Ultralytics) available")
 except ImportError:
     YOLO_AVAILABLE = False
-    print("❌ YOLO not available")
+    print("[ERROR] YOLO not available")
 
 # ONNX Runtime backend
 try:
     import onnxruntime as ort
     ONNX_AVAILABLE = True
-    print("✅ ONNX Runtime available")
+    print("[OK] ONNX Runtime available")
 except ImportError:
     ONNX_AVAILABLE = False
-    print("❌ ONNX Runtime not available")
+    print("[ERROR] ONNX Runtime not available")
 
 # MediaPipe backend (lightweight alternative)
 try:
     import mediapipe as mp
     MEDIAPIPE_AVAILABLE = True
-    print("✅ MediaPipe available")
+    print("[OK] MediaPipe available")
 except ImportError:
     MEDIAPIPE_AVAILABLE = False
-    print("❌ MediaPipe not available")
+    print("[ERROR] MediaPipe not available")
 
-print(f"🖥️ AI Model capabilities: CV2={CV2_AVAILABLE}, TORCH={TORCH_AVAILABLE}, YOLO={YOLO_AVAILABLE}, ONNX={ONNX_AVAILABLE}, MEDIAPIPE={MEDIAPIPE_AVAILABLE}")
+print(f"[MONITOR] AI Model capabilities: CV2={CV2_AVAILABLE}, TORCH={TORCH_AVAILABLE}, YOLO={YOLO_AVAILABLE}, ONNX={ONNX_AVAILABLE}, MEDIAPIPE={MEDIAPIPE_AVAILABLE}")
 
 # Global model cache
 _model_cache = {}
@@ -78,7 +98,7 @@ def get_best_available_detector():
 
 def extract_video_metadata_real(filepath):
     """Extract real video metadata using available backends"""
-    print(f"📊 Extracting real metadata from: {filepath}")
+    print(f"[INFO] Extracting real metadata from: {filepath}")
     
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"Video file not found: {filepath}")
@@ -106,10 +126,10 @@ def extract_video_metadata_real(filepath):
                     'height': height,
                     'file_size': file_size
                 }
-                print(f"📊 OpenCV metadata: {metadata}")
+                print(f"[INFO] OpenCV metadata: {metadata}")
                 return metadata
         except Exception as e:
-            print(f"⚠️ OpenCV metadata extraction failed: {e}")
+            print(f"[WARNING] OpenCV metadata extraction failed: {e}")
     
     # Fallback to ImageIO/MoviePy
     try:
@@ -132,14 +152,14 @@ def extract_video_metadata_real(filepath):
             'height': height,
             'file_size': file_size
         }
-        print(f"📊 ImageIO metadata: {metadata}")
+        print(f"[INFO] ImageIO metadata: {metadata}")
         return metadata
         
     except Exception as e:
-        print(f"⚠️ ImageIO metadata extraction failed: {e}")
+        print(f"[WARNING] ImageIO metadata extraction failed: {e}")
     
     # Final fallback to mock metadata
-    print("⚠️ Using fallback metadata")
+    print("[WARNING] Using fallback metadata")
     return {
         'duration': 60.0,
         'fps': 25.0,
@@ -158,7 +178,7 @@ def detect_persons_real(filepath):
         raise FileNotFoundError(f"Video file not found: {filepath}")
     
     detector_type = get_best_available_detector()
-    print(f"🤖 Using {detector_type.upper()} backend for person detection")
+    print(f"[AI] Using {detector_type.upper()} backend for person detection")
     
     if detector_type == "yolo":
         return detect_persons_yolo(filepath)
@@ -171,20 +191,28 @@ def detect_persons_real(filepath):
     elif detector_type == "onnx":
         return detect_persons_onnx(filepath)
     else:
-        print("⚠️ No AI models available, using mock detection")
+        print("[WARNING] No AI models available, using mock detection")
         return detect_persons_mock(filepath)
 
 def detect_persons_yolo(filepath):
     """Detect persons using YOLO model"""
-    print("🎯 Using YOLO for person detection")
+    print("[TARGET] Using YOLO for person detection")
     
     try:
         # Load YOLO model (downloads automatically on first use)
         if "yolo" not in _model_cache:
-            print("📥 Loading YOLO model...")
+            print("[LOAD] Loading YOLO model...")
             model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'yolov8n.pt')
-            _model_cache["yolo"] = YOLO(model_path)  # Use nano model for speed
-            print("✅ YOLO model loaded")
+            model = YOLO(model_path)  # Use nano model for speed
+            
+            # Configure GPU if available
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                model.to('cuda')
+                print(f"[START] YOLO model loaded on GPU: {torch.cuda.get_device_name(0)}")
+            else:
+                print("[WARNING] YOLO model loaded on CPU (CUDA not available)")
+                
+            _model_cache["yolo"] = model
         
         model = _model_cache["yolo"]
         
@@ -200,7 +228,7 @@ def detect_persons_yolo(filepath):
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        print(f"📊 Processing {total_frames} frames at {fps} FPS")
+        print(f"[INFO] Processing {total_frames} frames at {fps} FPS")
         
         frame_number = 0
         sample_rate = max(1, int(fps // 2))  # Sample every 0.5 seconds
@@ -212,10 +240,10 @@ def detect_persons_yolo(filepath):
             
             # Sample frames to avoid processing every frame
             if frame_number % sample_rate == 0:
-                print(f"🔄 Processing frame {frame_number}/{total_frames} ({(frame_number/total_frames)*100:.1f}%)")
-                
-                # Run YOLO detection
-                results = model(frame, verbose=False)
+                print(f"[PROCESSING] Processing frame {frame_number}/{total_frames} ({(frame_number/total_frames)*100:.1f}%)")
+                  # Run YOLO detection
+                device = 'cuda' if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
+                results = model(frame, device=device, verbose=False)
                 
                 # Extract person detections (class 0 = person in COCO)
                 for result in results:
@@ -238,6 +266,27 @@ def detect_persons_yolo(filepath):
                                     width_percent = ((x2 - x1) / frame_width) * 100
                                     height_percent = ((y2 - y1) / frame_height) * 100
                                     
+                                    # Calculate actual pixel width
+                                    bbox_width_pixels = x2 - x1
+                                    
+                                    # QUALITY FILTER 1: Skip persons with bounding box width < 128 pixels
+                                    # Small bounding boxes typically contain low-quality person images
+                                    # that are not suitable for face recognition training
+                                    MIN_BBOX_WIDTH = 128
+                                    
+                                    if bbox_width_pixels < MIN_BBOX_WIDTH:
+                                        print(f"[WARNING] Skipping person detection: bbox width {bbox_width_pixels:.0f}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                                        continue
+                                    
+                                    # QUALITY FILTER 2: Skip persons where height < 2 * width
+                                    # This filters out poor detections where people are lying down or have incorrect bbox shapes
+                                    bbox_height_pixels = y2 - y1
+                                    MIN_HEIGHT_WIDTH_RATIO = 2.0
+                                    
+                                    if bbox_height_pixels < (MIN_HEIGHT_WIDTH_RATIO * bbox_width_pixels):
+                                        print(f"[WARNING] Skipping person detection: bbox height {bbox_height_pixels:.0f}px < {MIN_HEIGHT_WIDTH_RATIO} * width {bbox_width_pixels:.0f}px (incorrect aspect ratio)")
+                                        continue
+                                    
                                     # Create detection record
                                     person_code = f"PERSON-{person_counter:04d}"
                                     timestamp = frame_number / fps
@@ -254,12 +303,13 @@ def detect_persons_yolo(filepath):
                                             'x': x_percent,
                                             'y': y_percent,
                                             'width': width_percent,
-                                            'height': height_percent
+                                            'height': height_percent,
+                                            'width_pixels': bbox_width_pixels  # Store pixel width for reference
                                         }]
                                     }
                                     
                                     detections.append(detection)
-                                    print(f"👤 YOLO detected person {person_code} at {timestamp:.1f}s (confidence: {confidence:.2f})")
+                                    print(f"👤 YOLO detected person {person_code} at {timestamp:.1f}s (confidence: {confidence:.2f}, width: {bbox_width_pixels:.0f}px)")
                                     
                                     person_counter += 1
             
@@ -271,21 +321,21 @@ def detect_persons_yolo(filepath):
                 break
         
         cap.release()
-        print(f"🎯 YOLO detection completed: {len(detections)} persons found")
+        print(f"[TARGET] YOLO detection completed: {len(detections)} persons found")
         return detections
         
     except Exception as e:
-        print(f"❌ YOLO detection failed: {e}")
+        print(f"[ERROR] YOLO detection failed: {e}")
         return detect_persons_mock(filepath)
 
 def detect_persons_torch(filepath):
     """Detect persons using PyTorch models"""
-    print("🔥 Using PyTorch for person detection")
+    print("[FIRE] Using PyTorch for person detection")
     
     try:
         # Use torchvision's pre-trained models
         if "torch_model" not in _model_cache:
-            print("📥 Loading PyTorch model...")
+            print("[LOAD] Loading PyTorch model...")
             import torchvision.transforms as transforms
             from torchvision.models import detection
             
@@ -293,7 +343,7 @@ def detect_persons_torch(filepath):
             model = detection.fasterrcnn_resnet50_fpn(pretrained=True)
             model.eval()
             _model_cache["torch_model"] = model
-            print("✅ PyTorch model loaded")
+            print("[OK] PyTorch model loaded")
         
         model = _model_cache["torch_model"]
         
@@ -308,7 +358,7 @@ def detect_persons_torch(filepath):
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        print(f"📊 Processing with PyTorch: {total_frames} frames")
+        print(f"[INFO] Processing with PyTorch: {total_frames} frames")
         
         frame_number = 0
         sample_rate = max(1, int(fps))  # Sample every second
@@ -324,7 +374,7 @@ def detect_persons_torch(filepath):
                 break
             
             if frame_number % sample_rate == 0:
-                print(f"🔄 PyTorch processing frame {frame_number}/{total_frames}")
+                print(f"[PROCESSING] PyTorch processing frame {frame_number}/{total_frames}")
                 
                 # Convert BGR to RGB
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -352,6 +402,27 @@ def detect_persons_torch(filepath):
                         width_percent = ((x2 - x1) / frame_width) * 100
                         height_percent = ((y2 - y1) / frame_height) * 100
                         
+                        # Calculate actual pixel width
+                        bbox_width_pixels = x2 - x1
+                        
+                        # QUALITY FILTER 1: Skip persons with bounding box width < 128 pixels
+                        # Small bounding boxes typically contain low-quality person images
+                        # that are not suitable for face recognition training
+                        MIN_BBOX_WIDTH = 128
+                        
+                        if bbox_width_pixels < MIN_BBOX_WIDTH:
+                            print(f"[WARNING] Skipping person detection: bbox width {bbox_width_pixels:.0f}px < {MIN_BBOX_WIDTH}px (too small for quality face recognition)")
+                            continue
+                        
+                        # QUALITY FILTER 2: Skip persons where height < 2 * width
+                        # This filters out poor detections where people are lying down or have incorrect bbox shapes
+                        bbox_height_pixels = y2 - y1
+                        MIN_HEIGHT_WIDTH_RATIO = 2.0
+                        
+                        if bbox_height_pixels < (MIN_HEIGHT_WIDTH_RATIO * bbox_width_pixels):
+                            print(f"[WARNING] Skipping person detection: bbox height {bbox_height_pixels:.0f}px < {MIN_HEIGHT_WIDTH_RATIO} * width {bbox_width_pixels:.0f}px (incorrect aspect ratio)")
+                            continue
+                        
                         person_code = f"PERSON-{person_counter:04d}"
                         timestamp = frame_number / fps
                         
@@ -367,12 +438,13 @@ def detect_persons_torch(filepath):
                                 'x': x_percent,
                                 'y': y_percent,
                                 'width': width_percent,
-                                'height': height_percent
+                                'height': height_percent,
+                                'width_pixels': bbox_width_pixels  # Store pixel width for reference
                             }]
                         }
                         
                         detections.append(detection)
-                        print(f"👤 PyTorch detected person {person_code} at {timestamp:.1f}s")
+                        print(f"👤 PyTorch detected person {person_code} at {timestamp:.1f}s (confidence: {score:.2f}, width: {bbox_width_pixels:.0f}px)")
                         person_counter += 1
             
             frame_number += 1
@@ -383,11 +455,11 @@ def detect_persons_torch(filepath):
                 break
         
         cap.release()
-        print(f"🔥 PyTorch detection completed: {len(detections)} persons found")
+        print(f"[FIRE] PyTorch detection completed: {len(detections)} persons found")
         return detections
         
     except Exception as e:
-        print(f"❌ PyTorch detection failed: {e}")
+        print(f"[ERROR] PyTorch detection failed: {e}")
         return detect_persons_mock(filepath)
 
 def detect_persons_mediapipe(filepath):
@@ -476,12 +548,12 @@ def detect_persons_mediapipe(filepath):
         return detections
         
     except Exception as e:
-        print(f"❌ MediaPipe detection failed: {e}")
+        print(f"[ERROR] MediaPipe detection failed: {e}")
         return detect_persons_mock(filepath)
 
 def detect_persons_opencv(filepath):
     """Detect persons using OpenCV's built-in classifiers"""
-    print("📹 Using OpenCV for person detection")
+    print("[VIDEO] Using OpenCV for person detection")
     
     try:
         # Use OpenCV's HOG (Histogram of Oriented Gradients) person detector
@@ -503,7 +575,7 @@ def detect_persons_opencv(filepath):
                 break
             
             if frame_number % sample_rate == 0:
-                print(f"🔄 OpenCV processing frame {frame_number}")
+                print(f"[PROCESSING] OpenCV processing frame {frame_number}")
                 
                 # Resize frame for faster processing
                 frame_resized = cv2.resize(frame, (640, 480))
@@ -556,16 +628,16 @@ def detect_persons_opencv(filepath):
                 break
         
         cap.release()
-        print(f"📹 OpenCV detection completed: {len(detections)} persons found")
+        print(f"[VIDEO] OpenCV detection completed: {len(detections)} persons found")
         return detections
         
     except Exception as e:
-        print(f"❌ OpenCV detection failed: {e}")
+        print(f"[ERROR] OpenCV detection failed: {e}")
         return detect_persons_mock(filepath)
 
 def detect_persons_onnx(filepath):
     """Detect persons using ONNX models"""
-    print("⚙️ Using ONNX for person detection")
+    print("[SETTINGS] Using ONNX for person detection")
     
     # Placeholder for ONNX implementation
     # You would download and use pre-trained ONNX models here

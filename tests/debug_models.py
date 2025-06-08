@@ -23,14 +23,14 @@ def debug_models():
         for model_name in models_to_check:
             model = getattr(app, model_name, None)
             if model:
-                print(f"✅ {model_name}: Available ({model})")
+                print(f"[OK] {model_name}: Available ({model})")
                 try:
                     count = model.query.count()
                     print(f"   Records in database: {count}")
                 except Exception as e:
                     print(f"   Error querying: {e}")
             else:
-                print(f"❌ {model_name}: Not Available")
+                print(f"[ERROR] {model_name}: Not Available")
         
         # Check db
         db = getattr(app, 'db', None)

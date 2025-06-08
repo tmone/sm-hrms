@@ -36,22 +36,22 @@ def test_detection_clearing():
         # Get all videos
         videos = Video.query.all()
         if not videos:
-            print("❌ No videos found in database!")
+            print("[ERROR] No videos found in database!")
             return False
         
-        print(f"📊 Found {len(videos)} video(s) in database:")
+        print(f"[INFO] Found {len(videos)} video(s) in database:")
         
         for video in videos:
             detections = DetectedPerson.query.filter_by(video_id=video.id).all()
             detection_count = len(detections)
             
-            print(f"\n📹 Video {video.id}: {video.title}")
-            print(f"   📁 File: {video.filename}")
-            print(f"   📊 Status: {video.status}")
-            print(f"   🔍 Detections: {detection_count}")
+            print(f"\n[VIDEO] Video {video.id}: {video.title}")
+            print(f"   [FILE] File: {video.filename}")
+            print(f"   [INFO] Status: {video.status}")
+            print(f"   [SEARCH] Detections: {detection_count}")
             
             if detection_count > 0:
-                print(f"   📋 Detection details:")
+                print(f"   [TRACE] Detection details:")
                 for i, detection in enumerate(detections[:3]):  # Show first 3
                     print(f"      {i+1}. ID:{detection.id} Time:{detection.timestamp}s bbox:[{detection.bbox_x},{detection.bbox_y},{detection.bbox_width}x{detection.bbox_height}]")
                 if detection_count > 3:
@@ -66,8 +66,8 @@ def test_detection_clearing():
                 break
         
         if not test_video:
-            print("\n📝 No videos with existing detections found.")
-            print("✅ Test would work - clearing logic will handle empty case gracefully.")
+            print("\n[LOG] No videos with existing detections found.")
+            print("[OK] Test would work - clearing logic will handle empty case gracefully.")
             return True
         
         print(f"\n🧪 Testing clearing for video {test_video.id} ({len(DetectedPerson.query.filter_by(video_id=test_video.id).all())} detections)")
@@ -78,30 +78,30 @@ def test_detection_clearing():
             
             if existing_detections:
                 detection_count = len(existing_detections)
-                print(f"   🔍 Found {detection_count} existing detections to delete")
+                print(f"   [SEARCH] Found {detection_count} existing detections to delete")
                 
                 # Don't actually delete in test mode, just simulate
-                print(f"   ✅ Would delete {detection_count} detections (test mode - not actually deleting)")
-                print(f"   🔄 In real processing, this would clear all existing data")
+                print(f"   [OK] Would delete {detection_count} detections (test mode - not actually deleting)")
+                print(f"   [PROCESSING] In real processing, this would clear all existing data")
             else:
-                print(f"   📝 No existing detections found for video {test_video.id}")
+                print(f"   [LOG] No existing detections found for video {test_video.id}")
                 
         except Exception as e:
-            print(f"   ❌ Error during clearing test: {e}")
+            print(f"   [ERROR] Error during clearing test: {e}")
             return False
         
-        print(f"\n✅ Detection clearing test completed successfully!")
-        print(f"💡 The clearing logic is ready and will work when processing videos.")
+        print(f"\n[OK] Detection clearing test completed successfully!")
+        print(f"[TIP] The clearing logic is ready and will work when processing videos.")
         
         return True
 
 if __name__ == "__main__":
-    print("🔧 Starting detection clearing test...")
+    print("[CONFIG] Starting detection clearing test...")
     success = test_detection_clearing()
     
     if success:
-        print("\n✅ All tests passed!")
-        print("🚀 Detection clearing functionality is working correctly.")
+        print("\n[OK] All tests passed!")
+        print("[START] Detection clearing functionality is working correctly.")
     else:
-        print("\n❌ Tests failed!")
+        print("\n[ERROR] Tests failed!")
         sys.exit(1)

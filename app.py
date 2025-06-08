@@ -1,6 +1,26 @@
 import os
 import sys
+
+# Fix Unicode output on Windows before anything else
+try:
+    from utils.fix_unicode_output import fix_unicode_output
+    fix_unicode_output()
+except Exception as e:
+    print(f"Warning: Could not fix Unicode output: {e}")
+
 from flask import Flask
+
+# Set up logging before anything else
+try:
+    from config_logging import setup_logging, get_logger
+    progress_logger = setup_logging()
+    logger = get_logger(__name__)
+    logger.info("Logging system initialized")
+except Exception as e:
+    print(f"Failed to setup logging: {e}")
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
 # Try to import optional dependencies
 SOCKETIO_AVAILABLE = False
@@ -11,21 +31,21 @@ try:
     from flask_socketio import SocketIO
     SOCKETIO_AVAILABLE = True
 except ImportError:
-    print("⚠️  Flask-SocketIO not available. Real-time features disabled.")
+    logger.warning("Flask-SocketIO not available. Real-time features disabled.")
     SocketIO = None
 
 try:
     from flask_babel import Babel
     BABEL_AVAILABLE = True
 except ImportError:
-    print("⚠️  Flask-Babel not available. Multi-language support disabled.")
+    logger.warning("Flask-Babel not available. Multi-language support disabled.")
     Babel = None
 
 try:
     import celery
     CELERY_AVAILABLE = True
 except ImportError:
-    print("⚠️  Celery not available. Background processing disabled.")
+    logger.warning("Celery not available. Background processing disabled.")
 
 # Core required imports
 from flask_sqlalchemy import SQLAlchemy
@@ -43,8 +63,29 @@ def create_app(config_name=None):
     
     # Configuration
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///stepmedia_hrm.db')
+    # Use instance folder for database
+    instance_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance')
+    if not os.path.exists(instance_path):
+        os.makedirs(instance_path)
+    db_path = os.path.join(instance_path, 'stepmedia_hrm.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', f'sqlite:///{db_path}')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
+    # Import database configuration for connection pool
+    try:
+        from config_database import SQLALCHEMY_ENGINE_OPTIONS
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = SQLALCHEMY_ENGINE_OPTIONS
+        logger.info("Using enhanced database connection pool settings")
+    except ImportError:
+        # Default connection pool settings
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+            'pool_size': 10,
+            'max_overflow': 20,
+            'pool_timeout': 45,
+            'pool_recycle': 3600,
+            'pool_pre_ping': True,
+        }
+        logger.info("Using default database connection pool settings")
     app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB file upload limit
     
     # Optional configuration
@@ -171,13 +212,32 @@ def create_app(config_name=None):
         processing_started_at = db.Column(db.DateTime)
         processing_completed_at = db.Column(db.DateTime)
         processed_path = db.Column(db.String(500))
+        annotated_video_path = db.Column(db.String(500))  # Enhanced detection annotated video
         processing_log = db.Column(db.Text)
         error_message = db.Column(db.Text)
+        task_id = db.Column(db.String(100))  # Celery task ID
+        processing_progress = db.Column(db.Integer, default=0)
         
         # Detection statistics
         person_count = db.Column(db.Integer, default=0)
         frame_count = db.Column(db.Integer)
         processed_frames = db.Column(db.Integer)
+        
+        # OCR extracted fields
+        ocr_location = db.Column(db.String(100))
+        ocr_video_date = db.Column(db.Date)
+        ocr_video_time = db.Column(db.Time)
+        ocr_extraction_done = db.Column(db.Boolean, default=False)
+        ocr_extraction_confidence = db.Column(db.Float)
+        
+        # Video chunking fields
+        parent_video_id = db.Column(db.Integer, db.ForeignKey('videos.id'))
+        chunk_index = db.Column(db.Integer)
+        total_chunks = db.Column(db.Integer)
+        is_chunk = db.Column(db.Boolean, default=False)
+        
+        # Employee relationship (uploader)
+        employee_id = db.Column(db.Integer, db.ForeignKey('employees.id'))
         
         # Metadata
         created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
@@ -201,6 +261,8 @@ def create_app(config_name=None):
                 'priority': self.priority,
                 'processing_started_at': self.processing_started_at.isoformat() if self.processing_started_at else None,
                 'processing_completed_at': self.processing_completed_at.isoformat() if self.processing_completed_at else None,
+                'processed_path': self.processed_path,
+                'annotated_video_path': self.annotated_video_path,
                 'person_count': self.person_count,
                 'frame_count': self.frame_count,
                 'processed_frames': self.processed_frames,
@@ -220,6 +282,10 @@ def create_app(config_name=None):
         frame_number = db.Column(db.Integer)
         confidence = db.Column(db.Float, default=0.0)
         
+        # Person tracking (for multi-frame tracking)
+        person_id = db.Column(db.String(50))  # e.g., "PERSON-0001"
+        track_id = db.Column(db.Integer)      # Internal tracking ID
+        
         # Bounding box coordinates
         bbox_x = db.Column(db.Integer)
         bbox_y = db.Column(db.Integer)
@@ -232,6 +298,13 @@ def create_app(config_name=None):
         
         # Face encoding (for face recognition)
         face_encoding = db.Column(db.Text)
+        
+        # OCR-based attendance fields
+        attendance_date = db.Column(db.Date)
+        attendance_time = db.Column(db.Time)
+        attendance_location = db.Column(db.String(100))
+        check_in_time = db.Column(db.DateTime)
+        check_out_time = db.Column(db.DateTime)
         
         created_at = db.Column(db.DateTime, default=datetime.utcnow)
         
@@ -250,6 +323,8 @@ def create_app(config_name=None):
                 'timestamp': self.timestamp,
                 'frame_number': self.frame_number,
                 'confidence': self.confidence,
+                'person_id': self.person_id,
+                'track_id': self.track_id,
                 'bbox_x': self.bbox_x,
                 'bbox_y': self.bbox_y,
                 'bbox_width': self.bbox_width,
@@ -397,6 +472,106 @@ def create_app(config_name=None):
                 'model_name': self.model.name if self.model else None
             }
 
+    # System Settings Model
+    class SystemSettings(db.Model):
+        """System-wide configuration settings"""
+        __tablename__ = 'system_settings'
+        
+        id = db.Column(db.Integer, primary_key=True)
+        key = db.Column(db.String(100), unique=True, nullable=False)
+        value = db.Column(db.Text)
+        value_type = db.Column(db.String(20), default='string')
+        category = db.Column(db.String(50), default='general')
+        description = db.Column(db.Text)
+        is_sensitive = db.Column(db.Boolean, default=False)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow)
+        updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+        
+        # Default settings
+        DEFAULT_SETTINGS = {
+            'general': {
+                'app_name': {'value': 'StepMedia HRM', 'type': 'string', 'description': 'Application name'},
+                'timezone': {'value': 'Asia/Bangkok', 'type': 'string', 'description': 'Default timezone'},
+                'language': {'value': 'en', 'type': 'string', 'description': 'Default language'}
+            },
+            'date_time': {
+                'date_format': {'value': 'DD-MM-YYYY', 'type': 'string', 'description': 'Date format for display'},
+                'time_format': {'value': '24h', 'type': 'string', 'description': 'Time format (12h or 24h)'},
+                'ocr_date_format': {'value': 'DD-MM-YYYY', 'type': 'string', 'description': 'Expected date format in OCR'}
+            },
+            'video_processing': {
+                'max_upload_size_mb': {'value': '2048', 'type': 'integer', 'description': 'Max video size in MB'},
+                'auto_process_on_upload': {'value': 'true', 'type': 'boolean', 'description': 'Auto process videos'},
+                'default_fps': {'value': '30', 'type': 'integer', 'description': 'Default FPS'},
+                'ocr_sample_interval': {'value': '10', 'type': 'integer', 'description': 'OCR sampling interval (seconds)'}
+            },
+            'attendance': {
+                'work_start_time': {'value': '08:00', 'type': 'string', 'description': 'Work start time'},
+                'work_end_time': {'value': '17:00', 'type': 'string', 'description': 'Work end time'},
+                'late_threshold_minutes': {'value': '15', 'type': 'integer', 'description': 'Late threshold (minutes)'},
+                'minimum_presence_seconds': {'value': '5', 'type': 'integer', 'description': 'Min presence time'}
+            }
+        }
+        
+        def get_typed_value(self):
+            """Get value converted to its proper type"""
+            if self.value_type == 'integer':
+                return int(self.value) if self.value else 0
+            elif self.value_type == 'boolean':
+                return self.value.lower() in ('true', '1', 'yes', 'on')
+            else:
+                return self.value
+        
+        @classmethod
+        def get_setting(cls, key, default=None):
+            """Get a setting value by key"""
+            setting = cls.query.filter_by(key=key).first()
+            return setting.get_typed_value() if setting else default
+        
+        @classmethod
+        def set_setting(cls, key, value, value_type='string', category='general', description=None):
+            """Set a setting value"""
+            setting = cls.query.filter_by(key=key).first()
+            if not setting:
+                setting = cls(key=key, value_type=value_type, category=category, description=description)
+                db.session.add(setting)
+            
+            if value_type == 'boolean':
+                setting.value = 'true' if value else 'false'
+            else:
+                setting.value = str(value)
+            
+            setting.value_type = value_type
+            if category:
+                setting.category = category
+            if description:
+                setting.description = description
+            
+            db.session.commit()
+            return setting
+        
+        @classmethod
+        def initialize_defaults(cls):
+            """Initialize default settings if they don't exist"""
+            for category, settings in cls.DEFAULT_SETTINGS.items():
+                for key, config in settings.items():
+                    existing = cls.query.filter_by(key=key).first()
+                    if not existing:
+                        cls.set_setting(key=key, value=config['value'], value_type=config['type'],
+                                      category=category, description=config['description'])
+            db.session.commit()
+        
+        @classmethod
+        def get_all_by_category(cls):
+            """Get all settings grouped by category"""
+            settings = cls.query.order_by(cls.category, cls.key).all()
+            grouped = {}
+            for setting in settings:
+                if setting.category not in grouped:
+                    grouped[setting.category] = []
+                grouped[setting.category].append(setting)
+            return grouped
+    
     # Store model and db references in app for blueprints to access
     app.db = db
     app.Employee = Employee
@@ -406,15 +581,19 @@ def create_app(config_name=None):
     app.FaceDataset = FaceDataset
     app.TrainedModel = TrainedModel
     app.RecognitionResult = RecognitionResult
-    
-    # Set up user loader now that Employee model is defined
+    app.SystemSettings = SystemSettings
+      # Set up user loader now that Employee model is defined
     @login_manager.user_loader
     def load_user(user_id):
-        return Employee.query.get(int(user_id))
+        return db.session.get(Employee, int(user_id))
     
     # Initialize database and create tables
     with app.app_context():
         db.create_all()
+        
+        # Initialize default settings
+        SystemSettings.initialize_defaults()
+        print("[OK] System settings initialized")
         
         # Create demo admin user if it doesn't exist
         admin = Employee.query.filter_by(email='admin@stepmedia.com').first()
@@ -429,12 +608,11 @@ def create_app(config_name=None):
             )
             db.session.add(admin)
             db.session.commit()
-            print("✅ Demo admin user created: admin@stepmedia.com")
-    
-    # Add a simple test route
+            print("[OK] Demo admin user created: admin@stepmedia.com")
+      # Add a simple test route
     @app.route('/test')
     def test():
-        return "<h1>✅ App is working!</h1><p><a href='/auth/login'>Go to Login</a></p>"
+        return "<h1>[OK] App is working!</h1><p><a href='/auth/login'>Go to Login</a></p>"
     
     # Add static file serving for uploads
     @app.route('/static/uploads/<path:filename>')
@@ -443,27 +621,72 @@ def create_app(config_name=None):
         upload_folder = app.config.get('UPLOAD_FOLDER', 'static/uploads')
         return send_from_directory(upload_folder, filename)
     
-    # Register blueprints
+    # Add static file serving for processing outputs (detected videos)
+    @app.route('/processing/outputs/<path:filename>')
+    def processing_output_file(filename):
+        from flask import send_from_directory
+        import os
+        outputs_dir = os.path.join('processing', 'outputs')
+        return send_from_directory(outputs_dir, filename)
+      # Register blueprints
+    blueprint_errors = []
+    
+    # Essential blueprints (required for basic functionality)
+    try:
+        from hr_management.blueprints.auth import auth_bp
+        app.register_blueprint(auth_bp, url_prefix='/auth')
+        print("[OK] Auth blueprint registered")
+    except ImportError as e:
+        blueprint_errors.append(f"Auth blueprint: {e}")
+        
     try:
         from hr_management.blueprints.dashboard import dashboard_bp
-        from hr_management.blueprints.employees import employees_bp  
-        from hr_management.blueprints.videos import videos_bp
-        from hr_management.blueprints.face_recognition import face_recognition_bp
-        from hr_management.blueprints.auth import auth_bp
-        from hr_management.blueprints.api import api_bp
-        
         app.register_blueprint(dashboard_bp, url_prefix='/')
-        app.register_blueprint(employees_bp, url_prefix='/employees')
-        app.register_blueprint(videos_bp, url_prefix='/videos')
-        app.register_blueprint(face_recognition_bp, url_prefix='/face-recognition')
-        app.register_blueprint(auth_bp, url_prefix='/auth')
-        app.register_blueprint(api_bp, url_prefix='/api')
-        
-        print("All blueprints registered successfully")
-        
+        print("[OK] Dashboard blueprint registered")
     except ImportError as e:
-        print(f"Warning: Some blueprints failed to load: {e}")
+        blueprint_errors.append(f"Dashboard blueprint: {e}")
+        
+    # Optional blueprints
+    optional_blueprints = [
+        ('hr_management.blueprints.employees', 'employees_bp', '/employees', 'Employees'),
+        ('hr_management.blueprints.videos', 'videos_bp', '/videos', 'Videos'),
+        ('hr_management.blueprints.face_recognition', 'face_recognition_bp', '/face-recognition', 'Face Recognition'),
+        ('hr_management.blueprints.api', 'api_bp', '/api', 'API'),
+        ('hr_management.blueprints.persons', 'persons_bp', '/persons', 'Persons'),
+        ('hr_management.blueprints.person_review', 'person_review_bp', '/persons/review', 'Person Review'),
+        ('hr_management.blueprints.attendance', 'attendance_bp', '/attendance', 'Attendance'),
+        ('hr_management.blueprints.settings', 'settings_bp', '/settings', 'Settings'),
+        ('hr_management.blueprints.person_recognition', 'person_recognition_bp', '/person-recognition', 'Person Recognition'),
+    ]
+    
+    for module_name, blueprint_name, url_prefix, display_name in optional_blueprints:
+        try:
+            module = __import__(module_name, fromlist=[blueprint_name])
+            blueprint = getattr(module, blueprint_name)
+            app.register_blueprint(blueprint, url_prefix=url_prefix)
+            print(f"[OK] {display_name} blueprint registered")
+        except ImportError as e:
+            blueprint_errors.append(f"{display_name} blueprint: {e}")
+        except AttributeError as e:
+            blueprint_errors.append(f"{display_name} blueprint: {e}")
+      # GPU management blueprint (special import)
+    try:
+        from hr_management.blueprints import gpu_management_bp
+        if gpu_management_bp is not None:
+            app.register_blueprint(gpu_management_bp, url_prefix='/gpu')
+            print("[OK] GPU Management blueprint registered")
+        else:
+            blueprint_errors.append("GPU Management blueprint: Dependencies not available")
+    except ImportError as e:
+        blueprint_errors.append(f"GPU Management blueprint: {e}")
+    
+    if blueprint_errors:
+        print("[WARNING]  Some blueprints failed to load:")
+        for error in blueprint_errors:
+            print(f"   - {error}")
         print("The application will run with limited functionality")
+    else:
+        print("[OK] All blueprints registered successfully")
     
     return app
 
@@ -508,14 +731,33 @@ def main():
     
     print("="*50)
     
+    # Start chunk merge monitor
+    try:
+        from processing.chunk_merge_monitor import get_chunk_monitor
+        monitor = get_chunk_monitor(app)
+        print("[OK] Chunk merge monitor started")
+    except Exception as e:
+        print(f"[WARNING] Could not start chunk merge monitor: {e}")
+        
+    # Start scheduled cleanup service
+    try:
+        from processing.scheduled_cleanup import start_scheduled_cleanup
+        cleanup_service = start_scheduled_cleanup(cleanup_interval_hours=6)  # Run every 6 hours
+        print("[OK] Scheduled cleanup service started (runs every 6 hours)")
+        
+        # Run immediate cleanup on startup to clean any leftover files
+        cleanup_service.run_immediate()
+    except Exception as e:
+        print(f"[WARNING] Could not start scheduled cleanup: {e}")
+    
     # Start the application
     try:
         if SOCKETIO_AVAILABLE and socketio:
             print("Starting with WebSocket support...")
-            socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+            socketio.run(app, debug=True, host='0.0.0.0', port=5001, allow_unsafe_werkzeug=True)
         else:
             print("Starting in standard mode...")
-            app.run(debug=True, host='0.0.0.0', port=5000)
+            app.run(debug=True, host='0.0.0.0', port=5001)
     except KeyboardInterrupt:
         print("\nApplication stopped by user")
     except Exception as e:

@@ -32,8 +32,28 @@
       "Bash(git remote add:*)",
       "Bash(git push:*)",
       "Bash(cp:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(awk:*)",
+      "Bash(sqlite3:*)",
+      "Bash(sed:*)",
+      "Bash(cat:*)",
+      "Bash(pip install:*)",
+      "Bash(.venv/Scripts/python.exe tests/test_dashboard_fix.py:*)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(for:*)",
+      "Bash(do echo \"=== $f ===\")",
+      "Bash(done)",
+      "Bash(.venv/bin/python:*)",
+      "Bash(curl:*)",
+      "Bash(timeout:*)",
+      "Bash(ffprobe:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(./.venv/Scripts/python.exe scripts/test_batch_recognition_fix.py:*)",
+      "Bash(./.venv/Scripts/python.exe scripts/test_batch_function_direct.py:*)",
+      "Bash(./.venv/Scripts/python.exe scripts/test_detailed_confirmation.py:*)",
+      "Bash(./.venv/Scripts/python.exe scripts/test_enhanced_modal_preview.py:*)"
     ],
     "deny": []
-  }
+  },
+  "enableAllProjectMcpServers": false
 }

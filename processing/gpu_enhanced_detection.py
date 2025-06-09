@@ -910,7 +910,7 @@ def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, n
             
             # Extract detections from results
             for frame_idx, (result, frame_num) in enumerate(zip(results, frame_numbers)):
-                timestamp = frame_num / 30.0  # Assuming 30 fps
+                timestamp = frame_num / fps if fps > 0 else frame_num / 30.0  # Use actual FPS
                 
                 if result.boxes is not None and len(result.boxes) > 0:
                     for box in result.boxes:
@@ -955,7 +955,7 @@ def process_batch_gpu(model, frames, frame_numbers, gpu_config, person_tracks, n
                 
                 # Convert OpenCV format to our standard format
                 for det in frame_detections:
-                    timestamp = frame_num / 30.0  # Assuming 30 fps
+                    timestamp = frame_num / fps if fps > 0 else frame_num / 30.0  # Use actual FPS
                     x1, y1, x2, y2 = det['bbox']
                     
                     # Calculate bounding box dimensions
@@ -1025,7 +1025,9 @@ def assign_person_id(x1, y1, x2, y2, frame_num, person_tracks, next_person_id):
         
         # Only consider tracks from recent frames
         frame_diff = frame_num - last_frame
-        if frame_diff > 30:  # Lost track after 1 second (assuming 30fps)
+        # Calculate max frames to wait based on actual FPS (1 second)
+        max_frames_missing = int(fps) if fps > 0 else 30
+        if frame_diff > max_frames_missing:  # Lost track after 1 second
             continue
             
         # Calculate position distance

@@ -2725,9 +2725,22 @@ def start_enhanced_gpu_processing(video, processing_options, app):
                     ocr_data = result['ocr_data']
                     video_obj.ocr_location = ocr_data.get('location')
                     video_obj.ocr_video_date = ocr_data.get('video_date')
+                    
+                    # Extract time from timestamps if available
+                    if ocr_data.get('timestamps') and len(ocr_data['timestamps']) > 0:
+                        first_timestamp = ocr_data['timestamps'][0]['timestamp']
+                        if isinstance(first_timestamp, datetime):
+                            video_obj.ocr_video_time = first_timestamp.time()
+                    
                     video_obj.ocr_extraction_done = True
                     video_obj.ocr_extraction_confidence = ocr_data.get('confidence', 0.0)
-                    print(f"[TEXT] Saved OCR data - Location: {video_obj.ocr_location}, Date: {video_obj.ocr_video_date}")
+                    
+                    # Also save extraction summary if available
+                    extraction_summary = ocr_data.get('extraction_summary', {})
+                    if extraction_summary:
+                        video_obj.ocr_extraction_confidence = extraction_summary.get('confidence', 0.0)
+                    
+                    print(f"[TEXT] Saved OCR data - Location: {video_obj.ocr_location}, Date: {video_obj.ocr_video_date}, Time: {video_obj.ocr_video_time}")
                 
                 db.session.commit()
                 

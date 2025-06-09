@@ -731,12 +731,8 @@ def main():
     
     print("="*50)
     
-    # Apply OCR saving patch
-    try:
-        import processing.patch_save_ocr_data
-        print("[OK] OCR saving patch applied - OCR data will be saved automatically")
-    except Exception as e:
-        print(f"[WARNING] Could not apply OCR saving patch: {e}")
+    # OCR saving is now integrated into the processing workflow
+    # No patch needed - OCR data is saved automatically during processing
     
     # Start chunk merge monitor
     try:

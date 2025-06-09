@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 import shutil
+import time
 from .cleanup_manager import get_cleanup_manager
 
 # Set up logging
@@ -251,20 +252,32 @@ class VideoChunkManager:
         # Merge annotated videos if they exist
         annotated_videos = []
         upload_dir = 'static/uploads'
+        logger.info(f"Checking {len(chunks)} chunks for annotated videos...")
+        
         for chunk in chunks:
             if chunk.annotated_video_path:
                 # Convert relative path to full path
                 full_path = os.path.join(upload_dir, chunk.annotated_video_path)
+                logger.info(f"Chunk {chunk.chunk_index}: annotated path = {chunk.annotated_video_path}")
                 if os.path.exists(full_path):
                     annotated_videos.append(full_path)
+                    logger.info(f"Found annotated video: {full_path}")
                 else:
                     logger.warning(f"Chunk annotated video not found: {full_path}")
+            else:
+                logger.info(f"Chunk {chunk.chunk_index}: no annotated video")
                 
+        logger.info(f"Total annotated videos found: {len(annotated_videos)}")
+        
         if annotated_videos:
             # Create merged annotated video
+            logger.info(f"Merging {len(annotated_videos)} annotated videos...")
             merged_video_path = self._merge_annotated_videos(parent_video, annotated_videos)
             if merged_video_path:
                 parent_video.annotated_video_path = merged_video_path
+                logger.info(f"Merged annotated video path set: {merged_video_path}")
+            else:
+                logger.error("Failed to create merged annotated video")
                 
         # Update parent video status
         parent_video.status = 'completed'
@@ -297,32 +310,67 @@ class VideoChunkManager:
         output_filename = f"{parent_video.filename.rsplit('.', 1)[0]}_annotated_merged.mp4"
         output_path = output_dir / output_filename
         
-        # Create concat list file
-        concat_file = output_dir / "concat_list.txt"
+        # Create unique concat list file to avoid conflicts
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        concat_file = output_dir / f"concat_list_{timestamp}.txt"
         with open(concat_file, 'w') as f:
             for video_path in video_paths:
-                f.write(f"file '{os.path.abspath(video_path)}'\n")
+                # Use forward slashes for ffmpeg compatibility on Windows
+                abs_path = os.path.abspath(video_path).replace('\\', '/')
+                f.write(f"file '{abs_path}'\n")
                 
-        # Use ffmpeg to concatenate and ensure H.264 output
+        # Use ffmpeg to concatenate with proper frame rate handling
+        # First, detect the frame rate of the first chunk
+        probe_cmd = [
+            'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+            '-show_entries', 'stream=r_frame_rate',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            str(video_paths[0])
+        ]
+        
+        try:
+            fps_output = subprocess.check_output(probe_cmd, encoding='utf-8', errors='replace').strip()
+            # Parse frame rate (e.g., "5/1" -> 5)
+            if '/' in fps_output:
+                num, den = fps_output.split('/')
+                fps = float(num) / float(den)
+            else:
+                fps = float(fps_output)
+            logger.info(f"Detected chunk FPS: {fps}")
+        except:
+            fps = 5  # Default to 5 FPS as we set for chunks
+            logger.warning(f"Could not detect FPS, using default: {fps}")
+        
+        # Use ffmpeg to concatenate with filter to ensure proper playback
         cmd = [
             'ffmpeg', '-f', 'concat', '-safe', '0',
             '-i', str(concat_file),
+            '-filter_complex', f'[0:v]fps=fps={fps},format=yuv420p[v]',  # Ensure consistent FPS
+            '-map', '[v]',  # Use filtered video
             '-c:v', 'libx264',  # Force H.264 codec
             '-preset', 'fast',  # Fast encoding
             '-crf', '23',  # Good quality
-            '-pix_fmt', 'yuv420p',  # Compatibility
             '-movflags', '+faststart',  # Web optimization
-            '-c:a', 'aac',  # AAC audio if present
+            '-an',  # No audio (chunks don't have audio)
             '-y',
             str(output_path)
         ]
         
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
             logger.info(f"Merged annotated video created: {output_path}")
             
-            # Clean up concat file
-            concat_file.unlink()
+            # Clean up concat file with retry
+            try:
+                concat_file.unlink()
+            except Exception as e:
+                logger.warning(f"Could not delete concat file immediately: {e}")
+                # Try again after a short delay
+                try:
+                    time.sleep(1)
+                    concat_file.unlink()
+                except:
+                    logger.warning(f"Concat file will be cleaned up later: {concat_file}")
             
             # Return relative path from static/uploads
             try:

@@ -647,6 +647,16 @@ window.closeUploadModal = function() {
     document.getElementById('uploadForm').reset();
     document.getElementById('fileInfo').classList.add('hidden');
     document.getElementById('uploadBtn').disabled = true;
+    // Clear stored file reference
+    window.selectedVideoFile = null;
+    // Recreate file input to ensure it's fully reset
+    const oldFileInput = document.getElementById('videoFile');
+    const newFileInput = oldFileInput.cloneNode(true);
+    oldFileInput.parentNode.replaceChild(newFileInput, oldFileInput);
+    // Reattach event listener to new file input
+    if (window.attachFileInputListener) {
+        window.attachFileInputListener();
+    }
 }
 
 // Initialize upload functionality after DOM is ready
@@ -676,8 +686,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Click to browse
     dropZone.addEventListener('click', () => {
-        fileInput = document.getElementById('videoFile'); // Re-get the element
-        fileInput.click();
+        const currentFileInput = document.getElementById('videoFile'); // Always get current element
+        if (currentFileInput) {
+            currentFileInput.click();
+        }
     });
 
     // Drag and drop events
@@ -701,18 +713,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // File input change
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            window.selectedVideoFile = null; // Clear drag-drop file
-            handleFileSelection(e.target.files[0]);
+    // Function to attach file input change listener
+    window.attachFileInputListener = function() {
+        const fileInput = document.getElementById('videoFile');
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    window.selectedVideoFile = null; // Clear drag-drop file
+                    handleFileSelection(e.target.files[0]);
+                }
+            });
         }
-    });
+    }
+    
+    // Initial attachment
+    window.attachFileInputListener();
 
     // Form submit handler
     document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        const currentFileInput = document.getElementById('videoFile');
         // If we have a drag-and-drop file and no file input selection
-        if (window.selectedVideoFile && (!fileInput.files || fileInput.files.length === 0)) {
+        if (window.selectedVideoFile && (!currentFileInput.files || currentFileInput.files.length === 0)) {
             e.preventDefault();
             
             // Create FormData and append the file
@@ -731,6 +752,8 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(response => {
                 if (response.redirected) {
+                    // Clear state before redirect
+                    window.selectedVideoFile = null;
                     window.location.href = response.url;
                 } else {
                     return response.text();

@@ -731,6 +731,13 @@ def main():
     
     print("="*50)
     
+    # Apply OCR saving patch
+    try:
+        import processing.patch_save_ocr_data
+        print("[OK] OCR saving patch applied - OCR data will be saved automatically")
+    except Exception as e:
+        print(f"[WARNING] Could not apply OCR saving patch: {e}")
+    
     # Start chunk merge monitor
     try:
         from processing.chunk_merge_monitor import get_chunk_monitor

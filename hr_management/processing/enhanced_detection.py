@@ -454,7 +454,7 @@ def extract_persons_data(video_path, person_tracks, persons_dir):
             'total_frames': len(track['frames']),
             'first_appearance_frame': track['first_appearance'],
             'last_appearance_frame': track['last_appearance'],
-            'duration_seconds': (track['last_appearance'] - track['first_appearance']) / 30.0,  # Assuming 30fps
+            'duration_seconds': (track['last_appearance'] - track['first_appearance']) / fps if fps > 0 else (track['last_appearance'] - track['first_appearance']) / 30.0,
             'images_extracted': images_extracted,
             'detection_timestamps': [f['timestamp'] for f in track['frames']],
             'avg_confidence': sum(f['confidence'] for f in track['frames']) / len(track['frames']),

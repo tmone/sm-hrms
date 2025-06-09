@@ -13,18 +13,22 @@ class EnhancedPersonTracker:
     """Enhanced tracker with recognition support"""
     
     def __init__(self, max_distance: float = 100.0, max_frames_missing: int = 30,
-                 use_recognition: bool = True):
+                 use_recognition: bool = True, fps: float = 30.0):
         """
         Initialize enhanced person tracker
         
         Args:
             max_distance: Maximum distance to associate detections between frames
-            max_frames_missing: Maximum frames a track can be missing before removal
+            max_frames_missing: Maximum frames a track can be missing before removal (or calculated from fps)
             use_recognition: Whether to use recognition results
+            fps: Video frames per second (used to calculate max_frames_missing if needed)
         """
         self.max_distance = max_distance
-        self.max_frames_missing = max_frames_missing
+        # Calculate max_frames_missing based on FPS if not explicitly set
+        # Keep tracks for 1 second
+        self.max_frames_missing = max_frames_missing if max_frames_missing != 30 else int(fps)
         self.use_recognition = use_recognition
+        self.fps = fps
         
         # Track storage
         self.tracks = {}  # track_id -> track_info

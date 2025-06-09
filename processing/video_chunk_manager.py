@@ -51,15 +51,21 @@ class VideoChunkManager:
             return False
         return duration > threshold
         
-    def split_video_to_chunks(self, video_path, output_dir):
-        """Split video into chunks using ffmpeg with copy codec"""
+    def split_video_to_chunks(self, video_path, output_dir, target_fps=5):
+        """Split video into chunks using ffmpeg with FPS reduction
+        
+        Args:
+            video_path: Path to input video
+            output_dir: Output directory for chunks
+            target_fps: Target FPS for chunks (default: 5)
+        """
         duration = self.get_video_duration(video_path)
         if duration is None:
             return []
             
         # Calculate number of chunks
         num_chunks = int((duration + self.chunk_duration - 1) // self.chunk_duration)
-        logger.info(f"Video duration: {duration:.1f}s, will create {num_chunks} chunks")
+        logger.info(f"Video duration: {duration:.1f}s, will create {num_chunks} chunks with {target_fps} FPS")
         
         # Create chunks directory
         video_name = Path(video_path).stem
@@ -76,19 +82,20 @@ class VideoChunkManager:
             chunk_filename = f"{video_name}_chunk_{i:03d}{original_ext}"
             chunk_path = chunks_dir / chunk_filename
             
-            # Use stream copy (no re-encoding) for fastest chunking
-            # This preserves original video format and quality
+            # Use FPS reduction with stream copy (no re-encoding)
+            # -r before -i: reduces input frame rate
             cmd = [
                 'ffmpeg',
-                '-ss', str(start_time),  # Seek BEFORE input (much faster)
+                '-ss', str(start_time),  # Seek to start position
+                '-r', str(target_fps),  # Reduce input frame rate to 5 FPS
                 '-i', str(video_path),
                 '-t', str(self.chunk_duration),
-                '-c', 'copy',  # Copy all streams without re-encoding
-                '-avoid_negative_ts', 'make_zero',
+                '-c', 'copy',  # Copy streams without re-encoding
+                '-an',  # Remove audio
                 '-y',  # Overwrite
                 str(chunk_path)
             ]
-            logger.info(f"[TRACE] Creating chunk {i+1}/{num_chunks} with stream copy (no re-encoding)")
+            logger.info(f"[TRACE] Creating chunk {i+1}/{num_chunks} with {target_fps} FPS")
             
             try:
                 logger.info(f"Creating chunk {i+1}/{num_chunks}: {chunk_filename}")
@@ -97,13 +104,15 @@ class VideoChunkManager:
                 chunk_paths.append(str(chunk_path))
             except subprocess.CalledProcessError as e:
                 logger.error(f"Failed to create chunk {i}: {e.stderr}")
-                # Try alternative method without avoid_negative_ts
+                # Try alternative method - seek after input
                 cmd_alt = [
                     'ffmpeg',
-                    '-ss', str(start_time),  # Input seeking
+                    '-r', str(target_fps),  # Reduce input frame rate
                     '-i', str(video_path),
+                    '-ss', str(start_time),  # Seek after input (slower but more compatible)
                     '-t', str(self.chunk_duration),
-                    '-c', 'copy',  # Still use stream copy in fallback
+                    '-c', 'copy',  # Copy streams
+                    '-an',  # Remove audio
                     '-y',
                     str(chunk_path)
                 ]
@@ -121,8 +130,9 @@ class VideoChunkManager:
                         '-t', str(self.chunk_duration),
                         '-c:v', 'libx264',
                         '-preset', 'ultrafast',
+                        '-r', str(target_fps),  # Output frame rate
                         '-crf', '28',  # Lower quality for speed
-                        '-c:a', 'aac',
+                        '-an',  # Remove audio
                         '-y',
                         str(chunk_path)
                     ]

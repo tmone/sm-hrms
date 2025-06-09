@@ -30,6 +30,109 @@ def gpu_queue_status():
     except Exception as e:
         return jsonify({'error': str(e)})
 
+@videos_bp.route('/processing-status/<int:video_id>')
+@login_required
+def processing_status(video_id):
+    """Get detailed processing status for a video with ETA"""
+    try:
+        Video = current_app.Video
+        video = Video.query.get_or_404(video_id)
+        
+        # Get basic info
+        status = {
+            'video_id': video.id,
+            'filename': video.filename,
+            'status': video.status,
+            'processing_progress': video.processing_progress or 0,
+            'is_chunk': video.is_chunk,
+            'parent_video_id': video.parent_video_id
+        }
+        
+        # If it's a chunked video, get chunk progress
+        if video.status == 'chunking_complete' or (video.total_chunks and video.total_chunks > 0):
+            chunks = Video.query.filter_by(
+                parent_video_id=video.id,
+                is_chunk=True
+            ).all()
+            
+            total_chunks = len(chunks)
+            completed_chunks = sum(1 for c in chunks if c.status == 'completed')
+            processing_chunks = sum(1 for c in chunks if c.status == 'processing')
+            queued_chunks = sum(1 for c in chunks if c.status in ['uploaded', 'queued'])
+            
+            # Calculate overall progress
+            if total_chunks > 0:
+                chunk_progress = (completed_chunks / total_chunks) * 100
+            else:
+                chunk_progress = 0
+            
+            # Estimate time remaining
+            eta_info = calculate_eta(completed_chunks, processing_chunks, queued_chunks, total_chunks)
+            
+            status.update({
+                'total_chunks': total_chunks,
+                'completed_chunks': completed_chunks,
+                'processing_chunks': processing_chunks,
+                'queued_chunks': queued_chunks,
+                'chunk_progress': round(chunk_progress, 1),
+                'eta_seconds': eta_info['eta_seconds'],
+                'eta_formatted': eta_info['eta_formatted'],
+                'processing_rate': eta_info['processing_rate']
+            })
+            
+            # Get active chunk details
+            active_chunks = [c for c in chunks if c.status == 'processing']
+            if active_chunks:
+                active_chunk = active_chunks[0]
+                status['active_chunk'] = {
+                    'chunk_index': active_chunk.chunk_index,
+                    'progress': active_chunk.processing_progress or 0
+                }
+        
+        # Get GPU queue status if processing
+        if video.status in ['processing', 'chunking_complete']:
+            from processing.gpu_processing_queue import get_gpu_processing_queue
+            gpu_queue = get_gpu_processing_queue()
+            queue_status = gpu_queue.get_queue_status()
+            status['queue_info'] = queue_status
+        
+        return jsonify(status)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+def calculate_eta(completed, processing, queued, total):
+    """Calculate estimated time to completion"""
+    # Assume average processing time per chunk (adjust based on actual data)
+    # With 5 FPS, chunks process faster
+    avg_seconds_per_chunk = 3  # 3 seconds per chunk with 5 FPS
+    
+    remaining = queued + processing
+    eta_seconds = remaining * avg_seconds_per_chunk
+    
+    # Format time
+    if eta_seconds < 60:
+        eta_formatted = f"{int(eta_seconds)} seconds"
+    elif eta_seconds < 3600:
+        minutes = eta_seconds / 60
+        eta_formatted = f"{int(minutes)} minutes"
+    else:
+        hours = eta_seconds / 3600
+        eta_formatted = f"{hours:.1f} hours"
+    
+    # Calculate processing rate
+    if completed > 0:
+        # This would need actual timing data in production
+        processing_rate = f"{completed} chunks completed"
+    else:
+        processing_rate = "Starting..."
+    
+    return {
+        'eta_seconds': eta_seconds,
+        'eta_formatted': eta_formatted,
+        'processing_rate': processing_rate
+    }
+
 @videos_bp.route('/')
 @login_required
 def index():
@@ -1574,7 +1677,7 @@ def stream_detected_video(filename):
 
 @videos_bp.route('/api/<int:id>/processing-status')
 @login_required
-def processing_status(id):
+def api_processing_status(id):
     """Get person extraction processing status with progress for AJAX polling"""
     Video = current_app.Video
     db = current_app.db

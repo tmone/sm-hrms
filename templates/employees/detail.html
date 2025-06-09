@@ -121,6 +121,103 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Person Code Mapping Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mt-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Person Code Mapping</h2>
+            <p class="text-sm text-gray-600 mb-4">Map this employee to detected person codes from video analysis for automatic attendance tracking.</p>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Assigned Person Codes -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-700 mb-3">Assigned Person Codes</h3>
+                    {% if assigned_person_codes %}
+                        <div class="space-y-2">
+                            {% for mapping in assigned_person_codes %}
+                            <div class="flex items-center justify-between p-3 border rounded-lg {% if mapping.is_primary %}border-blue-300 bg-blue-50{% else %}border-gray-200{% endif %}">
+                                <div>
+                                    <span class="font-medium text-gray-900">{{ mapping.display_code or mapping.person_code }}</span>
+                                    {% if mapping.is_primary %}
+                                        <span class="ml-2 text-xs text-blue-600 font-semibold">PRIMARY</span>
+                                    {% endif %}
+                                    <p class="text-xs text-gray-500">Mapped on {{ mapping.mapped_at.strftime('%b %d, %Y') if mapping.mapped_at else 'Unknown date' }}</p>
+                                </div>
+                                <form action="{{ url_for('employees.unmap_person', id=employee.id) }}" method="POST" style="display: inline;">
+                                    <input type="hidden" name="person_code" value="{{ mapping.person_code }}">
+                                    <button type="submit" class="text-red-600 hover:text-red-800 text-sm" 
+                                            onclick="return confirm('Remove mapping for {{ mapping.display_code or mapping.person_code }}?')">
+                                        Remove
+                                    </button>
+                                </form>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-sm text-gray-500">No person codes mapped yet.</p>
+                    {% endif %}
+                </div>
+                
+                <!-- Add New Mapping -->
+                <div>
+                    <h3 class="text-lg font-medium text-gray-700 mb-3">Add New Mapping</h3>
+                    {% if available_person_codes %}
+                        <form action="{{ url_for('employees.map_person', id=employee.id) }}" method="POST">
+                            <div class="space-y-3">
+                                <div>
+                                    <label for="person_code" class="block text-sm font-medium text-gray-700 mb-1">
+                                        Select Person Code
+                                    </label>
+                                    <select name="person_code" id="person_code" 
+                                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="">Choose a person code...</option>
+                                        {% for code in available_person_codes %}
+                                            <option value="{{ code }}">PERSON-{{ code }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label class="flex items-center">
+                                        <input type="checkbox" name="is_primary" value="true" checked
+                                               class="mr-2 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                        <span class="text-sm text-gray-700">Set as primary person code</span>
+                                    </label>
+                                </div>
+                                
+                                <div>
+                                    <label for="notes" class="block text-sm font-medium text-gray-700 mb-1">
+                                        Notes (optional)
+                                    </label>
+                                    <textarea name="notes" id="notes" rows="2"
+                                              class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                              placeholder="Any additional notes about this mapping..."></textarea>
+                                </div>
+                                
+                                <button type="submit" 
+                                        class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                                    Map Person Code
+                                </button>
+                            </div>
+                        </form>
+                    {% else %}
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <p class="text-sm text-yellow-800">
+                                No person codes available to map. This can happen when:
+                            </p>
+                            <ul class="text-xs text-yellow-700 mt-2 ml-4 list-disc">
+                                <li>No persons have been detected in videos yet</li>
+                                <li>All detected person codes are already mapped to employees</li>
+                                <li>This employee is already mapped to all their detected appearances</li>
+                            </ul>
+                            <p class="text-xs text-yellow-600 mt-2">
+                                <strong>Note:</strong> One employee can have multiple PERSON codes (different appearances in videos), 
+                                but each PERSON code can only belong to one employee.
+                            </p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

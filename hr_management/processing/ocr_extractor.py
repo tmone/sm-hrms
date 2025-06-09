@@ -43,8 +43,22 @@ class VideoOCRExtractor:
                         print("[WARNING] No GPU detected for OCR, using CPU")
                         self.reader = easyocr.Reader(['en'], gpu=False, verbose=False)
                 except Exception as e:
-                    print(f"[WARNING] Failed to initialize EasyOCR with GPU: {e}")
-                    self.reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+                    print(f"[WARNING] Failed to initialize EasyOCR: {e}")
+                    # Check for protocol version error
+                    if "protocol version" in str(e).lower():
+                        print("[ERROR] EasyOCR model files appear to be corrupted.")
+                        print("[INFO] Falling back to Tesseract OCR engine")
+                        self.ocr_engine = 'tesseract'
+                        self.reader = None
+                    else:
+                        # Try CPU mode as fallback
+                        try:
+                            self.reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+                        except:
+                            print("[ERROR] EasyOCR initialization failed completely")
+                            print("[INFO] Falling back to Tesseract OCR engine")
+                            self.ocr_engine = 'tesseract'
+                            self.reader = None
             elif ocr_engine == 'tesseract':
                 # Configure tesseract path for Windows
                 import platform
@@ -129,10 +143,22 @@ class VideoOCRExtractor:
             
             # Extract text
             if self.ocr_engine == 'easyocr' and self.reader:
-                results = self.reader.readtext(processed, detail=0)
-                text = ' '.join(results) if results else ''
+                try:
+                    results = self.reader.readtext(processed, detail=0)
+                    text = ' '.join(results) if results else ''
+                except Exception as e:
+                    print(f"[WARNING] EasyOCR readtext failed: {e}")
+                    # Fallback to tesseract
+                    if 'pytesseract' in globals():
+                        text = pytesseract.image_to_string(processed).strip()
+                    else:
+                        text = ''
             else:
-                text = pytesseract.image_to_string(processed).strip()
+                # Use tesseract
+                if 'pytesseract' in globals():
+                    text = pytesseract.image_to_string(processed).strip()
+                else:
+                    text = ''
             
             return text
         except Exception as e:

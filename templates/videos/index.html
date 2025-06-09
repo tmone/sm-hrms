@@ -84,7 +84,7 @@
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Video</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" style="min-width: 280px; max-width: 350px;">Video</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detections</th>
@@ -95,7 +95,7 @@
                         <tbody class="bg-white divide-y divide-gray-200">
                             {% for video in videos %}
                             <tr>
-                                <td class="px-6 py-4 whitespace-nowrap">
+                                <td class="px-6 py-4 whitespace-nowrap" style="min-width: 280px; max-width: 350px;">
                                     <div class="flex items-center">
                                         <div class="flex-shrink-0 h-10 w-10">
                                             <div class="h-10 w-10 rounded-lg bg-gray-200 flex items-center justify-center">
@@ -104,8 +104,8 @@
                                                 </svg>
                                             </div>
                                         </div>
-                                        <div class="ml-4">
-                                            <div class="text-sm font-medium text-gray-900">{{ video.filename }}</div>
+                                        <div class="ml-4 min-w-0 flex-1">
+                                            <div class="text-sm font-medium text-gray-900 truncate" style="max-width: 200px;" title="{{ video.filename }}">{{ video.filename }}</div>
                                             <div class="text-sm text-gray-500">{{ (video.file_size / 1024 / 1024) | round(1) }} MB</div>
                                         </div>
                                     </div>
@@ -146,9 +146,10 @@
                                                 Splitting...
                                             </span>
                                         {% elif video.status == 'chunking_complete' %}
-                                            <span class="flex items-center">
-                                                <div class="animate-pulse rounded-full h-3 w-3 bg-indigo-600 mr-1"></div>
-                                                Merging...
+                                            <span class="flex items-center" id="status-{{ video.id }}">
+                                                <div class="animate-spin rounded-full h-3 w-3 border-b-2 border-indigo-600 mr-1"></div>
+                                                <span id="status-text-{{ video.id }}">Processing Chunks</span>
+                                                <span id="progress-{{ video.id }}" class="ml-1 text-xs"></span>
                                             </span>
                                         {% elif video.status == 'uploaded' %}
                                             ✅ Ready
@@ -245,7 +246,9 @@
             {% if videos %}
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {% for video in videos %}
-                    <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-200">
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-200"
+                         data-video-id="{{ video.id }}"
+                         data-video-status="{{ video.status }}">
                         <!-- Video Preview -->
                         <div class="relative aspect-video bg-gray-900">
                             {% if video.status == 'completed' and video.annotated_video_path %}
@@ -280,12 +283,34 @@
                                 <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full 
                                       {% if video.status == 'completed' %}bg-green-100 text-green-800
                                       {% elif video.status == 'processing' %}bg-yellow-100 text-yellow-800
+                                      {% elif video.status == 'chunking_complete' %}bg-indigo-100 text-indigo-800
                                       {% elif video.status == 'failed' %}bg-red-100 text-red-800
                                       {% elif video.status == 'uploaded' %}bg-green-100 text-green-800
                                       {% else %}bg-gray-100 text-gray-800{% endif %}">
-                                    {{ video.status.title() }}
+                                    <span class="status-text">
+                                        {% if video.status == 'processing' %}
+                                            Processing...
+                                        {% elif video.status == 'chunking_complete' %}
+                                            Processing Chunks
+                                        {% else %}
+                                            {{ video.status.title() }}
+                                        {% endif %}
+                                    </span>
                                 </span>
                             </div>
+                            
+                            <!-- Processing Progress -->
+                            {% if video.status in ['processing', 'chunking_complete'] %}
+                            <div class="absolute bottom-2 left-2 right-2 bg-black bg-opacity-50 rounded px-2 py-1">
+                                <div class="text-xs text-white progress-text">
+                                    {% if video.processing_progress %}
+                                        {{ video.processing_progress }}%
+                                    {% else %}
+                                        Starting...
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endif %}
                         </div>
                         
                         <!-- Video Info -->
@@ -447,10 +472,127 @@ video:hover + .video-overlay {
         grid-template-columns: 1fr !important;
     }
 }
+
+/* Table container */
+.table-container {
+    width: 100%;
+    overflow: hidden;
+}
+
+/* Ensure table doesn't overflow */
+.overflow-x-auto {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
 </style>
 
 <script>
 console.log('🔄 Videos index page loaded - Enhanced progress tracking v2.0');
+
+// Track processing videos
+let processingVideos = new Set();
+let statusUpdateInterval = null;
+
+// Initialize processing video tracking
+function initializeProcessingTracking() {
+    // Find all videos with processing or chunking_complete status
+    document.querySelectorAll('[id^="status-"]').forEach(element => {
+        const videoId = element.id.replace('status-', '');
+        const statusElement = element.closest('td').querySelector('span');
+        
+        if (statusElement && (statusElement.textContent.includes('Processing') || statusElement.textContent.includes('Chunk'))) {
+            processingVideos.add(videoId);
+        }
+    });
+    
+    // Also check grid view
+    document.querySelectorAll('[data-video-status]').forEach(element => {
+        const status = element.getAttribute('data-video-status');
+        const videoId = element.getAttribute('data-video-id');
+        
+        if (status === 'processing' || status === 'chunking_complete') {
+            processingVideos.add(videoId);
+        }
+    });
+    
+    // Start status updates if we have processing videos
+    if (processingVideos.size > 0) {
+        startStatusUpdates();
+    }
+}
+
+// Update status for a single video
+async function updateVideoStatus(videoId) {
+    try {
+        const response = await fetch(`/videos/processing-status/${videoId}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            console.error(`Error fetching status for video ${videoId}:`, data.error);
+            return;
+        }
+        
+        // Update table view
+        const statusElement = document.getElementById(`status-text-${videoId}`);
+        const progressElement = document.getElementById(`progress-${videoId}`);
+        
+        if (statusElement) {
+            if (data.status === 'completed') {
+                // Reload page when video completes
+                location.reload();
+            } else if (data.total_chunks > 0) {
+                // Show chunk progress
+                statusElement.textContent = `Chunks: ${data.completed_chunks}/${data.total_chunks}`;
+                progressElement.textContent = `(${data.chunk_progress}% - ETA: ${data.eta_formatted})`;
+            } else {
+                progressElement.textContent = `(${data.processing_progress}%)`;
+            }
+        }
+        
+        // Update grid view
+        const gridStatus = document.querySelector(`[data-video-id="${videoId}"] .status-text`);
+        const gridProgress = document.querySelector(`[data-video-id="${videoId}"] .progress-text`);
+        
+        if (gridStatus) {
+            if (data.status === 'completed') {
+                location.reload();
+            } else if (data.total_chunks > 0) {
+                gridStatus.textContent = `${data.completed_chunks}/${data.total_chunks} chunks`;
+                if (gridProgress) {
+                    gridProgress.textContent = `${data.chunk_progress}% - ETA: ${data.eta_formatted}`;
+                }
+            }
+        }
+        
+    } catch (error) {
+        console.error(`Failed to update status for video ${videoId}:`, error);
+    }
+}
+
+// Start periodic status updates
+function startStatusUpdates() {
+    if (statusUpdateInterval) {
+        clearInterval(statusUpdateInterval);
+    }
+    
+    // Update immediately
+    processingVideos.forEach(videoId => updateVideoStatus(videoId));
+    
+    // Then update every 2 seconds
+    statusUpdateInterval = setInterval(() => {
+        processingVideos.forEach(videoId => updateVideoStatus(videoId));
+    }, 2000);
+}
+
+// Stop status updates when page is hidden
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && statusUpdateInterval) {
+        clearInterval(statusUpdateInterval);
+        statusUpdateInterval = null;
+    } else if (!document.hidden && processingVideos.size > 0) {
+        startStatusUpdates();
+    }
+});
 
 // View mode functions
 window.setViewMode = function(mode) {
@@ -505,6 +647,16 @@ window.closeUploadModal = function() {
     document.getElementById('uploadForm').reset();
     document.getElementById('fileInfo').classList.add('hidden');
     document.getElementById('uploadBtn').disabled = true;
+    // Clear stored file reference
+    window.selectedVideoFile = null;
+    // Recreate file input to ensure it's fully reset
+    const oldFileInput = document.getElementById('videoFile');
+    const newFileInput = oldFileInput.cloneNode(true);
+    oldFileInput.parentNode.replaceChild(newFileInput, oldFileInput);
+    // Reattach event listener to new file input
+    if (window.attachFileInputListener) {
+        window.attachFileInputListener();
+    }
 }
 
 // Initialize upload functionality after DOM is ready
@@ -514,6 +666,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Restore saved view mode
     const savedMode = localStorage.getItem('videoViewMode') || 'table';
     setViewMode(savedMode);
+    
+    // Initialize processing tracking
+    initializeProcessingTracking();
     
     // Get elements
     const dropZone = document.getElementById('dropZone');
@@ -531,8 +686,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Click to browse
     dropZone.addEventListener('click', () => {
-        fileInput = document.getElementById('videoFile'); // Re-get the element
-        fileInput.click();
+        const currentFileInput = document.getElementById('videoFile'); // Always get current element
+        if (currentFileInput) {
+            currentFileInput.click();
+        }
     });
 
     // Drag and drop events
@@ -556,18 +713,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // File input change
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            window.selectedVideoFile = null; // Clear drag-drop file
-            handleFileSelection(e.target.files[0]);
+    // Function to attach file input change listener
+    window.attachFileInputListener = function() {
+        const fileInput = document.getElementById('videoFile');
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    window.selectedVideoFile = null; // Clear drag-drop file
+                    handleFileSelection(e.target.files[0]);
+                }
+            });
         }
-    });
+    }
+    
+    // Initial attachment
+    window.attachFileInputListener();
 
     // Form submit handler
     document.getElementById('uploadForm').addEventListener('submit', function(e) {
+        const currentFileInput = document.getElementById('videoFile');
         // If we have a drag-and-drop file and no file input selection
-        if (window.selectedVideoFile && (!fileInput.files || fileInput.files.length === 0)) {
+        if (window.selectedVideoFile && (!currentFileInput.files || currentFileInput.files.length === 0)) {
             e.preventDefault();
             
             // Create FormData and append the file
@@ -586,6 +752,8 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(response => {
                 if (response.redirected) {
+                    // Clear state before redirect
+                    window.selectedVideoFile = null;
                     window.location.href = response.url;
                 } else {
                     return response.text();

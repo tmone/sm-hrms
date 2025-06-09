@@ -4,6 +4,7 @@
 let socket = null;
 let videoId = null;
 let videoStatus = null;
+let processingInterval = null;
 
 // Initialize the page
 function initializeVideoDetail(config) {
@@ -47,7 +48,9 @@ function initializeVideoDetail(config) {
             console.log('📡 Socket.IO not available, using AJAX polling...');
             setupAjaxPolling();
         }
-    } else if (videoStatus === 'processing') {
+    } else if (videoStatus === 'processing' || videoStatus === 'chunking_complete') {
+        console.log('🔄 Video is processing, setting up progress tracking...');
+        setupProcessingTracking();
         console.log('🔄 Video is processing (person extraction), setting up progress tracking...');
         setupProcessingPolling();
     } else {
@@ -648,6 +651,104 @@ function setupEventListeners() {
         }
     });
 }
+
+// Setup processing tracking for chunk-based videos
+function setupProcessingTracking() {
+    console.log('Setting up processing tracking for video:', videoId);
+    
+    // Update immediately
+    updateProcessingStatus();
+    
+    // Then update every 2 seconds
+    processingInterval = setInterval(updateProcessingStatus, 2000);
+}
+
+// Update processing status
+async function updateProcessingStatus() {
+    try {
+        const response = await fetch(`/videos/processing-status/${videoId}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            console.error('Error fetching processing status:', data.error);
+            return;
+        }
+        
+        // Update status indicator
+        const statusElement = document.getElementById('video-status');
+        if (statusElement && data.status === 'completed') {
+            // Reload page when processing completes
+            clearInterval(processingInterval);
+            location.reload();
+            return;
+        }
+        
+        // Update progress elements
+        if (data.total_chunks > 0) {
+            // Update progress bar
+            const progressBar = document.getElementById('progress-bar');
+            const progressPercentage = document.getElementById('progress-percentage');
+            const progressLabel = document.getElementById('progress-label');
+            
+            if (progressBar) {
+                progressBar.style.width = `${data.chunk_progress}%`;
+            }
+            if (progressPercentage) {
+                progressPercentage.textContent = `${data.chunk_progress}%`;
+            }
+            if (progressLabel) {
+                progressLabel.textContent = `Processing chunks: ${data.completed_chunks}/${data.total_chunks}`;
+            }
+            
+            // Update chunk counts
+            const totalChunks = document.getElementById('total-chunks');
+            const completedChunks = document.getElementById('completed-chunks');
+            const processingChunks = document.getElementById('processing-chunks');
+            const eta = document.getElementById('eta');
+            
+            if (totalChunks) totalChunks.textContent = data.total_chunks;
+            if (completedChunks) completedChunks.textContent = data.completed_chunks;
+            if (processingChunks) processingChunks.textContent = data.processing_chunks;
+            if (eta) eta.textContent = data.eta_formatted;
+            
+            // Update active chunk info
+            const activeChunkInfo = document.getElementById('active-chunk-info');
+            if (activeChunkInfo) {
+                let infoText = '';
+                
+                // Add active chunk info if available
+                if (data.active_chunk) {
+                    infoText = `Currently processing chunk ${data.active_chunk.chunk_index + 1} (${data.active_chunk.progress}%)`;
+                }
+                
+                // Add queue info if available
+                if (data.queue_info) {
+                    const queueInfo = `Queue: ${data.queue_info.queue_size} waiting, ${data.queue_info.active_tasks} active`;
+                    if (infoText) {
+                        infoText += ` | ${queueInfo}`;
+                    } else {
+                        infoText = queueInfo;
+                    }
+                }
+                
+                activeChunkInfo.textContent = infoText;
+            }
+        }
+        
+    } catch (error) {
+        console.error('Failed to update processing status:', error);
+    }
+}
+
+// Stop tracking when page is hidden
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && processingInterval) {
+        clearInterval(processingInterval);
+        processingInterval = null;
+    } else if (!document.hidden && (videoStatus === 'processing' || videoStatus === 'chunking_complete')) {
+        setupProcessingTracking();
+    }
+});
 
 // Export functions for global access
 window.handleVideoLoad = handleVideoLoad;

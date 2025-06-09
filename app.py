@@ -731,6 +731,9 @@ def main():
     
     print("="*50)
     
+    # OCR saving is now integrated into the processing workflow
+    # No patch needed - OCR data is saved automatically during processing
+    
     # Start chunk merge monitor
     try:
         from processing.chunk_merge_monitor import get_chunk_monitor

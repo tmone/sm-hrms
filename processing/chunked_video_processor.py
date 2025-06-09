@@ -84,7 +84,8 @@ class ChunkProcessor:
             
         self.quality_analyzer = VideoQualityAnalyzer()
         self.frame_extractor = FrameExtractor()
-        self.tracker = EnhancedPersonTracker(use_recognition=True)
+        # Tracker will be initialized after we get FPS from video
+        self.tracker = None
         
         # Initialize recognition model
         try:
@@ -134,6 +135,11 @@ class ChunkProcessor:
         
         fps = int(cap.get(cv2.CAP_PROP_FPS))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        
+        # Initialize tracker with actual FPS
+        if self.tracker is None:
+            self.tracker = EnhancedPersonTracker(use_recognition=True, fps=fps)
+            logger.info(f"Initialized tracker with {fps} FPS (max_frames_missing={self.tracker.max_frames_missing})")
         
         # Create chunk output directory
         chunk_output = os.path.join(self.output_dir, f"chunk_{self.chunk_idx:03d}")
